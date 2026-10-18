@@ -90,6 +90,7 @@ function saveSetting(key, value)
   local h = fs.open(SETTINGS_FILE, "w")
   h.write(textutils.serialize(userSet))
   h.close()
+  if settingChanged then settingChanged(key, value) end
 end
 
 -- Zeitzone: Standard = Zeitzone des Servers, sonst UTC + cfg.timeOffset Stunden
@@ -1159,14 +1160,17 @@ end
 -- ------------------------------------------------------------
 
 NBT_SIDES = { "up", "down", "north", "south", "east", "west" }
-nbtState = { last = nil, count = 0, kinds = 0, missed = 0, err = nil, running = false, now = false }
+NBT_HIST_MAX, NBT_ITEMS_MAX = 40, 40
+-- hist: neueste zuerst, je Export { t, count, kinds, missed, items = { { n = Name, c = Anzahl } } }
+nbtState = { last = nil, count = 0, kinds = 0, missed = 0, err = nil, running = false, now = false,
+             hist = {}, histVer = 0 }
 do
 local NBT_DB = fs.combine(DIR, "nbtexport.db")
 
 local function saveNbt()
   local h = fs.open(NBT_DB, "w")
-  h.write(textutils.serialize({ last = nbtState.last, count = nbtState.count,
-                                kinds = nbtState.kinds, missed = nbtState.missed }))
+  h.write(textutils.serialize({ last = nbtState.last, count = nbtState.count, kinds = nbtState.kinds,
+                                missed = nbtState.missed, hist = nbtState.hist }))
   h.close()
 end
 
@@ -1175,9 +1179,12 @@ if fs.exists(NBT_DB) then
   local t = textutils.unserialize(h.readAll())
   h.close()
   if type(t) == "table" then
-    for k, v in pairs(t) do nbtState[k] = v end
+    for _, k in ipairs({ "last", "count", "kinds", "missed", "hist" }) do
+      if t[k] ~= nil then nbtState[k] = t[k] end
+    end
   end
 end
+if type(nbtState.hist) ~= "table" then nbtState.hist = {} end
 
 -- NBT in alten Versionen, Daten-Komponenten ab Minecraft 1.21
 local function hasData(it)
@@ -1202,11 +1209,13 @@ local function exportOne(it, total)
 end
 
 -- Redstone-Signal am NBT-Storage-Computer schalten und auf dessen
--- Bestaetigung warten (3 Versuche)
-local function nbtSignal(on)
+-- Bestaetigung warten (3 Versuche). extra = zusaetzliche Felder (Zusammenfassung)
+local function nbtSignal(on, extra)
   if not modemName then return false end
+  local msg = { type = "nbtRs", on = on, key = cfg.key, tz = tzOffset() }
+  for k, v in pairs(extra or {}) do msg[k] = v end
   for _ = 1, 3 do
-    rednet.broadcast({ type = "nbtRs", on = on, key = cfg.key }, cfg.protocol)
+    rednet.broadcast(msg, cfg.protocol)
     local timer = os.startTimer(2)
     while true do
       local ev, a, b, c = os.pullEvent()
@@ -1231,17 +1240,31 @@ local function exportAll()
   local skip = {}
   for _, n in ipairs(cfg.nbtExportSkip or {}) do skip[n] = true end
   local count, kinds, missed = 0, 0, 0
+  local byName = {}
   for _, it in ipairs(list) do
     -- ohne Fingerprint wuerde die Bridge auch die normalen Items dieser Sorte nehmen
     if type(it) == "table" and it.name and it.fingerprint and not skip[it.name] and hasData(it) then
       local want = tonumber(it.count or it.amount) or 0
       local got = exportOne(it, want)
-      if got > 0 then count, kinds = count + got, kinds + 1 end
+      if got > 0 then
+        count, kinds = count + got, kinds + 1
+        local label = it.displayName and prettyName(it.displayName) or prettyName(it.name)
+        byName[label] = (byName[label] or 0) + got
+      end
       missed = missed + (want - got)
     end
   end
-  nbtState.last, nbtState.count, nbtState.kinds, nbtState.missed = os.epoch("utc"), count, kinds, missed
+  local items = {}
+  for n, c in pairs(byName) do items[#items + 1] = { n = n, c = c } end
+  table.sort(items, function(a, b) return a.c > b.c end)
+  while #items > NBT_ITEMS_MAX do table.remove(items) end
+
+  local now = os.epoch("utc")
+  nbtState.last, nbtState.count, nbtState.kinds, nbtState.missed = now, count, kinds, missed
   nbtState.err = nil
+  table.insert(nbtState.hist, 1, { t = now, count = count, kinds = kinds, missed = missed, items = items })
+  while #nbtState.hist > NBT_HIST_MAX do table.remove(nbtState.hist) end
+  nbtState.histVer = nbtState.histVer + 1
   saveNbt()
   if count > 0 or missed > 0 then
     chat("NBT-Export: " .. count .. " Items (" .. kinds .. " Sorten) in die Kiste"
@@ -1261,12 +1284,19 @@ function runNbtExport()
     end
     sleep(cfg.nbtStorageWait)
   end
+  local before = nbtState.last
   local ok, err = pcall(exportAll)
   if not ok then nbtState.err = tostring(err) end
-  if cfg.nbtStorage and not nbtSignal(false) then
-    -- der NBT-Storage-Computer schaltet nach seiner Hoechstdauer selbst ab
-    nbtState.err = "NBT-Storage: Signal AUS nicht bestaetigt"
-    chat("NBT-Export: Redstone-Signal AUS wurde nicht bestaetigt!", "nbt")
+  if cfg.nbtStorage then
+    -- Zusammenfassung fuer das Log am NBT-Storage-Computer
+    local h = nbtState.last ~= before and nbtState.hist[1] or nil
+    local summary = h and { count = h.count, kinds = h.kinds, missed = h.missed, items = { table.unpack(h.items, 1, 10) } }
+                    or { err = nbtState.err }
+    if not nbtSignal(false, { summary = summary }) then
+      -- der NBT-Storage-Computer schaltet nach seiner Hoechstdauer selbst ab
+      nbtState.err = "NBT-Storage: Signal AUS nicht bestaetigt"
+      chat("NBT-Export: Redstone-Signal AUS wurde nicht bestaetigt!", "nbt")
+    end
   end
 end
 
@@ -1296,11 +1326,35 @@ function nbtLoop()
   end
 end
 
+-- Fuer die Sync-Nachricht: der Verlauf nur, wenn er sich geaendert hat
+-- (oder jede Minute, falls ein Neben-Dashboard neu dazukommt)
+local sentVer, sentAt = -1, 0
+function nbtSyncData()
+  local d = { last = nbtState.last, count = nbtState.count, kinds = nbtState.kinds,
+              missed = nbtState.missed, err = nbtState.err, running = nbtState.running }
+  local now = os.epoch("utc")
+  if sentVer ~= nbtState.histVer or now - sentAt > 60000 then
+    d.hist, sentVer, sentAt = nbtState.hist, nbtState.histVer, now
+  end
+  return d
+end
+
+function applyNbtSync(d)
+  for _, k in ipairs({ "last", "count", "kinds", "missed", "err", "running" }) do nbtState[k] = d[k] end
+  if type(d.hist) == "table" then nbtState.hist = d.hist end
+end
+
 function nbtStatus()
   if nbtState.running then return "laeuft gerade..." end
   if nbtState.err then return "Fehler: " .. nbtState.err end
   if not nbtState.last then return "noch nie" end
   return osDate("%d.%m. %H:%M", math.floor(nbtState.last / 1000)) .. ": " .. nbtState.count .. " Items"
+end
+
+function nbtNext()
+  if not cfg.nbtExport then return "aus" end
+  if not nbtState.last then return "gleich" end
+  return osDate("%H:%M", math.floor(nbtState.last / 1000) + cfg.nbtExportInterval)
 end
 end
 
@@ -1579,12 +1633,28 @@ end
 
 local syncData, syncAt = nil, nil
 
+-- Einstellungen, die das Haupt-Dashboard an die Neben-Dashboards weitergibt
+-- (Schriftgroesse, Rolle, Monitor usw. bleiben pro Computer)
+SHARED_SETTINGS = { timeOffset = true, title = true, headerColor = true, accentColor = true,
+                    chatTps = true, chatEnergySeconds = true, chatPrefix = true, farmTimeout = true,
+                    nbtExport = true, nbtExportInterval = true, nbtExportSide = true,
+                    nbtStorage = true, nbtStorageWait = true }
+
+-- Am Neben-Dashboard geaenderte gemeinsame Einstellung ans Haupt-Dashboard schicken
+function settingChanged(key, value)
+  if isMain() or not SHARED_SETTINGS[key] then return end
+  state.sharedHoldUntil = os.epoch("utc") + 6000
+  sendCmd({ cmd = "setting", setting = key, value = value })
+end
+
 function buildSync()
   local srcs = {}
   for _, src in ipairs(sources) do
     srcs[#srcs + 1] = { label = src.label, stored = src.stored, cap = src.cap, rate = src.rate,
                         remote = src.remote, ae = src.ae, id = src.id }
   end
+  local shared = {}
+  for k in pairs(SHARED_SETTINGS) do shared[k] = cfg[k] end
   local st = {}
   for name, x in pairs(stockState) do
     st[name] = { count = x.count, trend = stockTrend(x), low = x.low, crafting = x.crafting, err = x.err }
@@ -1596,6 +1666,7 @@ function buildSync()
     crafts = state.crafts, craftErr = state.craftErr,
     stock = stock.items, stockState = st, storage = storage, topItems = topItems,
     players = players, env = env, chat = chatSettings,
+    shared = shared, nbt = nbtSyncData(),
   }
 end
 
@@ -1615,6 +1686,10 @@ applySync = function(sender, msg)
   env = msg.env
   if type(msg.chat) == "table" and os.epoch("utc") >= (state.chatHoldUntil or 0) then chatSettings = msg.chat end
   aeFEFound = msg.aeFE and true or false
+  if type(msg.nbt) == "table" then applyNbtSync(msg.nbt) end
+  if type(msg.shared) == "table" and now >= (state.sharedHoldUntil or 0) then
+    for k in pairs(SHARED_SETTINGS) do cfg[k] = msg.shared[k] end
+  end
 end
 
 applyCmd = function(msg)
@@ -1637,6 +1712,10 @@ applyCmd = function(msg)
   elseif msg.cmd == "stockSet" and type(msg.items) == "table" then
     stock.items = msg.items
     saveStock()
+  elseif msg.cmd == "setting" and SHARED_SETTINGS[msg.setting] then
+    saveSetting(msg.setting, msg.value)
+  elseif msg.cmd == "nbtNow" then
+    nbtState.now = true
   end
 end
 
@@ -2305,6 +2384,41 @@ function drawFarmPanel(x, y, w, h, rH)
   end
 end
 
+-- Kleine Zusammenfassung des NBT-Exports auf dem Startbildschirm
+function drawNbtPanel(x, y, w, h)
+  local ix, iy, iw, ih = panel(x, y, w, h, "NBT-EXPORT  (naechster: " .. nbtNext() .. ")", colors.orange)
+  local last = iy + ih - 1
+  local hst = nbtState.hist[1]
+  if nbtState.running then
+    put(ix, iy, fit("Export laeuft gerade...", iw), colors.yellow)
+  elseif nbtState.err then
+    put(ix, iy, fit("Fehler: " .. nbtState.err, iw), colors.red)
+  elseif not hst then
+    put(ix, iy, fit("Noch kein Export", iw), colors.gray)
+    return
+  end
+  if not hst then return end
+  local cy = iy + ((nbtState.running or nbtState.err) and 1 or 0)
+  if cy > last then return end
+  local head = osDate("%H:%M", math.floor(hst.t / 1000)) .. "  " .. fmtNum(hst.count) .. " Items, "
+               .. hst.kinds .. " Sorten"
+  put(ix, cy, fit(head, iw), colors.white)
+  if hst.missed and hst.missed > 0 and cy < last then
+    cy = cy + 1
+    put(ix, cy, fit(hst.missed .. " passten nicht in die Kiste", iw), colors.red)
+  end
+  for i, it in ipairs(hst.items) do
+    if cy + i > last then break end
+    local num = fmtNum(it.c) .. "x"
+    put(ix, cy + i, num, colors.lightGray)
+    put(ix + #num + 1, cy + i, fit(it.n, iw - #num - 1), colors.white)
+  end
+end
+
+function showNbtPanel()
+  return cfg.nbtExport or #nbtState.hist > 0
+end
+
 function drawDash()
   header()
   local top = HH + 1
@@ -2314,7 +2428,14 @@ function drawDash()
     local rw = W - lw - 1
     local sh = math.max(6, math.floor(bh * 0.42))
     drawServer(1, top, lw, sh)
-    drawCrafts(1, top + sh + 1, lw, bh - sh - 1)
+    local ch = bh - sh - 1
+    if showNbtPanel() and ch >= 14 then
+      local nh = clamp(math.floor(ch * 0.35), 5, 8)
+      drawCrafts(1, top + sh + 1, lw, ch - nh)
+      drawNbtPanel(1, top + bh - nh, lw, nh)
+    else
+      drawCrafts(1, top + sh + 1, lw, ch)
+    end
     local fh, rH = farmPanelHeight(math.max(3, bh - 10))
     drawEnergy(lw + 2, top, rw, bh - fh - 1)
     drawFarmPanel(lw + 2, top + bh - fh, rw, fh, rH)
@@ -2407,6 +2528,7 @@ function metricDefs()
   defs[#defs + 1] = { key = "cpus", label = "CPUs", lo = 0, fmt = function(v) return fmtNum(v) end,
     color = function() return function() return colors.purple end end }
   defs[#defs + 1] = { key = "log", label = "Craft-Log", log = true }
+  defs[#defs + 1] = { key = "nbtlog", label = "NBT-Export", nbtLog = true }
   return defs
 end
 
@@ -2425,6 +2547,42 @@ function drawLog(x, y, w, h)
     put(x + 8, ry, fit(e.name, w - 9 - #right - 1), colors.white)
     put(x + w - #right, ry, right, colors.gray)
   end
+end
+
+-- Alle bisherigen NBT-Exporte mit ihren Items, neueste zuerst, zum Blaettern
+function drawNbtLog(x, y, w, h)
+  local lines = {}
+  for _, e in ipairs(nbtState.hist) do
+    local head = osDate("%d.%m. %H:%M", math.floor(e.t / 1000)) .. "  " .. fmtNum(e.count) .. " Items, "
+                 .. e.kinds .. " Sorten"
+    if e.missed and e.missed > 0 then head = head .. ", " .. e.missed .. " nicht exportiert" end
+    lines[#lines + 1] = { head, colors.yellow }
+    if #e.items == 0 then lines[#lines + 1] = { "  (keine Items mit NBT-Daten)", colors.gray } end
+    for _, it in ipairs(e.items) do
+      lines[#lines + 1] = { it.n, colors.white, fmtNum(it.c) .. "x" }
+    end
+  end
+  put(x + 1, y, fit("Exportiert ins NBT Storage" .. (cfg.nbtExport and "" or "  (Export ist AUS)"), w - 2),
+      colors.lightGray)
+  if #lines == 0 then
+    put(x + 1, y + 2, "Noch keine NBT-Exporte aufgezeichnet", colors.gray)
+    return
+  end
+  local per = math.max(1, h - 3)
+  local pages = math.max(1, math.ceil(#lines / per))
+  state.nbtPage = clamp(state.nbtPage or 1, 1, pages)
+  for i = 1, per do
+    local l = lines[(state.nbtPage - 1) * per + i]
+    if not l then break end
+    local ry = y + i
+    if l[3] then
+      put(x + 3, ry, l[3], colors.lightGray)
+      put(x + 4 + #l[3], ry, fit(l[1], w - 5 - #l[3]), l[2])
+    else
+      put(x + 1, ry, fit(l[1], w - 2), l[2])
+    end
+  end
+  footer({}, pages, 1, "nbtPage")
 end
 
 function drawStats()
@@ -2450,6 +2608,7 @@ function drawStats()
   end)
 
   if d.log then drawLog(1, y + bh + 1, W, H - (y + bh + 1) + 1) return end
+  if d.nbtLog then drawNbtLog(1, y + bh + 1, W, H - (y + bh + 1) + 1) return end
 
   -- Zeitraum (gleiche Zeile, wenn Platz ist)
   local rx, ry = 14 + lblW, y
@@ -3272,7 +3431,9 @@ do
         minus = function() saveSetting("nbtStorageWait", math.max(0, cfg.nbtStorageWait - 1)) end,
         plus = function() saveSetting("nbtStorageWait", math.min(120, cfg.nbtStorageWait + 1)) end },
       { "NBT-Export zuletzt", nbtStatus(),
-        button = "JETZT", fn = function() nbtState.now = true end },
+        button = "JETZT", fn = function()
+          if isMain() then nbtState.now = true else sendCmd({ cmd = "nbtNow" }) end
+        end },
     }
   end
 
@@ -3284,7 +3445,7 @@ do
     if state.renaming then
       put(2, top, fit("Eingabe am Computer: " .. state.renaming, W - 2), colors.yellow)
     else
-      put(2, top, fit("Gilt nur fuer diesen Computer, sofort aktiv", W - 2), colors.gray)
+      put(2, top, fit("Sofort aktiv. Rolle/Schrift nur hier, Rest fuer alle Dashboards", W - 2), colors.gray)
     end
     local list = rows()
     local listTop, listBot = top + 1, H - rowH - 1

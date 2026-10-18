@@ -33,3 +33,9 @@ Das Dashboard legt im eingestellten Abstand (Standard: 1 Stunde) alle Items mit 
 aus dem ME-System in eine Kiste direkt an der ME Bridge. Vorher schaltet es per Funk das
 Redstone-Signal am Computer **NBT Storage** an und nach dem Export wieder aus. Antwortet
 NBT Storage nicht, wird nicht exportiert. Einstellbar im Reiter EINSTELLUNGEN.
+
+- Startbildschirm: kleine Übersicht (letzter Export, wichtigste Items, nächster Termin)
+- Reiter STATISTIK → „NBT-Export“: alle Exporte mit Zeit, Items und Mengen
+- NBT Storage: optionaler Monitor mit Signal-Status und Log (Signal AN/AUS, exportierte Items)
+- Neben-Dashboards übernehmen Zeitzone, Farben, Titel, Chat- und NBT-Einstellungen vom
+  Haupt-Dashboard; Änderungen dort werden ans Haupt-Dashboard weitergegeben
