@@ -44,7 +44,8 @@
             "es"
           ]
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "scheme": "foodtracker"
   }
