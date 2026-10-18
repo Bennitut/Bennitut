@@ -8,18 +8,53 @@ export interface Nutrients {
 
 export type Unit = "g" | "ml" | "stk";
 
+/** Sprachen mit fertiger Übersetzung. Weitere Sprachen fallen auf Englisch zurück. */
+export const LANGUAGES = ["de", "en", "fr", "it", "es"] as const;
+export type Language = (typeof LANGUAGES)[number];
+
+/**
+ * Text in mehreren Sprachen. `de` ist Pflicht; "de-AT" und "de-CH" enthalten
+ * regionale Begriffe (z. B. Erdäpfel, Rüebli), wo sie sich vom Bundesdeutschen unterscheiden.
+ */
+export type LocalizedText = { de: string } & Partial<Record<Language | "de-AT" | "de-CH", string>>;
+
+export type IngredientCategory =
+  | "obst"
+  | "gemuese"
+  | "getreide"
+  | "huelsenfruechte"
+  | "milch_ei"
+  | "fleisch"
+  | "fisch"
+  | "pflanzlich"
+  | "nuesse_samen"
+  | "vorrat";
+
+/** Herkunft einer Zutat: bestimmt, für welche Ernährungsform sie geeignet ist. */
+export type IngredientDiet = "vegan" | "vegetarisch" | "fisch" | "fleisch";
+export type Diet = "alles" | "pescetarisch" | "vegetarisch" | "vegan";
+
+/** Die wichtigsten der 14 EU-Hauptallergene. */
+export const ALLERGENS = ["gluten", "laktose", "ei", "nuesse", "erdnuss", "soja", "fisch", "krebstiere", "sellerie", "sesam"] as const;
+export type Allergen = (typeof ALLERGENS)[number];
+
 export interface Ingredient {
   id: string;
-  name: string;
+  name: LocalizedText;
+  category: IngredientCategory;
   unit: Unit;
   /** Nährwerte pro 100 g / 100 ml bzw. pro Stück. */
   nutrients: Nutrients;
   /** Kleinste kaufbare Packungsgröße in `unit`. */
   packSize: number;
-  /** Preis pro Packung in Euro. */
+  /** Richtpreis pro Packung in Euro (Deutschland). */
   packPrice: number;
   /** Haltbarkeit nach dem Einkauf in Tagen. */
   shelfLifeDays: number;
+  /** Haltbarkeit nach dem Öffnen, falls kürzer (Dosen, Kokosmilch …). */
+  openedShelfLifeDays?: number;
+  diet: IngredientDiet;
+  allergens: Allergen[];
 }
 
 export interface RecipeIngredient {
@@ -30,17 +65,45 @@ export interface RecipeIngredient {
 
 export type MealType = "breakfast" | "lunch" | "dinner";
 
+export interface RecipeText {
+  name: string;
+  steps?: string[];
+  /** Zutaten außerhalb des Katalogs, z. B. Gewürze („1 TL Kreuzkümmel“). */
+  otherIngredients?: string[];
+}
+
+export type RecipeSource =
+  | { kind: "katalog" }
+  | { kind: "eigen" }
+  | { kind: "ki" }
+  | { kind: "import"; url?: string; platform?: "instagram" | "tiktok" | "video" }
+  | { kind: "community"; communityId: string; author: string };
+
 export interface Recipe {
   id: string;
+  /** Sprache von `name`, `steps` und `otherIngredients`. */
+  language: string;
   name: string;
+  steps: string[];
+  otherIngredients: string[];
+  /** Übersetzungen, z. B. von Claude erzeugt. */
+  translations?: Partial<Record<string, RecipeText>>;
   mealTypes: MealType[];
   ingredients: RecipeIngredient[];
+  cookMinutes: number;
   tags: string[];
+  source: RecipeSource;
 }
 
 export interface PantryItem {
   ingredientId: string;
   amount: number;
+}
+
+export interface LockedMeal {
+  day: number;
+  mealType: MealType;
+  recipeId: string;
 }
 
 export interface PlanRequest {
@@ -50,8 +113,17 @@ export interface PlanRequest {
   mealTypes: MealType[];
   /** Vorräte, die zuerst aufgebraucht werden sollen. */
   pantry: PantryItem[];
-  /** Tags, die ein Rezept nicht haben darf (z. B. "fleisch"). */
-  excludeTags: string[];
+  diet: Diet;
+  /** Allergene, die kein Rezept enthalten darf. */
+  allergens: Allergen[];
+  /** Zutaten, die man nicht mag. */
+  excludeIngredients: string[];
+  /** Nur Rezepte mit höchstens so viel Zubereitungszeit (0 = egal). */
+  maxCookMinutes: number;
+  /** Lieblingsrezepte, die bevorzugt eingeplant werden. */
+  favoriteRecipeIds: string[];
+  /** Vom Nutzer festgelegte Gerichte; der Planer plant den Rest drumherum. */
+  locked: LockedMeal[];
   /** Gleiches Rezept höchstens so oft im Plan. */
   maxRepeats: number;
   seed?: number;
@@ -64,23 +136,30 @@ export interface PlannedMeal {
   recipeName: string;
   portions: number;
   nutrientsPerPortion: Nutrients;
+  locked: boolean;
   /** Resteverwertung: zusätzliche Mengen, damit angebrochene Packungen leer werden. */
-  extras: { ingredientId: string; name: string; unit: Unit; amount: number }[];
+  extras: { ingredientId: string; unit: Unit; amount: number }[];
 }
 
 export interface ShoppingItem {
   ingredientId: string;
-  name: string;
   unit: Unit;
   needed: number;
   fromPantry: number;
   packs: number;
   packSize: number;
+  /** Richtpreis in Euro; die App rechnet in die Landeswährung um. */
   price: number;
   /** Menge, die nach dem Plan übrig bleibt. */
   leftover: number;
-  /** Lange haltbar: Rest wandert in den Vorrat statt in den Müll. */
+  /** Rest hält über das Planende hinaus und wandert in den Vorrat für den nächsten Plan. */
   durable: boolean;
+}
+
+export interface SpoilageWarning {
+  ingredientId: string;
+  shelfLifeDays: number;
+  day: number;
 }
 
 export interface MealPlan {
@@ -93,5 +172,5 @@ export interface MealPlan {
   unusedPantry: PantryItem[];
   dailyKcalPerPerson: number[];
   /** Zutaten, die nach Ablauf der Haltbarkeit eingeplant wurden. */
-  spoilageWarnings: string[];
+  spoilageWarnings: SpoilageWarning[];
 }

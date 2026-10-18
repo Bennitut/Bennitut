@@ -1,21 +1,27 @@
+import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Tabs } from "expo-router/js-tabs";
-import { Text } from "react-native";
 import { colors } from "../components/ui";
+import { useI18n } from "../lib/i18n";
 import { StoreProvider } from "../lib/store";
 
-const icon = (emoji: string) => () => <Text style={{ fontSize: 20 }}>{emoji}</Text>;
+function RootStack() {
+  const { t } = useI18n();
+  return (
+    <Stack screenOptions={{ headerShadowVisible: false, headerTintColor: colors.primary, headerBackButtonDisplayMode: "minimal" }}>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="recipe/[id]" options={{ title: "" }} />
+      <Stack.Screen name="recipe/edit" options={{ title: t("editor.newTitle"), presentation: "modal" }} />
+      <Stack.Screen name="recipe/import" options={{ title: t("import.title"), presentation: "modal" }} />
+      <Stack.Screen name="settings" options={{ title: t("settings.title") }} />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   return (
     <StoreProvider>
       <StatusBar style="dark" />
-      <Tabs screenOptions={{ tabBarActiveTintColor: colors.primary, headerShadowVisible: false }}>
-        <Tabs.Screen name="index" options={{ title: "Heute", tabBarIcon: icon("📊") }} />
-        <Tabs.Screen name="scan" options={{ title: "Erfassen", tabBarIcon: icon("📷") }} />
-        <Tabs.Screen name="plan" options={{ title: "Plan", tabBarIcon: icon("🗓️") }} />
-        <Tabs.Screen name="shopping" options={{ title: "Einkauf", tabBarIcon: icon("🛒") }} />
-      </Tabs>
+      <RootStack />
     </StoreProvider>
   );
 }

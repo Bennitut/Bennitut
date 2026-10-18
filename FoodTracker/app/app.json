@@ -32,6 +32,18 @@
           "cameraPermission": "FoodTracker fotografiert Mahlzeiten und Kassenbons, um dein Essen zu erfassen.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": [
+            "de",
+            "en",
+            "fr",
+            "it",
+            "es"
+          ]
+        }
       ]
     ],
     "scheme": "foodtracker"

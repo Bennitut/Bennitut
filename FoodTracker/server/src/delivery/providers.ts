@@ -3,7 +3,6 @@ import type { PantryItem, ShoppingItem } from "../types.js";
 
 export interface OrderLine {
   ingredientId: string;
-  name: string;
   packs: number;
   packSize: number;
   unit: string;
@@ -20,7 +19,8 @@ export interface Order {
 }
 
 /**
- * Schnittstelle für Lieferdienste. Echte Anbieter (z. B. REWE, Knuspr, Picnic, Flink)
+ * Schnittstelle für Lieferdienste. Echte Anbieter (z. B. REWE, Knuspr, Picnic, Flink in
+ * Deutschland, BILLA/gurkerl.at in Österreich, Migros/Coop in der Schweiz)
  * bieten keine offenen Bestell-APIs; eine Anbindung braucht einen Partnervertrag.
  * Jeder Anbieter wird als eigene Implementierung dieses Interfaces ergänzt.
  */
@@ -69,7 +69,7 @@ export function findProvider(id: string): DeliveryProvider | undefined {
 export function linesFromShoppingList(items: ShoppingItem[]): OrderLine[] {
   return items
     .filter((i) => i.packs > 0)
-    .map((i) => ({ ingredientId: i.ingredientId, name: i.name, packs: i.packs, packSize: i.packSize, unit: i.unit }));
+    .map((i) => ({ ingredientId: i.ingredientId, packs: i.packs, packSize: i.packSize, unit: i.unit }));
 }
 
 /** Gelieferte Ware landet automatisch im Vorrat – so wird der Einkauf mitgetrackt. */

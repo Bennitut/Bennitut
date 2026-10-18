@@ -1,21 +1,20 @@
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
-import { Button, Card, ErrorText, Muted, NutrientRow, Screen, styles } from "../components/ui";
-import { api, type ImageMediaType } from "../lib/api";
-import { useStore } from "../lib/store";
-import type { MealAnalysis, PantryItem, ReceiptAnalysis } from "../lib/types";
+import { Image, Text, View } from "react-native";
+import { Button, Card, Chip, ChipRow, ErrorText, Muted, NutrientRow, Screen, styles } from "../../components/ui";
+import { api, toMediaType } from "../../lib/api";
+import { useI18n } from "../../lib/i18n";
+import { useStore } from "../../lib/store";
+import type { MealAnalysis, PantryItem, ReceiptAnalysis } from "../../lib/types";
 
 type Mode = "meal" | "receipt";
 
 const PORTIONS = [0.5, 1, 1.5];
 
-function toMediaType(mimeType: string | undefined): ImageMediaType {
-  return mimeType === "image/png" || mimeType === "image/webp" || mimeType === "image/gif" ? mimeType : "image/jpeg";
-}
-
 export default function ScanScreen() {
   const { addDiaryEntry, addPantryItems, ingredients } = useStore();
+  const i18n = useI18n();
+  const { t } = i18n;
   const [mode, setMode] = useState<Mode>("meal");
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,7 +38,7 @@ export default function ScanScreen() {
     if (source === "camera") {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        setError("Ohne Kamerazugriff kann kein Foto aufgenommen werden.");
+        setError(t("scan.cameraDenied"));
         return;
       }
     }
@@ -53,15 +52,15 @@ export default function ScanScreen() {
     setImageUri(asset.uri);
     setLoading(true);
     try {
-      const mediaType = toMediaType(asset.mimeType);
+      const image = { data: asset.base64, mediaType: toMediaType(asset.mimeType) };
       if (mode === "meal") {
-        setMeal(await api.analyzeMeal(asset.base64, mediaType));
+        setMeal(await api.analyzeMeal(image, i18n.language));
         setPortion(1);
       } else {
-        setReceipt(await api.analyzeReceipt(asset.base64, mediaType));
+        setReceipt(await api.analyzeReceipt(image, i18n.language));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Analyse fehlgeschlagen");
+      setError(i18n.error(e));
     } finally {
       setLoading(false);
     }
@@ -90,27 +89,16 @@ export default function ScanScreen() {
 
   return (
     <Screen>
-      <View style={[styles.row, { justifyContent: "flex-start" }]}>
+      <ChipRow>
         {(["meal", "receipt"] as const).map((m) => (
-          <Pressable
-            key={m}
-            onPress={() => reset(m)}
-            style={[styles.chip, mode === m && { backgroundColor: "#DCEFE3" }]}
-            accessibilityRole="button"
-          >
-            <Text style={styles.text}>{m === "meal" ? "🍽️ Mahlzeit" : "🧾 Kassenbon"}</Text>
-          </Pressable>
+          <Chip key={m} label={t(m === "meal" ? "scan.meal" : "scan.receipt")} selected={mode === m} onPress={() => reset(m)} />
         ))}
-      </View>
+      </ChipRow>
 
-      <Card title={mode === "meal" ? "Mahlzeit fotografieren" : "Kassenbon fotografieren"}>
-        <Muted>
-          {mode === "meal"
-            ? "Die KI erkennt Lebensmittel und schätzt Menge und Nährwerte."
-            : "Die KI liest den Bon und übernimmt gekaufte Lebensmittel in deinen Vorrat."}
-        </Muted>
-        <Button label="📷 Foto aufnehmen" onPress={() => pick("camera")} loading={loading} />
-        <Button label="Aus Galerie wählen" variant="secondary" onPress={() => pick("library")} disabled={loading} />
+      <Card title={t(mode === "meal" ? "scan.mealTitle" : "scan.receiptTitle")}>
+        <Muted>{t(mode === "meal" ? "scan.mealHint" : "scan.receiptHint")}</Muted>
+        <Button label={t("scan.takePhoto")} onPress={() => pick("camera")} loading={loading} />
+        <Button label={t("scan.fromLibrary")} variant="secondary" onPress={() => pick("library")} disabled={loading} />
         <ErrorText message={error} />
       </Card>
 
@@ -128,40 +116,38 @@ export default function ScanScreen() {
           ))}
           <NutrientRow nutrients={meal.total} />
           <Muted>
-            Sicherheit: {meal.confidence}. {meal.notes}
+            {t("scan.confidence", { level: t(`scan.confidenceLevels.${meal.confidence}`) })} {meal.notes}
           </Muted>
-          <Text style={styles.text}>Wie viel davon hast du gegessen?</Text>
-          <View style={[styles.row, { justifyContent: "flex-start" }]}>
+          <Text style={styles.text}>{t("scan.howMuch")}</Text>
+          <ChipRow>
             {PORTIONS.map((p) => (
-              <Pressable
-                key={p}
-                onPress={() => setPortion(p)}
-                style={[styles.chip, portion === p && { backgroundColor: "#DCEFE3" }]}
-              >
-                <Text style={styles.text}>{p === 1 ? "Alles" : `${p}×`}</Text>
-              </Pressable>
+              <Chip key={p} label={p === 1 ? t("scan.all") : `${i18n.number(p)}×`} selected={portion === p} onPress={() => setPortion(p)} />
             ))}
-          </View>
-          <Button label={saved ? "✓ Im Tagebuch" : "Ins Tagebuch übernehmen"} onPress={saveMeal} disabled={saved} />
+          </ChipRow>
+          <Button label={saved ? t("scan.inDiary") : t("scan.addToDiary")} onPress={saveMeal} disabled={saved} />
         </Card>
       ) : null}
 
       {receipt ? (
-        <Card title={receipt.receipt.store ?? "Kassenbon"}>
+        <Card title={receipt.receipt.store ?? t("scan.receiptFallbackTitle")}>
           {receipt.receipt.items.map((item, i) => {
             const ingredient = item.ingredientId ? ingredients.get(item.ingredientId) : undefined;
             return (
               <View key={i} style={styles.row}>
                 <Text style={[styles.text, { flex: 1, opacity: item.isFood ? 1 : 0.5 }]}>{item.name}</Text>
                 <Text style={styles.muted}>
-                  {ingredient ? `→ ${ingredient.name} (${item.quantity} ${ingredient.unit})` : item.isFood ? "nicht zugeordnet" : "kein Lebensmittel"}
+                  {ingredient
+                    ? t("scan.mapped", { name: i18n.ingredientName(ingredient.id), amount: i18n.number(item.quantity), unit: i18n.unit(ingredient.unit) })
+                    : t(item.isFood ? "scan.notMapped" : "scan.notFood")}
                 </Text>
               </View>
             );
           })}
-          {receipt.receipt.total != null ? <Muted>Summe: {receipt.receipt.total.toFixed(2)} €</Muted> : null}
+          {receipt.receipt.total != null ? (
+            <Muted>{t("scan.total", { amount: `${i18n.number(receipt.receipt.total)} ${receipt.receipt.currency ?? ""}`.trim() })}</Muted>
+          ) : null}
           <Button
-            label={saved ? "✓ Im Vorrat" : `${receipt.pantry.length} Lebensmittel in den Vorrat`}
+            label={saved ? t("scan.inPantry") : t("scan.addToPantry", { n: receipt.pantry.length })}
             onPress={saveReceipt}
             disabled={saved || receipt.pantry.length === 0}
           />

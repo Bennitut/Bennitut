@@ -1,5 +1,7 @@
 import type {
+  Diet,
   Ingredient,
+  IngredientDiet,
   MealPlan,
   MealType,
   PantryItem,
@@ -7,6 +9,7 @@ import type {
   PlannedMeal,
   Recipe,
   ShoppingItem,
+  SpoilageWarning,
 } from "../types.js";
 import { addNutrients, nutrientsFor, recipeNutrients, roundNutrients } from "./nutrition.js";
 
@@ -18,14 +21,17 @@ import { addNutrients, nutrientsFor, recipeNutrients, roundNutrients } from "./n
  *  2. vorhandene Vorräte zuerst verwertet werden,
  *  3. nichts nach Ablauf der Haltbarkeit eingeplant wird,
  *  4. der Kalorienbedarf pro Tag getroffen wird (über die Portionsgröße),
- *  5. genug Abwechslung bleibt.
+ *  5. genug Abwechslung bleibt,
+ *  6. Lieblingsrezepte bevorzugt und vom Nutzer fixierte Gerichte beibehalten werden.
  *
  * Das ist ein kombinatorisches Problem (Rezepte teilen sich Packungen). Gelöst wird es
  * per lokaler Suche mit mehreren Neustarts und festem Seed, damit Ergebnisse reproduzierbar sind.
  */
 
-/** Ab dieser Haltbarkeit gilt ein Rest nicht als Verschwendung, sondern als Vorrat. */
+/** Ab dieser Haltbarkeit gilt ein Rest als Vorrat, der praktisch nicht verdirbt. */
 const DURABLE_DAYS = 60;
+/** Reste, die nach Planende noch so viele Tage halten, gehen in den Vorrat für den nächsten Plan. */
+const CARRY_OVER_DAYS = 7;
 const MIN_PORTION = 0.7;
 const MAX_PORTION = 1.5;
 /** Resteverwertung darf die Menge einer Zutat in einem Gericht um höchstens so viel erhöhen. */
@@ -33,8 +39,12 @@ const MAX_EXTRA_SHARE = 0.5;
 /** …und den Tag höchstens auf diesen Anteil des Kalorienziels bringen. */
 const MAX_DAY_KCAL_WITH_EXTRAS = 1.15;
 
+const START_TEMPERATURE = 3;
+const END_TEMPERATURE = 0.02;
+
 const WEIGHTS = {
   perishableLeftover: 10, // pro übrig gebliebener (Anteil einer) Packung
+  carryOverLeftover: 1.5, // hält noch bis in den nächsten Plan
   durableLeftover: 0.2,
   unusedPantry: 15,
   kcalDeviation: 8, // pro 100 % Abweichung pro Tag
@@ -42,12 +52,75 @@ const WEIGHTS = {
   repeat: 40,
   sameAsYesterday: 1.5,
   price: 0.05, // pro Euro
+  favoriteFirst: 12, // Bonus, wenn ein Lieblingsrezept mindestens einmal vorkommt
+  favoriteRepeat: 2, // kleiner Bonus für jede weitere Wiederholung
 };
+
+const ALLOWED_DIETS: Record<Diet, IngredientDiet[]> = {
+  vegan: ["vegan"],
+  vegetarisch: ["vegan", "vegetarisch"],
+  pescetarisch: ["vegan", "vegetarisch", "fisch"],
+  alles: ["vegan", "vegetarisch", "fisch", "fleisch"],
+};
+
+/** Fehler mit Code, damit die App ihn übersetzen kann. */
+export class PlanError extends Error {
+  constructor(
+    readonly code: "no_recipe_for_meal" | "unknown_locked_recipe" | "unknown_ingredient",
+    readonly detail: string,
+  ) {
+    super(`${code}: ${detail}`);
+  }
+}
+
+const keepsDays = (ingredient: Ingredient) => ingredient.openedShelfLifeDays ?? ingredient.shelfLifeDays;
+
+/**
+ * Ob ein Rest nach Ende eines Plans über `planDays` Tage noch verwendbar ist und in den Vorrat
+ * wandert (statt Verschwendung). Geöffnete Dosen etc. verderben schnell und zählen nicht dazu.
+ */
+export function keepsAfterPlan(ingredient: Ingredient, planDays: number): boolean {
+  return keepsDays(ingredient) >= planDays + CARRY_OVER_DAYS;
+}
+
+function leftoverWeight(ingredient: Ingredient, planDays: number): number {
+  if (keepsDays(ingredient) >= DURABLE_DAYS) return WEIGHTS.durableLeftover;
+  return keepsAfterPlan(ingredient, planDays) ? WEIGHTS.carryOverLeftover : WEIGHTS.perishableLeftover;
+}
+
+/** Prüft, ob ein Rezept zu Ernährungsform, Allergien, Abneigungen und Zeitbudget passt. */
+export function matchesPreferences(
+  recipe: Recipe,
+  request: Pick<PlanRequest, "diet" | "allergens" | "excludeIngredients" | "maxCookMinutes">,
+  ingredients: Map<string, Ingredient>,
+): boolean {
+  if (request.maxCookMinutes > 0 && recipe.cookMinutes > request.maxCookMinutes) return false;
+  const allowed = ALLOWED_DIETS[request.diet];
+  return recipe.ingredients.every((ri) => {
+    const ingredient = ingredients.get(ri.ingredientId);
+    return (
+      ingredient !== undefined &&
+      allowed.includes(ingredient.diet) &&
+      !ingredient.allergens.some((a) => request.allergens.includes(a)) &&
+      !request.excludeIngredients.includes(ingredient.id)
+    );
+  });
+}
+
+/** Strengste Ernährungsform, zu der ein Rezept passt. */
+export function recipeDiet(recipe: Recipe, ingredients: Map<string, Ingredient>): Diet {
+  const diets = new Set(recipe.ingredients.map((ri) => ingredients.get(ri.ingredientId)?.diet));
+  if (diets.has("fleisch")) return "alles";
+  if (diets.has("fisch")) return "pescetarisch";
+  if (diets.has("vegetarisch")) return "vegetarisch";
+  return "vegan";
+}
 
 interface Slot {
   day: number;
   mealType: MealType;
   candidates: number[]; // Indizes in recipes
+  locked: boolean;
 }
 
 interface Evaluation {
@@ -64,19 +137,28 @@ export interface PlannerInput {
 }
 
 export function planMeals({ request, recipes, ingredients }: PlannerInput): MealPlan {
-  const usable = recipes.filter((r) => !r.tags.some((t) => request.excludeTags.includes(t)));
+  // Eigene Rezepte überschreiben gleichnamige IDs; fixierte Gerichte dürfen auch außerhalb der Filter liegen.
+  const byId = new Map(recipes.map((r) => [r.id, r]));
+  for (const recipe of byId.values()) {
+    const unknown = recipe.ingredients.find((ri) => !ingredients.has(ri.ingredientId));
+    if (unknown) throw new PlanError("unknown_ingredient", `${recipe.id}/${unknown.ingredientId}`);
+  }
+  const lockedIds = new Set(request.locked.map((l) => l.recipeId));
+  const usable = [...byId.values()].filter((r) => lockedIds.has(r.id) || matchesPreferences(r, request, ingredients));
   const recipeKcal = usable.map((r) => recipeNutrients(r, ingredients).kcal);
-  const slots = buildSlots(request, usable);
+  const favorites = new Set(request.favoriteRecipeIds);
+  const isFavorite = usable.map((r) => favorites.has(r.id));
+  const slots = buildSlots(request, usable, ingredients);
   const pantry = aggregatePantry(request.pantry);
   const rng = mulberry32(request.seed ?? 42);
 
   const evaluate = (assignment: number[]): Evaluation =>
-    evaluateAssignment(assignment, slots, usable, recipeKcal, ingredients, pantry, request);
+    evaluateAssignment(assignment, slots, usable, recipeKcal, isFavorite, ingredients, pantry, request);
 
-  let best: number[] = [];
-  let bestEval: Evaluation | undefined;
-  const restarts = 6;
-  const iterations = 1500 + slots.length * 150;
+  let best: number[] = slots.map((s) => s.candidates[0]!);
+  let bestEval: Evaluation | undefined = evaluate(best);
+  const restarts = 4;
+  const iterations = 2000 + slots.length * 250;
 
   for (let restart = 0; restart < restarts; restart++) {
     let current = slots.map((s) => pick(s.candidates, rng));
@@ -85,39 +167,51 @@ export function planMeals({ request, recipes, ingredients }: PlannerInput): Meal
       const next = [...current];
       if (rng() < 0.7) {
         const slotIndex = Math.floor(rng() * slots.length);
+        if (slots[slotIndex]!.locked) continue;
         next[slotIndex] = pick(slots[slotIndex]!.candidates, rng);
       } else {
         // Tausch zweier Mahlzeiten gleichen Typs: hilft, Verderbliches nach vorne zu ziehen.
         const a = Math.floor(rng() * slots.length);
         const b = Math.floor(rng() * slots.length);
-        if (slots[a]!.mealType !== slots[b]!.mealType) continue;
+        if (slots[a]!.mealType !== slots[b]!.mealType || slots[a]!.locked || slots[b]!.locked) continue;
+        if (!slots[a]!.candidates.includes(next[b]!) || !slots[b]!.candidates.includes(next[a]!)) continue;
         [next[a], next[b]] = [next[b]!, next[a]!];
       }
       const nextEval = evaluate(next);
-      // Gleich gute Lösungen akzeptieren, um Plateaus zu verlassen.
-      if (nextEval.cost <= currentEval.cost) {
+      // Simulated Annealing: anfangs auch schlechtere Pläne zulassen, um lokale Optima
+      // (z. B. eine angebrochene Milchpackung für ein einziges Frühstück) zu verlassen.
+      const temperature = START_TEMPERATURE * Math.pow(END_TEMPERATURE / START_TEMPERATURE, i / iterations);
+      const delta = nextEval.cost - currentEval.cost;
+      if (delta <= 0 || rng() < Math.exp(-delta / temperature)) {
         current = next;
         currentEval = nextEval;
+        if (!bestEval || currentEval.cost < bestEval.cost) {
+          best = current;
+          bestEval = currentEval;
+        }
       }
-    }
-    if (!bestEval || currentEval.cost < bestEval.cost) {
-      best = current;
-      bestEval = currentEval;
     }
   }
 
   return buildPlan(best, bestEval!, slots, usable, ingredients, pantry, request);
 }
 
-function buildSlots(request: PlanRequest, recipes: Recipe[]): Slot[] {
+function buildSlots(request: PlanRequest, recipes: Recipe[], ingredients: Map<string, Ingredient>): Slot[] {
   const slots: Slot[] = [];
   for (let day = 0; day < request.days; day++) {
     for (const mealType of request.mealTypes) {
-      const candidates = recipes.flatMap((r, i) => (r.mealTypes.includes(mealType) ? [i] : []));
-      if (candidates.length === 0) {
-        throw new Error(`Kein passendes Rezept für Mahlzeit "${mealType}" mit den gewählten Filtern`);
+      const lock = request.locked.find((l) => l.day === day && l.mealType === mealType);
+      if (lock) {
+        const index = recipes.findIndex((r) => r.id === lock.recipeId);
+        if (index < 0) throw new PlanError("unknown_locked_recipe", lock.recipeId);
+        slots.push({ day, mealType, candidates: [index], locked: true });
+        continue;
       }
-      slots.push({ day, mealType, candidates });
+      const candidates = recipes.flatMap((r, i) =>
+        r.mealTypes.includes(mealType) && matchesPreferences(r, request, ingredients) ? [i] : [],
+      );
+      if (candidates.length === 0) throw new PlanError("no_recipe_for_meal", mealType);
+      slots.push({ day, mealType, candidates, locked: false });
     }
   }
   return slots;
@@ -128,6 +222,7 @@ function evaluateAssignment(
   slots: Slot[],
   recipes: Recipe[],
   recipeKcal: number[],
+  isFavorite: boolean[],
   ingredients: Map<string, Ingredient>,
   pantry: Map<string, number>,
   request: PlanRequest,
@@ -158,8 +253,9 @@ function evaluateAssignment(
     }
   });
 
-  for (const count of counts.values()) {
+  for (const [r, count] of counts) {
     if (count > request.maxRepeats) cost += WEIGHTS.repeat * (count - request.maxRepeats);
+    if (isFavorite[r]) cost -= WEIGHTS.favoriteFirst + WEIGHTS.favoriteRepeat * (Math.min(count, request.maxRepeats) - 1);
   }
   // Nicht zweimal hintereinander dasselbe zur selben Mahlzeit.
   const perDay = request.mealTypes.length;
@@ -173,9 +269,7 @@ function evaluateAssignment(
     const toBuy = amount - fromPantry;
     const packs = Math.ceil(toBuy / ingredient.packSize - 1e-9);
     const leftover = packs * ingredient.packSize - toBuy;
-    const leftoverPacks = leftover / ingredient.packSize;
-    const durable = ingredient.shelfLifeDays >= DURABLE_DAYS;
-    cost += (durable ? WEIGHTS.durableLeftover : WEIGHTS.perishableLeftover) * leftoverPacks;
+    cost += leftoverWeight(ingredient, request.days) * (leftover / ingredient.packSize);
     cost += WEIGHTS.price * packs * ingredient.packPrice;
     // Eingekauft wird an Tag 0; Verderbliches darf nur bis zum Ablauf eingeplant werden.
     if (packs > 0 && lastUseDay.get(id)! >= ingredient.shelfLifeDays) cost += WEIGHTS.spoilage;
@@ -183,7 +277,7 @@ function evaluateAssignment(
 
   for (const [id, amount] of pantry) {
     const ingredient = ingredients.get(id);
-    if (!ingredient || ingredient.shelfLifeDays >= DURABLE_DAYS) continue;
+    if (!ingredient || keepsAfterPlan(ingredient, request.days)) continue;
     const unused = Math.max(0, amount - (needed.get(id) ?? 0));
     cost += WEIGHTS.unusedPantry * (unused / ingredient.packSize);
   }
@@ -211,6 +305,7 @@ function buildPlan(
       recipeId: recipe.id,
       recipeName: recipe.name,
       portions: portion * request.people,
+      locked: slot.locked,
       nutrientsPerPortion: {
         kcal: n.kcal * portion,
         protein: n.protein * portion,
@@ -222,7 +317,7 @@ function buildPlan(
   });
 
   const shoppingList: ShoppingItem[] = [];
-  const spoilageWarnings: string[] = [];
+  const spoilageWarnings: SpoilageWarning[] = [];
   let boughtPerishable = 0;
   let leftoverPerishable = 0;
   for (const [id, amount] of [...evaluation.needed].sort(([a], [b]) => a.localeCompare(b))) {
@@ -231,7 +326,7 @@ function buildPlan(
     const toBuy = amount - fromPantry;
     const packs = Math.ceil(toBuy / ingredient.packSize - 1e-9);
     let leftover = packs * ingredient.packSize - toBuy;
-    const durable = ingredient.shelfLifeDays >= DURABLE_DAYS;
+    const durable = keepsAfterPlan(ingredient, request.days);
     if (!durable && leftover > 0) {
       leftover -= absorbLeftover(ingredient, leftover, meals, recipes, assignment, request);
     }
@@ -240,13 +335,10 @@ function buildPlan(
       leftoverPerishable += leftover;
     }
     if (packs > 0 && evaluation.lastUseDay.get(id)! >= ingredient.shelfLifeDays) {
-      spoilageWarnings.push(
-        `${ingredient.name} ist nur ${ingredient.shelfLifeDays} Tage haltbar, wird aber an Tag ${evaluation.lastUseDay.get(id)! + 1} gebraucht – zweite Lieferung einplanen.`,
-      );
+      spoilageWarnings.push({ ingredientId: id, shelfLifeDays: ingredient.shelfLifeDays, day: evaluation.lastUseDay.get(id)! });
     }
     shoppingList.push({
       ingredientId: id,
-      name: ingredient.name,
       unit: ingredient.unit,
       needed: round1(amount),
       fromPantry: round1(fromPantry),
@@ -262,7 +354,7 @@ function buildPlan(
   for (const [id, amount] of pantry) {
     let unused = amount - (evaluation.needed.get(id) ?? 0);
     const ingredient = ingredients.get(id);
-    if (ingredient && ingredient.shelfLifeDays < DURABLE_DAYS && unused > 0) {
+    if (ingredient && !keepsAfterPlan(ingredient, request.days) && unused > 0) {
       unused -= absorbLeftover(ingredient, unused, meals, recipes, assignment, request);
     }
     if (unused > 1e-6) unusedPantry.push({ ingredientId: id, amount: round1(unused) });
@@ -312,10 +404,11 @@ function absorbLeftover(
       base.amount * meal.portions * MAX_EXTRA_SHARE,
       kcalPerUnit > 0 ? kcalRoom / kcalPerUnit : Infinity,
     );
-    const extra = Math.min(capacity, remaining);
-    if (extra <= 1e-9) continue;
+    // Auf eine Nachkommastelle gerundet, damit keine „0 Stk.“-Hinweise entstehen.
+    const extra = Math.floor(Math.min(capacity, remaining) * 10) / 10;
+    if (extra <= 0) continue;
     remaining -= extra;
-    meal.extras.push({ ingredientId: ingredient.id, name: ingredient.name, unit: ingredient.unit, amount: round1(extra) });
+    meal.extras.push({ ingredientId: ingredient.id, unit: ingredient.unit, amount: extra });
     meal.nutrientsPerPortion = addNutrients(meal.nutrientsPerPortion, nutrientsFor(ingredient, extra / request.people));
   }
   return leftover - remaining;
