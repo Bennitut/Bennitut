@@ -57,6 +57,10 @@ local DEFAULTS = {
   role           = "main",  -- "main" = Haupt-Dashboard, "mirror" = Neben-Dashboard (spiegelt das Haupt-Dashboard)
   syncInterval   = 2,       -- Sekunden zwischen zwei Sync-Nachrichten des Haupt-Dashboards
   energyTimeout  = 10,      -- Sekunden ohne Funkdaten, bis ein Sender als weg gilt
+  nbtExport      = false,   -- Items mit NBT-Daten regelmaessig aus dem ME-System in eine Kiste legen
+  nbtExportSide  = "up",    -- Seite der Kiste, von der ME Bridge aus gesehen
+  nbtExportInterval = 3600, -- Sekunden zwischen zwei Exporten
+  nbtExportSkip  = {},      -- Item-IDs, die im ME-System bleiben sollen
 }
 
 local cfg = {}
@@ -229,7 +233,7 @@ local sendCmd   -- Befehl ans Haupt-Dashboard (weiter unten definiert, braucht d
 local CHAT_CATS = {
   { "tps", "TPS-Warnung" }, { "energy", "Energie" }, { "crafts", "Craft fertig" },
   { "farms", "Farmen an/aus" }, { "offline", "Farm offline" }, { "stock", "Lager" },
-  { "storage", "ME-Speicher" }, { "lag", "Lag-Schutz" },
+  { "storage", "ME-Speicher" }, { "lag", "Lag-Schutz" }, { "nbt", "NBT-Export" },
 }
 local chatSettings = {
   enabled = cfg.chat ~= false,
@@ -1151,6 +1155,108 @@ function readExtras()
   else
     env = nil
   end
+end
+end
+
+-- ------------------------------------------------------------
+--  NBT-Export: Items mit NBT-/Komponenten-Daten aus dem ME-System
+--  in eine Kiste an der ME Bridge legen (nur Haupt-Dashboard)
+-- ------------------------------------------------------------
+
+NBT_SIDES = { "up", "down", "north", "south", "east", "west" }
+nbtState = { last = nil, count = 0, kinds = 0, missed = 0, err = nil, running = false, now = false }
+do
+local NBT_DB = fs.combine(DIR, "nbtexport.db")
+
+local function saveNbt()
+  local h = fs.open(NBT_DB, "w")
+  h.write(textutils.serialize({ last = nbtState.last, count = nbtState.count,
+                                kinds = nbtState.kinds, missed = nbtState.missed }))
+  h.close()
+end
+
+if fs.exists(NBT_DB) then
+  local h = fs.open(NBT_DB, "r")
+  local t = textutils.unserialize(h.readAll())
+  h.close()
+  if type(t) == "table" then
+    for k, v in pairs(t) do nbtState[k] = v end
+  end
+end
+
+-- NBT in alten Versionen, Daten-Komponenten ab Minecraft 1.21
+local function hasData(it)
+  local d = it.components or it.nbt
+  if type(d) == "table" then return next(d) ~= nil end
+  return type(d) == "string" and d ~= ""
+end
+
+-- Genau diese Variante (Fingerprint) exportieren; die Bridge gibt oft nur
+-- einen Stack pro Aufruf heraus
+local function exportOne(it, total)
+  local filter = { name = it.name, fingerprint = it.fingerprint }
+  local done = 0
+  while done < total do
+    filter.count = total - done
+    local ok, n = pcall(me.exportItem, filter, cfg.nbtExportSide)
+    if type(n) == "table" then n = n.count or n.amount end
+    if not ok or type(n) ~= "number" or n <= 0 then break end
+    done = done + n
+  end
+  return done
+end
+
+function runNbtExport()
+  if not me or not me.getItems or not me.exportItem then
+    nbtState.err = "Keine ME Bridge"
+    return
+  end
+  local ok, list = pcall(me.getItems)
+  if not ok or type(list) ~= "table" then
+    nbtState.err = "Itemliste nicht lesbar"
+    return
+  end
+  local skip = {}
+  for _, n in ipairs(cfg.nbtExportSkip or {}) do skip[n] = true end
+  local count, kinds, missed = 0, 0, 0
+  for _, it in ipairs(list) do
+    -- ohne Fingerprint wuerde die Bridge auch die normalen Items dieser Sorte nehmen
+    if type(it) == "table" and it.name and it.fingerprint and not skip[it.name] and hasData(it) then
+      local want = tonumber(it.count or it.amount) or 0
+      local got = exportOne(it, want)
+      if got > 0 then count, kinds = count + got, kinds + 1 end
+      missed = missed + (want - got)
+    end
+  end
+  nbtState.last, nbtState.count, nbtState.kinds, nbtState.missed = os.epoch("utc"), count, kinds, missed
+  nbtState.err = nil
+  saveNbt()
+  if count > 0 or missed > 0 then
+    chat("NBT-Export: " .. count .. " Items (" .. kinds .. " Sorten) in die Kiste"
+         .. (missed > 0 and (", " .. missed .. " passten nicht rein") or ""), "nbt")
+  end
+end
+
+-- Laeuft parallel zum Rest, damit ein langer Export das Dashboard nicht anhaelt
+function nbtLoop()
+  while true do
+    local due = nbtState.last == nil
+      or os.epoch("utc") - nbtState.last >= cfg.nbtExportInterval * 1000
+    if isMain() and (nbtState.now or (cfg.nbtExport and due)) then
+      nbtState.now, nbtState.running = false, true
+      local ok, err = pcall(runNbtExport)
+      nbtState.running = false
+      if not ok then nbtState.err = tostring(err) end
+    end
+    sleep(nbtState.now and 0 or 5)
+  end
+end
+
+function nbtStatus()
+  if nbtState.running then return "laeuft gerade..." end
+  if nbtState.err then return "Fehler: " .. nbtState.err end
+  if not nbtState.last then return "noch nie" end
+  return osDate("%d.%m. %H:%M", math.floor(nbtState.last / 1000)) .. ": " .. nbtState.count .. " Items"
 end
 end
 
@@ -3104,6 +3210,20 @@ do
         button = "AENDERN", fn = function() textSetting("title", "Titel des Dashboards") end },
       { "Update-Code (Pastebin)", tostring(cfg.updateCode),
         button = "AENDERN", fn = function() textSetting("updateCode", "Pastebin-Code fuer UPDATE") end },
+      { "NBT-Export", cfg.nbtExport and "AN" or "AUS",
+        button = cfg.nbtExport and "AUSSCHALTEN" or "EINSCHALTEN",
+        fn = function() saveSetting("nbtExport", not cfg.nbtExport) end },
+      { "NBT-Export alle", string.format("%g h", cfg.nbtExportInterval / 3600),
+        minus = function() saveSetting("nbtExportInterval", math.max(900, cfg.nbtExportInterval - 900)) end,
+        plus = function() saveSetting("nbtExportInterval", math.min(86400, cfg.nbtExportInterval + 900)) end },
+      { "NBT-Export Kiste (von Bridge)", tostring(cfg.nbtExportSide),
+        button = "AENDERN", fn = function()
+          local i = 1
+          for k, v in ipairs(NBT_SIDES) do if v == cfg.nbtExportSide then i = k end end
+          saveSetting("nbtExportSide", NBT_SIDES[i % #NBT_SIDES + 1])
+        end },
+      { "NBT-Export zuletzt", nbtStatus(),
+        button = "JETZT", fn = function() nbtState.now = true end },
     }
   end
 
@@ -3241,6 +3361,7 @@ function infoTerm()
   print("Spieler:   " .. (playerDet and peripheral.getName(playerDet) or "kein Player Detector"))
   print("Wetter:    " .. (envDet and peripheral.getName(envDet) or "kein Environment Detector"))
   print("Rolle:     " .. (isMain() and "HAUPT-Dashboard" or "Neben-Dashboard (Spiegel)"))
+  print("NBT-Export: " .. (cfg.nbtExport and ("AN, Kiste " .. cfg.nbtExportSide .. " der Bridge") or "aus"))
   print("")
   print("[Q] Beenden")
 end
@@ -3442,7 +3563,7 @@ setupScreen()
 infoTerm()
 
 while true do
-  local ok, err = pcall(parallel.waitForAny, sampleLoop, eventLoop, chatLoop)
+  local ok, err = pcall(parallel.waitForAny, sampleLoop, eventLoop, chatLoop, nbtLoop)
   if ok or err == "Terminated" then break end
   printError("Fehler: " .. tostring(err))
   print("Neustart in 5 Sekunden...")
@@ -3524,6 +3645,17 @@ return {
   chatStorageWarn = 90,     -- Meldung, wenn ein ME-Speicher zu so viel % voll ist
 
   stockMaxCraft = 4096,     -- hoechstens so viele Items pro Auto-Craft
+
+  -- NBT-Export: legt alle Items mit NBT-Daten (verzauberte/beschaedigte
+  -- Werkzeuge, gefuellte Rucksaecke, ...) regelmaessig aus dem ME-System in
+  -- eine Kiste. Die Kiste muss direkt an der ME Bridge stehen.
+  -- Auch im Reiter EINSTELLUNGEN schaltbar.
+  nbtExport         = false,
+  nbtExportSide     = "up",   -- Seite der Kiste von der Bridge aus: up/down/north/south/east/west
+  nbtExportInterval = 3600,   -- Sekunden zwischen zwei Exporten (3600 = 1 Stunde)
+  nbtExportSkip     = {       -- diese Items bleiben im ME-System, z.B.:
+    -- "minecraft:enchanted_book",
+  },
 }
 ]=],
     ["scan.lua"] = [=[

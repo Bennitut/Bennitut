@@ -65,7 +65,8 @@ local function durchlauf(nurTesten)
 
   local anzahlSorten, anzahlItems = 0, 0
   for _, item in ipairs(items) do
-    if hatDaten(item) and not AUSNAHMEN[item.name] then
+    -- ohne Fingerprint wuerde die Bridge auch die normalen Items dieser Sorte nehmen
+    if item.fingerprint and hatDaten(item) and not AUSNAHMEN[item.name] then
       local name = item.displayName or item.name
       if nurTesten then
         print(("%dx %s"):format(item.count, name))
