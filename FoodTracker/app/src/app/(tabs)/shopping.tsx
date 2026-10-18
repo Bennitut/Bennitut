@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Linking, Text, View } from "react-native";
-import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, styles } from "../../components/ui";
+import { Linking, Pressable, Text, View } from "react-native";
+import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, colors, styles } from "../../components/ui";
 import { api } from "../../lib/api";
 import { weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
@@ -11,7 +11,8 @@ import { useStore } from "../../lib/store";
 import type { DeliveryProviderInfo } from "../../lib/types";
 
 export default function ShoppingScreen() {
-  const { plan, orders, saveOrder, addPantryItems } = useStore();
+  const { plan, orders, saveOrder, addPantryItems, ingredients } = useStore();
+  const [leftoversOpen, setLeftoversOpen] = useState(false);
   const i18n = useI18n();
   const { t } = i18n;
   const [providers, setProviders] = useState<DeliveryProviderInfo[]>([]);
@@ -35,7 +36,14 @@ export default function ShoppingScreen() {
   const toBuy = (week?.shoppingList.filter((i) => i.packs > 0) ?? []).sort((a, b) =>
     i18n.ingredientName(a.ingredientId).localeCompare(i18n.ingredientName(b.ingredientId), i18n.language),
   );
-  const carryOver = week?.shoppingList.filter((i) => i.durable && i.leftover > 0 && i.packs > 0) ?? [];
+  // Reste nach der Woche: angebrochen, deshalb zählt die kürzere Haltbarkeit nach dem Öffnen.
+  const carryOver = (week?.shoppingList.filter((i) => i.durable && i.leftover > 0 && i.packs > 0) ?? [])
+    .map((item) => {
+      const ingredient = ingredients.get(item.ingredientId);
+      const shelfLife = ingredient ? Math.min(ingredient.shelfLifeDays, ingredient.openedShelfLifeDays ?? Infinity) : 0;
+      return { item, daysLeft: Math.max(0, shelfLife - (week?.days ?? 7)) };
+    })
+    .sort((a, b) => a.daysLeft - b.daysLeft);
 
   // Der Demo-Anbieter ist übersetzt; echte Anbieter heißen überall gleich.
   const providerName = (p: DeliveryProviderInfo) => (p.id === "demo" ? t("shopping.providers.demo") : p.name);
@@ -103,12 +111,37 @@ export default function ShoppingScreen() {
             {t("shopping.sumHint", { price: i18n.price(week!.totalPrice) })} {t("common.estimatedPrices")}
           </Muted>
         ) : null}
-        {carryOver.map((item) => (
-          <Muted key={item.ingredientId}>
-            ↪ {i18n.ingredientName(item.ingredientId)}: {t("shopping.carryOver", { amount: i18n.number(item.leftover), unit: i18n.unit(item.unit) })}
-          </Muted>
-        ))}
       </Card>
+
+      {carryOver.length > 0 ? (
+        <Card>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: leftoversOpen }}
+            onPress={() => setLeftoversOpen((open) => !open)}
+            style={styles.row}
+          >
+            <Text style={[styles.text, { flex: 1, fontWeight: "600" }]}>{t("shopping.leftoversTitle", { n: carryOver.length })}</Text>
+            <Text style={styles.muted}>{leftoversOpen ? "▾" : "▸"}</Text>
+          </Pressable>
+          {leftoversOpen ? (
+            <>
+              <Muted>{t("shopping.leftoversHint")}</Muted>
+              {carryOver.map(({ item, daysLeft }) => (
+                <View key={item.ingredientId} style={[styles.row, { paddingVertical: 2 }]}>
+                  <Text style={[styles.text, { flex: 1 }]}>
+                    {i18n.ingredientName(item.ingredientId)}{" "}
+                    <Text style={styles.muted}>{i18n.amount(item.leftover, item.unit)}</Text>
+                  </Text>
+                  <Text style={[styles.muted, daysLeft <= 7 ? { color: colors.warning, fontWeight: "600" } : null]}>
+                    {daysLeft <= 7 ? t("shopping.useSoon", { days: daysLeft }) : t("shopping.keepsDays", { days: daysLeft })}
+                  </Text>
+                </View>
+              ))}
+            </>
+          ) : null}
+        </Card>
+      ) : null}
 
       {toBuy.length > 0 ? (
         <Card title={t("shopping.deliver")}>

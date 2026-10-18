@@ -124,7 +124,14 @@ export default function RecipeDetailScreen() {
       {image ? (
         <View style={{ gap: 4 }}>
           <Image source={{ uri: image.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 14 }} resizeMode="cover" accessibilityIgnoresInvertColors />
-          {image.credit ? <Muted>{t("recipes.photoCredit", { credit: image.credit })}</Muted> : null}
+          {image.credit ? (
+            <Text
+              style={[styles.muted, image.source ? { textDecorationLine: "underline" } : null]}
+              onPress={image.source ? () => Linking.openURL(image.source!) : undefined}
+            >
+              {t("recipes.photoCredit", { credit: image.credit })}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       <Card>

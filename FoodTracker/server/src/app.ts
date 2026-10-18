@@ -46,7 +46,7 @@ export const RecipeBody = z.object({
   media: z
     .object({
       // Eigene Fotos kommen als data-URI und dürfen deshalb etwas größer sein.
-      image: z.object({ uri: z.string().max(700_000), credit: z.string().max(200).optional() }).optional(),
+      image: z.object({ uri: z.string().max(700_000), credit: z.string().max(200).optional(), source: z.string().url().max(2000).optional() }).optional(),
       videos: z
         .array(
           z.object({

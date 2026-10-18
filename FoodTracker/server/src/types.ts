@@ -91,7 +91,7 @@ export interface RecipeVideo {
 
 export interface RecipeMedia {
   /** Foto des Gerichts: URL oder data-URI (eigenes Foto). */
-  image?: { uri: string; credit?: string };
+  image?: { uri: string; credit?: string; /** Seite mit Urheber und Lizenz. */ source?: string };
   videos?: RecipeVideo[];
 }
 
