@@ -18,6 +18,7 @@ export const fr: Dictionary = {
     scan: "Saisir",
     plan: "Menu",
     recipes: "Recettes",
+    pantry: "Provisions",
     shopping: "Courses",
   },
   mealTypes: {
@@ -133,6 +134,7 @@ export const fr: Dictionary = {
     swapTitle: "Échanger le {meal} du jour {day}",
     swapHint: "Le plat choisi est verrouillé et le reste du menu est recalculé.",
     noAlternatives: "Aucune alternative adaptée.",
+    aiOffline: "Les nouvelles recettes IA nécessitent une connexion au serveur. Le menu a été créé à partir des recettes existantes.",
   },
   recipes: {
     mine: "Les miennes",
@@ -227,6 +229,32 @@ export const fr: Dictionary = {
     providers: {
       demo: "Service de livraison de démo",
       demoDescription: "Simule commande et livraison – pour essayer sans vrai fournisseur.",
+    },
+  },
+  pantry: {
+    empty: "Vos provisions sont vides. Ajoutez des aliments, scannez un ticket ou faites-vous livrer.",
+    add: "＋ Ajouter un aliment",
+    items: "{n} aliments",
+    soon: "À consommer bientôt",
+    daysLeft: "encore env. {n} jours",
+    lastDay: "à consommer aujourd'hui",
+    expired: "vérifier la fraîcheur",
+    amount: "Quantité en {unit}",
+    remove: "Retirer des provisions",
+    cookWith: "Vous pouvez cuisiner",
+    coverage: "{have} ingrédients sur {total} disponibles",
+    scanReceipt: "🧾 Scanner un ticket",
+    categories: {
+      obst: "Fruits",
+      gemuese: "Légumes",
+      getreide: "Céréales, pain et pâtes",
+      huelsenfruechte: "Légumineuses",
+      milch_ei: "Produits laitiers et œufs",
+      fleisch: "Viande",
+      fisch: "Poisson et fruits de mer",
+      pflanzlich: "Alternatives végétales",
+      nuesse_samen: "Fruits à coque et graines",
+      vorrat: "Placard",
     },
   },
   settings: {

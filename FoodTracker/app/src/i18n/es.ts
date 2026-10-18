@@ -18,6 +18,7 @@ export const es: Dictionary = {
     scan: "Registrar",
     plan: "Plan",
     recipes: "Recetas",
+    pantry: "Despensa",
     shopping: "Compra",
   },
   mealTypes: {
@@ -133,6 +134,7 @@ export const es: Dictionary = {
     swapTitle: "Cambiar {meal} del día {day}",
     swapHint: "El plato elegido se fija y se recalcula el resto del plan.",
     noAlternatives: "No hay alternativas adecuadas.",
+    aiOffline: "Las nuevas recetas de IA necesitan conexión con el servidor. El plan se ha creado con las recetas existentes.",
   },
   recipes: {
     mine: "Mías",
@@ -227,6 +229,32 @@ export const es: Dictionary = {
     providers: {
       demo: "Reparto de demostración",
       demoDescription: "Simula pedido y entrega, para probar sin un proveedor real.",
+    },
+  },
+  pantry: {
+    empty: "Tu despensa está vacía. Añade alimentos, escanea un tique o pide la compra a domicilio.",
+    add: "＋ Añadir alimento",
+    items: "{n} alimentos",
+    soon: "Consumir pronto",
+    daysLeft: "quedan unos {n} días",
+    lastDay: "consumir hoy",
+    expired: "comprueba si sigue bien",
+    amount: "Cantidad en {unit}",
+    remove: "Quitar de la despensa",
+    cookWith: "Puedes cocinar",
+    coverage: "{have} de {total} ingredientes disponibles",
+    scanReceipt: "🧾 Escanear tique",
+    categories: {
+      obst: "Fruta",
+      gemuese: "Verduras",
+      getreide: "Cereales, pan y pasta",
+      huelsenfruechte: "Legumbres",
+      milch_ei: "Lácteos y huevos",
+      fleisch: "Carne",
+      fisch: "Pescado y marisco",
+      pflanzlich: "Alternativas vegetales",
+      nuesse_samen: "Frutos secos y semillas",
+      vorrat: "Despensa",
     },
   },
   settings: {

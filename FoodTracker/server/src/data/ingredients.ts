@@ -174,6 +174,31 @@ export const INGREDIENTS: Ingredient[] = [
   ing("currypaste", ["Rote Currypaste", "Red curry paste", "Pâte de curry rouge", "Pasta di curry rosso", "Pasta de curry rojo"], "vorrat", "g", [120, 2, 12, 6], 110, 1.99, 365, "vegan", { opened: 14 }),
   ing("pesto", ["Pesto Genovese", "Green pesto", "Pesto alla genovese", "Pesto alla genovese", "Pesto genovés"], "vorrat", "g", [480, 5, 5, 48], 190, 1.99, 21, "vegetarisch", { allergens: ["laktose", "nuesse"] }),
   ing("honig", ["Honig", "Honey", "Miel", "Miele", "Miel"], "vorrat", "g", [305, 0.4, 76, 0], 500, 3.99, 365, "vegetarisch"),
+  ing("zucker", ["Zucker", "Sugar", "Sucre", "Zucchero", "Azúcar"], "vorrat", "g", [400, 0, 100, 0], 1000, 1.19, 365, "vegan"),
+  ing("rosinen", ["Rosinen", "Raisins", "Raisins secs", "Uvetta", "Pasas"], "vorrat", "g", [300, 2.5, 69, 0.5], 250, 1.49, 365, "vegan", { ch: "Sultaninen" }),
+  ing("apfelmus", ["Apfelmus (Glas)", "Apple sauce (jar)", "Compote de pommes", "Purea di mele", "Puré de manzana"], "vorrat", "g", [75, 0.2, 18, 0.1], 700, 1.29, 365, "vegan", { opened: 7, ch: "Apfelmus (Glas)" }),
+  ing("marmelade", ["Konfitüre", "Jam", "Confiture", "Marmellata", "Mermelada"], "vorrat", "g", [250, 0.4, 60, 0.1], 450, 1.99, 365, "vegan", { opened: 30, at: "Marmelade" }),
+  ing("semmelbroesel", ["Paniermehl", "Breadcrumbs", "Chapelure", "Pangrattato", "Pan rallado"], "getreide", "g", [360, 12, 72, 2], 400, 0.99, 365, "vegan", { ...gluten, at: "Semmelbrösel" }),
+  ing("hefe", ["Trockenhefe", "Dried yeast", "Levure sèche", "Lievito secco", "Levadura seca"], "vorrat", "g", [330, 40, 41, 7], 21, 0.39, 365, "vegan"),
+  ing("sauerkraut", ["Sauerkraut", "Sauerkraut", "Choucroute", "Crauti", "Chucrut"], "gemuese", "g", [20, 1.5, 2, 0.3], 500, 0.99, 365, "vegan", { opened: 5 }),
+  ing("rotkohl", ["Rotkohl (Glas)", "Red cabbage (jar)", "Chou rouge (bocal)", "Cavolo rosso (vasetto)", "Lombarda (tarro)"], "gemuese", "g", [55, 1, 11, 0.2], 700, 1.29, 365, "vegan", { opened: 5, at: "Rotkraut (Glas)", ch: "Rotkabis (Glas)" }),
+  ing("weisskohl", ["Weißkohl", "White cabbage", "Chou blanc", "Cavolo cappuccio", "Repollo"], "gemuese", "g", [25, 1.4, 4, 0.2], 1000, 1.29, 21, "vegan", { at: "Weißkraut", ch: "Weisskabis" }),
 ];
+
+/** Weitere Zutaten für klassische Gerichte aus Deutschland, Österreich, der Schweiz und der Welt. */
+INGREDIENTS.push(
+  ing("spaetzle", ["Eierspätzle (getrocknet)", "Spätzle egg noodles", "Spätzle", "Spätzle", "Spätzle"], "getreide", "g", [360, 13, 68, 3.5], 500, 1.69, 365, "vegetarisch", { allergens: ["gluten", "ei"], ch: "Spätzli (getrocknet)" }),
+  ing("lasagneplatten", ["Lasagneplatten", "Lasagne sheets", "Feuilles de lasagne", "Sfoglie per lasagne", "Placas de lasaña"], "getreide", "g", [360, 13, 70, 2], 500, 1.29, 365, "vegan", gluten),
+  ing("risottoreis", ["Risottoreis", "Risotto rice", "Riz à risotto", "Riso per risotti", "Arroz para risotto"], "getreide", "g", [350, 7, 78, 0.6], 500, 1.79, 365, "vegan"),
+  ing("reisnudeln", ["Reisnudeln", "Rice noodles", "Nouilles de riz", "Spaghetti di riso", "Fideos de arroz"], "getreide", "g", [360, 6, 80, 0.6], 250, 1.79, 365, "vegan"),
+  ing("bergkaese", ["Bergkäse", "Alpine cheese", "Fromage de montagne", "Formaggio di montagna", "Queso de montaña"], "milch_ei", "g", [400, 28, 0, 32], 200, 2.79, 30, "vegetarisch", laktose),
+  ing("ricotta", ["Ricotta", "Ricotta", "Ricotta", "Ricotta", "Ricotta"], "milch_ei", "g", [140, 9, 3, 10], 250, 1.49, 7, "vegetarisch", laktose),
+  ing("saure_sahne", ["Saure Sahne", "Sour cream", "Crème aigre", "Panna acida", "Nata agria"], "milch_ei", "g", [115, 3, 4, 10], 200, 0.79, 10, "vegetarisch", { ...laktose, at: "Sauerrahm", ch: "Saurer Halbrahm" }),
+  ing("rindergulasch", ["Rindergulasch", "Beef stewing steak", "Bœuf à braiser", "Spezzatino di manzo", "Ternera para guisar"], "fleisch", "g", [135, 21, 0, 5.5], 500, 7.99, 2, "fleisch", { at: "Rindsgulasch", ch: "Rindsragout" }),
+  ing("hackfleisch_gemischt", ["Hackfleisch gemischt", "Mixed mince (beef & pork)", "Viande hachée mixte", "Macinato misto", "Carne picada mixta"], "fleisch", "g", [250, 18, 0, 20], 500, 3.99, 2, "fleisch", { at: "Faschiertes gemischt" }),
+  ing("schweineschnitzel", ["Schweineschnitzel", "Pork escalopes", "Escalopes de porc", "Scaloppine di maiale", "Escalopes de cerdo"], "fleisch", "g", [120, 22, 0, 3], 400, 4.99, 3, "fleisch", { at: "Schweinsschnitzel", ch: "Schweinsplätzli" }),
+  ing("kalbfleisch", ["Kalbfleisch (geschnetzelt)", "Veal strips", "Émincé de veau", "Straccetti di vitello", "Ternera lechal en tiras"], "fleisch", "g", [110, 21, 0, 2.5], 400, 9.99, 2, "fleisch", { ch: "Kalbsgeschnetzeltes" }),
+  ing("bratwurst", ["Bratwürste", "Bratwurst sausages", "Saucisses à griller", "Salsicce bratwurst", "Salchichas bratwurst"], "fleisch", "stk", [290, 13, 1, 26], 4, 3.49, 7, "fleisch", { ch: "Bratwürste" }),
+);
 
 export const ingredientById = new Map(INGREDIENTS.map((i) => [i.id, i]));

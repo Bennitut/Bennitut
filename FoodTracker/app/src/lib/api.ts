@@ -1,9 +1,9 @@
+import Constants from "expo-constants";
 import type {
   Allergen,
   CommunityRecipe,
   DeliveryProviderInfo,
   Diet,
-  Ingredient,
   LockedMeal,
   MealAnalysis,
   MealPlan,
@@ -16,8 +16,18 @@ import type {
   ShoppingItem,
 } from "./types";
 
-// Im Simulator reicht localhost; auf einem echten Gerät die LAN-IP des Rechners eintragen.
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+/**
+ * Adresse des Backends. Während der Entwicklung läuft es auf demselben Rechner wie Expo;
+ * dessen Adresse kennt die App (z. B. "10.0.0.7:8081"), also nehmen wir denselben Host mit Port 3000.
+ * Mit EXPO_PUBLIC_API_URL lässt sich die Adresse fest vorgeben (z. B. für einen echten Server).
+ */
+function serverUrl(): string {
+  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
+  const devHost = Constants.expoConfig?.hostUri?.split(":")[0];
+  return devHost ? `http://${devHost}:3000` : "http://localhost:3000";
+}
+
+export const BASE_URL = serverUrl();
 
 export type ImageMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
 export interface ImagePayload {
@@ -45,7 +55,12 @@ export function setDeviceId(id: string) {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
+    // KI-Anfragen dürfen dauern; ohne Server soll die App aber nicht ewig warten.
+    const slow = path.startsWith("/api/analyze") || path.startsWith("/api/recipes") || path === "/api/plan";
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), slow ? 120_000 : 10_000);
     res = await fetch(`${BASE_URL}${path}`, {
+      signal: controller.signal,
       ...init,
       headers: { "Content-Type": "application/json", "X-Device-Id": deviceId, ...init?.headers },
     });
@@ -68,8 +83,6 @@ export interface PlanPreferences {
 }
 
 export const api = {
-  catalog: () => request<{ ingredients: Ingredient[]; recipes: Recipe[] }>("/api/catalog"),
-
   analyzeMeal: (image: ImagePayload, language: string) =>
     post<MealAnalysis>("/api/analyze/meal", { imageBase64: image.data, mediaType: image.mediaType, language }),
 
@@ -94,9 +107,6 @@ export const api = {
       language: string;
     },
   ) => post<{ plan: MealPlan; extraRecipes: Recipe[] }>("/api/plan", body),
-
-  matchingRecipes: (body: PlanPreferences & { mealType?: MealType; recipes: Recipe[] }) =>
-    post<{ recipeIds: string[] }>("/api/recipes/matching", body),
 
   importRecipe: (body: { url?: string; caption?: string; frames: ImagePayload[]; language: string }) =>
     post<{ recipe: Recipe; author: string | null }>("/api/recipes/import", body),

@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, styles } from "../../components/ui";
@@ -7,7 +8,7 @@ import { useStore } from "../../lib/store";
 import type { DeliveryProviderInfo } from "../../lib/types";
 
 export default function ShoppingScreen() {
-  const { plan, pantry, orders, saveOrder, addPantryItems, ingredients } = useStore();
+  const { plan, orders, saveOrder, addPantryItems } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
   const [providers, setProviders] = useState<DeliveryProviderInfo[]>([]);
@@ -126,22 +127,7 @@ export default function ShoppingScreen() {
         </Card>
       ) : null}
 
-      <Card title={t("shopping.pantry")}>
-        {pantry.length === 0 ? (
-          <Muted>{t("shopping.pantryEmpty")}</Muted>
-        ) : (
-          [...pantry]
-            .sort((a, b) => i18n.ingredientName(a.ingredientId).localeCompare(i18n.ingredientName(b.ingredientId), i18n.language))
-            .map((item) => (
-            <View key={item.ingredientId} style={styles.row}>
-              <Text style={styles.text}>{i18n.ingredientName(item.ingredientId)}</Text>
-              <Text style={styles.muted}>
-                {i18n.amount(item.amount, ingredients.get(item.ingredientId)?.unit ?? "g")}
-              </Text>
-            </View>
-          ))
-        )}
-      </Card>
+      <Button label={`🥫 ${t("shopping.pantry")} ›`} variant="secondary" onPress={() => router.push("/pantry")} />
     </Screen>
   );
 }

@@ -16,6 +16,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Instagram & TikTok** | Link zu einem Koch-Video einfügen → Claude liest Beschreibung, Vorschaubild und (optional) Einzelbilder aus dem gespeicherten Video und macht daraus ein Rezept mit Mengen. |
 | **Community** | Eigene Rezepte teilen, Rezepte anderer entdecken (beliebt/neu) und als Favorit speichern. Favoriten zählen als „Likes“. |
 | **Zero Waste** | Rezepte werden so kombiniert, dass gekaufte Packungen aufgebraucht werden; vorhandene Vorräte kommen zuerst dran; Verderbliches wird nur innerhalb der Haltbarkeit eingeplant; Reste geöffneter Dosen zählen als Verschwendung. Was trotzdem übrig wäre, wird als „♻️ Reste mitverwenden“ auf passende Gerichte verteilt. |
+| **Vorrat** | Eigener Tab mit dem aktuellen Lagerbestand der Küche, nach Kategorien sortiert, mit geschätzter Resthaltbarkeit („bald verbrauchen“), Mengen zum Nachzählen und Rezeptvorschlägen, die mit dem Vorhandenen kochbar sind. |
 | **Lieferdienst** | Die Einkaufsliste wird mit einem Tipp bestellt. Gelieferte Ware landet automatisch im Vorrat. |
 | **Automatisches Tracking** | Hakt man eine geplante Mahlzeit als „Gegessen“ ab, wird sie ins Tagebuch übernommen und die Zutaten werden vom Vorrat abgezogen. |
 
@@ -43,7 +44,7 @@ FoodTracker/
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
-    ├── src/data/         104 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 52 Rezepte
+    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 101 Rezepte
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
 ```
 
@@ -64,11 +65,23 @@ npm start                              # http://localhost:3000, Community-Rezept
 # App (zweites Terminal)
 cd app
 npm install
-EXPO_PUBLIC_API_URL=http://<IP-deines-Rechners>:3000 npx expo start
+npx expo start
 ```
 
-QR-Code mit der Kamera (iOS) bzw. Expo Go (Android) scannen. Auf einem echten Gerät muss
-`EXPO_PUBLIC_API_URL` die LAN-IP des Rechners sein, nicht `localhost`.
+QR-Code mit der Kamera (iOS) bzw. Expo Go (Android) scannen. Handy und Rechner müssen im selben WLAN sein.
+Die App findet den Server automatisch (gleicher Rechner, Port 3000). Für einen anderen Server:
+`EXPO_PUBLIC_API_URL=http://<adresse>:3000 npx expo start`.
+
+**Ohne Server** funktionieren Rezepte, Ernährungsplan, Tauschen/Fixieren, Vorrat und Tagebuch trotzdem:
+Katalog und Zero-Waste-Planer sind in die App eingebaut. Den Server braucht man nur für Foto-/Bon-Erkennung,
+KI-Rezepte, Import, Übersetzen, Community und Bestellungen.
+
+**Windows: „Keine Verbindung zum Server“** – meist blockiert die Windows-Firewall Port 3000.
+Einmalig in einer PowerShell **als Administrator**:
+
+```powershell
+New-NetFirewallRule -DisplayName "FoodTracker Server" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+```
 
 Für App-Store-/Play-Store-Builds: `npx eas-cli@latest build --platform all`.
 

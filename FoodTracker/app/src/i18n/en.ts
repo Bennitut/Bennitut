@@ -18,6 +18,7 @@ export const en: Dictionary = {
     scan: "Capture",
     plan: "Plan",
     recipes: "Recipes",
+    pantry: "Pantry",
     shopping: "Shopping",
   },
   mealTypes: {
@@ -133,6 +134,7 @@ export const en: Dictionary = {
     swapTitle: "Swap {meal} on day {day}",
     swapHint: "The chosen dish is locked and the rest of the plan is recalculated.",
     noAlternatives: "No matching alternatives found.",
+    aiOffline: "New AI recipes need a connection to the server. The plan was created from the existing recipes.",
   },
   recipes: {
     mine: "Mine",
@@ -227,6 +229,32 @@ export const en: Dictionary = {
     providers: {
       demo: "Demo delivery service",
       demoDescription: "Simulates ordering and delivery – to try things out without a real provider.",
+    },
+  },
+  pantry: {
+    empty: "Your pantry is empty. Add food, scan a receipt or get an order delivered.",
+    add: "＋ Add food",
+    items: "{n} items",
+    soon: "Use soon",
+    daysLeft: "about {n} days left",
+    lastDay: "use today",
+    expired: "check if still good",
+    amount: "Amount in {unit}",
+    remove: "Remove from pantry",
+    cookWith: "You can cook",
+    coverage: "{have} of {total} ingredients in stock",
+    scanReceipt: "🧾 Scan receipt",
+    categories: {
+      obst: "Fruit",
+      gemuese: "Vegetables",
+      getreide: "Grains, bread & pasta",
+      huelsenfruechte: "Pulses",
+      milch_ei: "Dairy & eggs",
+      fleisch: "Meat",
+      fisch: "Fish & seafood",
+      pflanzlich: "Plant-based",
+      nuesse_samen: "Nuts & seeds",
+      vorrat: "Store cupboard",
     },
   },
   settings: {

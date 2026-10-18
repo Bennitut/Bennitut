@@ -2,8 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { isUILanguage, regionFromCode } from "../i18n";
-import { api, setDeviceId } from "./api";
-import { addToPantry, consumeMeal, newId, nowTime, today } from "./pantry";
+import { setDeviceId } from "./api";
+import { INGREDIENTS, RECIPES } from "./catalog";
+import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import type {
   DiaryEntry,
   Ingredient,
@@ -19,7 +20,8 @@ import type {
 interface PersistedState {
   deviceId: string;
   diary: DiaryEntry[];
-  pantry: PantryItem[];
+  /** Lagerbestand in der Küche, je Einkauf ein Posten. */
+  pantry: StockItem[];
   plan: MealPlan | null;
   /** Rezepte, die nur im aktuellen Plan vorkommen (z. B. KI-Vorschläge). */
   planRecipes: Recipe[];
@@ -35,9 +37,11 @@ interface PersistedState {
   shared: Record<string, string>;
   /** Von Claude übersetzte Rezepttexte: Rezept-ID → Sprache → Text. */
   translations: Record<string, Record<string, RecipeText>>;
-  catalog: { ingredients: Ingredient[]; recipes: Recipe[] };
   settings: Settings;
 }
+
+/** Fest eingebauter Katalog – funktioniert auch ohne Verbindung zum Server. */
+const catalog = { ingredients: INGREDIENTS, recipes: RECIPES };
 
 const STORAGE_KEY = "foodtracker/state/v2";
 const LEGACY_STORAGE_KEY = "foodtracker/state/v1";
@@ -74,7 +78,6 @@ function initialState(): PersistedState {
     savedRecipes: [],
     shared: {},
     translations: {},
-    catalog: { ingredients: [], recipes: [] },
     settings: defaultSettings(),
   };
 }
@@ -84,8 +87,14 @@ async function loadState(): Promise<PersistedState> {
   const base = initialState();
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   if (raw) {
-    const saved = JSON.parse(raw) as Partial<PersistedState>;
-    return { ...base, ...saved, settings: { ...base.settings, ...saved.settings } };
+    // Ältere Versionen speicherten auch den Katalog; der kommt jetzt immer aus der App.
+    const { catalog: _oldCatalog, ...saved } = JSON.parse(raw) as Partial<PersistedState> & { catalog?: unknown };
+    return {
+      ...base,
+      ...saved,
+      pantry: migrateStock(saved.pantry ?? []),
+      settings: { ...base.settings, ...saved.settings },
+    };
   }
   const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
   if (!legacy) return base;
@@ -93,7 +102,7 @@ async function loadState(): Promise<PersistedState> {
   return {
     ...base,
     diary: old.diary ?? [],
-    pantry: old.pantry ?? [],
+    pantry: migrateStock(old.pantry ?? []),
     settings: {
       ...base.settings,
       kcalPerPersonPerDay: old.settings?.kcalPerPersonPerDay ?? base.settings.kcalPerPersonPerDay,
@@ -105,6 +114,7 @@ async function loadState(): Promise<PersistedState> {
 
 interface Store extends PersistedState {
   ready: boolean;
+  catalog: typeof catalog;
   ingredients: Map<string, Ingredient>;
   /** Alle bekannten Rezepte: Katalog, eigene, gespeicherte Community-Rezepte und Plan-Rezepte. */
   recipes: Map<string, Recipe>;
@@ -113,6 +123,8 @@ interface Store extends PersistedState {
   addDiaryEntry: (entry: Omit<DiaryEntry, "id" | "date" | "time">) => void;
   removeDiaryEntry: (id: string) => void;
   addPantryItems: (items: PantryItem[]) => void;
+  /** Setzt die Gesamtmenge einer Zutat im Vorrat (0 = entfernen). */
+  setPantryAmount: (ingredientId: string, amount: number) => void;
   setPlan: (plan: MealPlan, extraRecipes: Recipe[]) => void;
   markMealEaten: (index: number, title: string) => void;
   toggleLock: (index: number) => void;
@@ -141,30 +153,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .finally(() => setReady(true));
   }, []);
 
-  // Katalog nach dem Laden aktualisieren; bei fehlender Verbindung bleibt die gespeicherte Kopie.
-  useEffect(() => {
-    if (!ready) return;
-    api
-      .catalog()
-      .then((catalog) => setState((s) => ({ ...s, catalog })))
-      .catch(() => {});
-  }, [ready]);
-
   useEffect(() => {
     if (ready) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
   }, [state, ready]);
 
   const store = useMemo<Store>(() => {
-    const ingredients = new Map(state.catalog.ingredients.map((i) => [i.id, i]));
+    const ingredients = new Map(catalog.ingredients.map((i) => [i.id, i]));
     const userRecipes = [...state.myRecipes, ...state.savedRecipes, ...state.planRecipes];
     const recipes = new Map<string, Recipe>();
-    for (const recipe of [...state.catalog.recipes, ...userRecipes]) {
+    for (const recipe of [...catalog.recipes, ...userRecipes]) {
       const cached = state.translations[recipe.id];
       recipes.set(recipe.id, cached ? { ...recipe, translations: { ...recipe.translations, ...cached } } : recipe);
     }
     return {
       ...state,
       ready,
+      catalog,
       ingredients,
       recipes,
       userRecipes,
@@ -172,6 +176,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setState((s) => ({ ...s, diary: [...s.diary, { ...entry, id: newId(), date: today(), time: nowTime() }] })),
       removeDiaryEntry: (id) => setState((s) => ({ ...s, diary: s.diary.filter((e) => e.id !== id) })),
       addPantryItems: (items) => setState((s) => ({ ...s, pantry: addToPantry(s.pantry, items) })),
+      setPantryAmount: (ingredientId, amount) =>
+        setState((s) => ({ ...s, pantry: setPantryAmount(s.pantry, ingredientId, Math.max(0, amount)) })),
       setPlan: (plan, extraRecipes) =>
         setState((s) => {
           // KI-Rezepte aus dem alten Plan behalten, solange sie noch eingeplant sind.

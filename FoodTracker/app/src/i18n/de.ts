@@ -18,6 +18,7 @@ export const de = {
     scan: "Erfassen",
     plan: "Plan",
     recipes: "Rezepte",
+    pantry: "Vorrat",
     shopping: "Einkauf",
   },
   mealTypes: {
@@ -133,6 +134,7 @@ export const de = {
     swapTitle: "{meal} an Tag {day} tauschen",
     swapHint: "Das gewählte Gericht wird fixiert und der übrige Plan neu berechnet.",
     noAlternatives: "Keine passenden Alternativen gefunden.",
+    aiOffline: "Für neue KI-Rezepte braucht die App eine Verbindung zum Server. Der Plan wurde aus den vorhandenen Rezepten erstellt.",
   },
   recipes: {
     mine: "Meine",
@@ -227,6 +229,32 @@ export const de = {
     providers: {
       demo: "Demo-Lieferdienst",
       demoDescription: "Simuliert Bestellung und Lieferung – zum Ausprobieren ohne echten Anbieter.",
+    },
+  },
+  pantry: {
+    empty: "Noch nichts im Vorrat. Füge Lebensmittel hinzu, fotografiere einen Kassenbon oder lass dir eine Bestellung liefern.",
+    add: "＋ Lebensmittel hinzufügen",
+    items: "{n} Lebensmittel",
+    soon: "Bald verbrauchen",
+    daysLeft: "noch ca. {n} Tage",
+    lastDay: "heute verbrauchen",
+    expired: "Haltbarkeit prüfen",
+    amount: "Menge in {unit}",
+    remove: "Aus dem Vorrat entfernen",
+    cookWith: "Damit kannst du kochen",
+    coverage: "{have} von {total} Zutaten da",
+    scanReceipt: "🧾 Kassenbon scannen",
+    categories: {
+      obst: "Obst",
+      gemuese: "Gemüse",
+      getreide: "Getreide, Brot & Nudeln",
+      huelsenfruechte: "Hülsenfrüchte",
+      milch_ei: "Milchprodukte & Eier",
+      fleisch: "Fleisch",
+      fisch: "Fisch & Meeresfrüchte",
+      pflanzlich: "Pflanzliche Alternativen",
+      nuesse_samen: "Nüsse & Samen",
+      vorrat: "Vorratsschrank",
     },
   },
   settings: {

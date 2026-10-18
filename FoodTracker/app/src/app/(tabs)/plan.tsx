@@ -2,7 +2,9 @@ import { Link, router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Button, Card, Chip, ErrorText, Field, Muted, Screen, colors, styles } from "../../components/ui";
-import { api } from "../../lib/api";
+import { ApiError, api } from "../../lib/api";
+import { PlanError, matchesPreferences, planMeals } from "../../lib/catalog";
+import { aggregatePantry } from "../../lib/pantry";
 import { useI18n } from "../../lib/i18n";
 import { useStore } from "../../lib/store";
 import type { LockedMeal, MealType } from "../../lib/types";
@@ -33,7 +35,8 @@ interface SwapTarget {
 
 export default function PlanScreen() {
   const store = useStore();
-  const { settings, updateSettings, pantry, plan, setPlan, eatenMeals, markMealEaten, toggleLock, recipes, userRecipes, favoriteIds } = store;
+  const { settings, updateSettings, pantry, plan, setPlan, eatenMeals, markMealEaten, toggleLock, recipes, userRecipes, favoriteIds, catalog, ingredients } =
+    store;
   const i18n = useI18n();
   const { t } = i18n;
   const [loading, setLoading] = useState(false);
@@ -48,47 +51,67 @@ export default function PlanScreen() {
     maxCookMinutes: settings.maxCookMinutes,
   };
 
+  const [notice, setNotice] = useState<string | null>(null);
+
   const createPlan = async (extraLock?: LockedMeal) => {
     setLoading(true);
     setError(null);
-    try {
-      const locked: LockedMeal[] = (plan?.meals ?? [])
-        .filter((m) => m.locked && m.day < settings.days && settings.mealTypes.includes(m.mealType))
-        .filter((m) => !(extraLock && m.day === extraLock.day && m.mealType === extraLock.mealType))
-        .map(({ day, mealType, recipeId }) => ({ day, mealType, recipeId }));
-      if (extraLock) locked.push(extraLock);
-      const result = await api.plan({
-        ...preferences,
-        days: settings.days,
-        people: settings.people,
-        kcalPerPersonPerDay: settings.kcalPerPersonPerDay,
-        mealTypes: settings.mealTypes,
-        pantry,
-        favoriteRecipeIds: favoriteIds,
-        locked,
-        recipes: userRecipes,
-        preferences: settings.preferences.trim() || undefined,
-        language: i18n.language,
-      });
-      setPlan(result.plan, result.extraRecipes);
-    } catch (e) {
-      setError(i18n.error(e));
-    } finally {
-      setLoading(false);
+    setNotice(null);
+    const locked: LockedMeal[] = (plan?.meals ?? [])
+      .filter((m) => m.locked && m.day < settings.days && settings.mealTypes.includes(m.mealType))
+      .filter((m) => !(extraLock && m.day === extraLock.day && m.mealType === extraLock.mealType))
+      .map(({ day, mealType, recipeId }) => ({ day, mealType, recipeId }));
+    if (extraLock) locked.push(extraLock);
+    const request = {
+      ...preferences,
+      days: settings.days,
+      people: settings.people,
+      kcalPerPersonPerDay: settings.kcalPerPersonPerDay,
+      mealTypes: settings.mealTypes,
+      pantry: aggregatePantry(pantry),
+      favoriteRecipeIds: favoriteIds,
+      locked,
+      maxRepeats: 3,
+    };
+
+    // Mit Wünschen schlägt Claude über den Server neue Rezepte vor; sonst plant das Handy selbst.
+    const wishes = settings.preferences.trim();
+    if (wishes) {
+      try {
+        const result = await api.plan({ ...request, recipes: userRecipes, preferences: wishes, language: i18n.language });
+        setPlan(result.plan, result.extraRecipes);
+        setLoading(false);
+        return;
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.code !== "network") {
+          setError(i18n.error(e));
+          setLoading(false);
+          return;
+        }
+        setNotice(t("plan.aiOffline"));
+      }
     }
+
+    // Kurz warten, damit die Ladeanzeige erscheint, bevor die Planung rechnet.
+    setTimeout(() => {
+      try {
+        const result = planMeals({ request, recipes: [...catalog.recipes, ...userRecipes], ingredients });
+        setPlan(result, []);
+      } catch (e) {
+        setError(e instanceof PlanError ? t(`errors.plan_${e.code}`) : i18n.error(e));
+      } finally {
+        setLoading(false);
+      }
+    }, 50);
   };
 
-  const openSwap = async (target: SwapTarget) => {
+  const openSwap = (target: SwapTarget) => {
+    const recipeIds = [...new Map([...catalog.recipes, ...userRecipes].map((r) => [r.id, r])).values()]
+      .filter((r) => r.mealTypes.includes(target.mealType) && matchesPreferences(r, preferences, ingredients))
+      .map((r) => r.id);
     setSwap(target);
-    setAlternatives(null);
-    try {
-      const { recipeIds } = await api.matchingRecipes({ ...preferences, mealType: target.mealType, recipes: userRecipes });
-      // Favoriten zuerst.
-      setAlternatives([...recipeIds].sort((a, b) => Number(favoriteIds.includes(b)) - Number(favoriteIds.includes(a))));
-    } catch (e) {
-      setSwap(null);
-      setError(i18n.error(e));
-    }
+    // Favoriten zuerst.
+    setAlternatives(recipeIds.sort((a, b) => Number(favoriteIds.includes(b)) - Number(favoriteIds.includes(a))));
   };
 
   const chooseAlternative = (recipeId: string) => {
@@ -127,6 +150,7 @@ export default function PlanScreen() {
         <Muted>{t("plan.pantryHint", { n: pantry.length })}</Muted>
         <Button label={plan ? t("plan.recreate") : t("plan.create")} onPress={() => createPlan()} loading={loading} />
         {plan ? <Muted>{t("plan.replanHint")}</Muted> : null}
+        {notice ? <Text style={styles.warning}>{notice}</Text> : null}
         <ErrorText message={error} />
       </Card>
 

@@ -1,42 +1,14 @@
 import type { MealType, Recipe } from "../types.js";
-
-type Names = [de: string, en: string, fr: string, it: string, es: string];
+import { recipe } from "./recipeHelper.js";
+import { CLASSIC_RECIPES } from "./recipesClassics.js";
 
 const B: MealType[] = ["breakfast"];
 const LD: MealType[] = ["lunch", "dinner"];
 const BD: MealType[] = ["breakfast", "dinner"];
 
-/**
- * Rezept mit Mengen pro Portion. Schritte gibt es auf Deutsch und Englisch;
- * andere Sprachen übersetzt Claude bei Bedarf.
- */
-function recipe(
-  id: string,
-  [de, en, fr, it, es]: Names,
-  mealTypes: MealType[],
-  cookMinutes: number,
-  ingredients: Record<string, number>,
-  steps: { de: string[]; en: string[] },
-  other: { de: string[]; en: string[] } = { de: [], en: [] },
-): Recipe {
-  return {
-    id,
-    language: "de",
-    name: de,
-    steps: steps.de,
-    otherIngredients: other.de,
-    translations: { en: { name: en, steps: steps.en, otherIngredients: other.en }, fr: { name: fr }, it: { name: it }, es: { name: es } },
-    mealTypes,
-    ingredients: Object.entries(ingredients).map(([ingredientId, amount]) => ({ ingredientId, amount })),
-    cookMinutes,
-    tags: [],
-    source: { kind: "katalog" },
-  };
-}
-
 const salt = { de: ["Salz, Pfeffer"], en: ["Salt, pepper"] };
 
-export const RECIPES: Recipe[] = [
+const BASE_RECIPES: Recipe[] = [
   // Frühstück
   recipe("porridge_beeren", ["Porridge mit Beeren", "Porridge with berries", "Porridge aux fruits rouges", "Porridge ai frutti di bosco", "Porridge con frutos rojos"], B, 10,
     { haferflocken: 70, milch: 250, beeren: 100 },
@@ -268,3 +240,5 @@ export const RECIPES: Recipe[] = [
     { de: ["Reis kochen, Brokkoli die letzten 5 Minuten mitgaren.", "Tempeh in Scheiben braten.", "Erdnussbutter mit Sojasauce und etwas Wasser verrühren und über die Bowl geben."],
       en: ["Cook the rice, adding the broccoli for the last 5 minutes.", "Fry the tempeh slices.", "Whisk peanut butter with soy sauce and a little water and drizzle over the bowl."] }),
 ];
+
+export const RECIPES: Recipe[] = [...BASE_RECIPES, ...CLASSIC_RECIPES];
