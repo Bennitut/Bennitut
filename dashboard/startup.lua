@@ -1,0 +1,3631 @@
+-- ============================================================
+--  Basis-Dashboard (CC:Tweaked)
+--  Server-TPS, Energiespeicher (inkl. AE2 + Draconic), AE2-Autocrafts,
+--  Statistiken mit Verlauf und Farm-Steuerung
+--
+--  Benoetigt:
+--   - Advanced Computer + Advanced Monitor (Touch)
+--   - Wireless- oder Ender-Modem (fuer die Farm-Computer)
+--   - Wired Modem + Kabel zu den Energiespeichern (Energy Pylon des
+--     Draconic Cores, Induction Port, ...) und zur ME Bridge
+--     (Advanced Peripherals)
+-- ============================================================
+
+local DIR = fs.getDir(shell.getRunningProgram())
+
+local DEFAULTS = {
+  title          = "BASIS-DASHBOARD",
+  monitor        = nil,     -- Name des Monitors, nil = automatisch
+  textScale      = "auto",  -- "auto" oder feste Zahl 0.5 - 5
+  minWidth       = 50,      -- bei "auto": groesste Schrift, bei der mindestens
+  minHeight      = 24,      -- so viele Zeichen/Zeilen auf den Monitor passen
+  protocol       = "farmctl",
+  key            = "",
+  energy         = {},      -- leer = automatisch, sonst Liste (siehe config.lua)
+  energyUnit     = "FE",
+  energyFactor   = 1,
+  aeEnergy       = false,   -- AE2-Energie ueber die ME Bridge mitzaehlen (AppliedFlux-FE ist nicht lesbar)
+  aeFactor       = 2,       -- AE -> FE (1 AE = 2 FE)
+  feCells        = true,    -- FE in AppliedFlux-Zellen mitzaehlen
+  feCellFactor   = 1048576, -- FE pro belegtem Byte einer FE-Zelle
+  meBridge       = nil,
+  sampleInterval = 1,
+  rateWindow     = 10,
+  pingInterval   = 5,
+  farmTimeout    = 15,
+  updateUrl      = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/", -- Quelle fuer den UPDATE-Knopf
+  chat           = true,    -- Meldungen ueber eine Chat Box (Advanced Peripherals)
+  chatPrefix     = "Basis",
+  chatRange      = nil,     -- Reichweite in Bloecken, nil = ganzer Server
+  chatInterval   = 1.5,     -- Sekunden zwischen zwei Nachrichten (Chat-Box-Cooldown)
+  chatTps        = 19,      -- Meldung, wenn die TPS darunter fallen
+  chatEnergySeconds = 10,   -- Meldung, wenn die Energie so lange sinkt
+  chatEnergyPause = 300,    -- mindestens so viele Sekunden zwischen zwei Energie-Warnungen
+  chatCrafts     = true,
+  chatFarms      = true,
+  chatFarmOffline = true,   -- Meldung, wenn ein Farm-Computer offline/wieder online geht
+  chatStock      = true,    -- Meldung, wenn ein Lager-Item knapp wird / Auto-Craft startet
+  chatStorageWarn = 90,     -- Meldung, wenn ein ME-Speicher zu so viel % voll ist
+  stockMaxCraft  = 4096,    -- hoechstens so viele Items pro Auto-Craft
+  role           = "main",  -- "main" = Haupt-Dashboard, "mirror" = Neben-Dashboard (spiegelt das Haupt-Dashboard)
+  syncInterval   = 2,       -- Sekunden zwischen zwei Sync-Nachrichten des Haupt-Dashboards
+  energyTimeout  = 10,      -- Sekunden ohne Funkdaten, bis ein Sender als weg gilt
+  nbtExport      = false,   -- Items mit NBT-Daten regelmaessig aus dem ME-System in eine Kiste legen
+  nbtExportSide  = "up",    -- Seite der Kiste, von der ME Bridge aus gesehen
+  nbtExportInterval = 3600, -- Sekunden zwischen zwei Exporten
+  nbtExportSkip  = {},      -- Item-IDs, die im ME-System bleiben sollen
+  nbtStorage     = true,    -- vor dem Export Redstone am NBT-Storage-Computer einschalten, danach aus
+  nbtStorageWait = 3,       -- Sekunden zwischen Signal AN und Export
+}
+
+local cfg = {}
+for k, v in pairs(DEFAULTS) do cfg[k] = v end
+local cfgPath = fs.combine(DIR, "config.lua")
+if fs.exists(cfgPath) then
+  local ok, user = pcall(dofile, cfgPath)
+  if ok and type(user) == "table" then
+    for k, v in pairs(user) do cfg[k] = v end
+  else
+    printError("config.lua konnte nicht geladen werden: " .. tostring(user))
+    sleep(3)
+  end
+end
+
+-- Im Reiter EINSTELLUNGEN geaenderte Werte (pro Computer, haben Vorrang vor config.lua)
+local SETTINGS_FILE = fs.combine(DIR, "settings.db")
+local userSet = {}
+if fs.exists(SETTINGS_FILE) then
+  local h = fs.open(SETTINGS_FILE, "r")
+  local t = textutils.unserialize(h.readAll())
+  h.close()
+  if type(t) == "table" then
+    userSet = t
+    for k, v in pairs(t) do cfg[k] = v end
+  end
+end
+
+function saveSetting(key, value)
+  cfg[key] = value
+  userSet[key] = value
+  local h = fs.open(SETTINGS_FILE, "w")
+  h.write(textutils.serialize(userSet))
+  h.close()
+end
+
+-- Zeitzone: Standard = Zeitzone des Servers, sonst UTC + cfg.timeOffset Stunden
+function tzOffset()
+  if type(cfg.timeOffset) == "number" then return cfg.timeOffset end
+  return math.floor((os.epoch("local") - os.epoch("utc")) / 3600000 + 0.5)
+end
+
+-- os.date in der eingestellten Zeitzone (sec = Unix-Zeit in Sekunden, Standard: jetzt)
+function osDate(fmt, sec)
+  sec = sec or math.floor(os.epoch("utc") / 1000)
+  return os.date("!" .. fmt, sec + math.floor(tzOffset() * 3600))
+end
+
+function themeColor(key, default)
+  return colors[cfg[key] or default] or colors[default]
+end
+
+-- ------------------------------------------------------------
+--  Hilfsfunktionen
+-- ------------------------------------------------------------
+
+function clamp(v, a, b) return math.max(a, math.min(b, v)) end
+
+function push(t, v, max)
+  t[#t + 1] = v
+  while #t > max do table.remove(t, 1) end
+end
+
+function fmtNum(n, unit)
+  if type(n) ~= "number" then return "?" end
+  local pre = { "", "k", "M", "G", "T", "P", "E" }
+  local i = 1
+  while math.abs(n) >= 1000 and i < #pre do n = n / 1000; i = i + 1 end
+  local s
+  if i == 1 then
+    if math.abs(n) < 100 and n ~= math.floor(n) then s = string.format("%.1f", n)
+    else s = string.format("%d", math.floor(n + 0.5)) end
+  else
+    s = string.format("%.2f", n)
+  end
+  if unit then return s .. " " .. pre[i] .. unit end
+  return s .. pre[i]
+end
+
+-- Kurzform fuer grosse Ziffern: Zahl mit d Nachkommastellen und Praefix (k, M, G ...)
+function fmtNumD(n, d)
+  local pre = { "", "k", "M", "G", "T", "P", "E" }
+  local i = 1
+  while math.abs(n) >= 1000 and i < #pre do n = n / 1000; i = i + 1 end
+  if i == 1 then return string.format("%d", math.floor(n + 0.5)) end
+  return string.format("%." .. d .. "f", n) .. pre[i]
+end
+
+function fmtDur(s)
+  if type(s) ~= "number" or s ~= s or s == math.huge then return "-" end
+  s = math.floor(s)
+  local d = math.floor(s / 86400); s = s % 86400
+  local h = math.floor(s / 3600); s = s % 3600
+  local m = math.floor(s / 60); s = s % 60
+  if d > 0 then return string.format("%dd %dh", d, h) end
+  if h > 0 then return string.format("%dh %02dm", h, m) end
+  if m > 0 then return string.format("%dm %02ds", m, s) end
+  return s .. "s"
+end
+
+function spanLabel(s)
+  if s >= 3600 then return string.format("%gh", s / 3600) end
+  return string.format("%gm", s / 60)
+end
+
+function fit(s, w)
+  s = tostring(s)
+  if w <= 0 then return "" end
+  if #s <= w then return s end
+  if w <= 2 then return s:sub(1, w) end
+  return s:sub(1, w - 2) .. ".."
+end
+
+function prettyName(s)
+  if type(s) ~= "string" then return "?" end
+  s = s:gsub("^%[", ""):gsub("%]$", "")
+  if s:find(":") and not s:find(" ") then
+    s = (s:match(":(.+)$") or s):gsub("_", " ")
+    s = s:gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end)
+  end
+  return s
+end
+
+function round(v)
+  if math.abs(v) >= 1000 then return math.floor(v + 0.5) end
+  return math.floor(v * 100 + 0.5) / 100
+end
+
+function tpsColor(t)
+  return (t >= 18 and colors.lime) or (t >= 15 and colors.yellow) or colors.red
+end
+
+function fmtRate(r, u)
+  return (r >= 0 and "+" or "-") .. fmtNum(math.abs(r), u) .. "/t"
+end
+
+-- ------------------------------------------------------------
+--  Zustand
+-- ------------------------------------------------------------
+
+local state = {
+  screen   = "dash",
+  farmView = "list",   -- list | edit | auto
+  page     = 1,
+  statIdx  = 1,
+  rangeIdx = 1,
+  tps      = nil,
+  energy   = nil,   -- { stored, cap }
+  rate     = nil,   -- Einheit pro Tick
+  crafts   = nil,
+  craftErr = nil,
+}
+
+-- ------------------------------------------------------------
+--  Chat-Bot (Chat Box von Advanced Peripherals)
+-- ------------------------------------------------------------
+
+local chatBox
+local chatQueue = {}
+
+function isMain() return cfg.role ~= "mirror" end
+
+function detectChat()
+  chatBox = peripheral.find("chat_box") or peripheral.find("chatBox")
+end
+
+local sendCmd   -- Befehl ans Haupt-Dashboard (weiter unten definiert, braucht das Funkmodem)
+
+-- Einstellungen des Chat-Bots (im CHAT-Reiter umschaltbar, gespeichert in chat.db)
+local CHAT_CATS = {
+  { "tps", "TPS-Warnung" }, { "energy", "Energie" }, { "crafts", "Craft fertig" },
+  { "farms", "Farmen an/aus" }, { "offline", "Farm offline" }, { "stock", "Lager" },
+  { "storage", "ME-Speicher" }, { "lag", "Lag-Schutz" }, { "nbt", "NBT-Export" },
+}
+local chatSettings = {
+  enabled = cfg.chat ~= false,
+  cats = { tps = true, energy = true, crafts = cfg.chatCrafts ~= false, farms = cfg.chatFarms ~= false,
+           offline = cfg.chatFarmOffline ~= false, stock = cfg.chatStock ~= false, storage = true, lag = true },
+  mode = "all",      -- "all" = an alle, "players" = nur an ausgewaehlte Spieler
+  players = {},      -- name -> true (ausgewaehlt)
+  known = {},        -- von Hand hinzugefuegte Namen
+}
+
+local saveChat, loadChat
+do
+local CHAT_FILE = fs.combine(DIR, "chat.db")
+function saveChat()
+  local h = fs.open(CHAT_FILE, "w")
+  h.write(textutils.serialize(chatSettings))
+  h.close()
+  if not isMain() and sendCmd then sendCmd({ cmd = "chatSet", settings = chatSettings }) end
+end
+
+function loadChat()
+  if not fs.exists(CHAT_FILE) then return end
+  local h = fs.open(CHAT_FILE, "r")
+  local t = textutils.unserialize(h.readAll())
+  h.close()
+  if type(t) ~= "table" then return end
+  for k, v in pairs(t) do
+    if k == "cats" and type(v) == "table" then
+      for c, on in pairs(v) do chatSettings.cats[c] = on end
+    else
+      chatSettings[k] = v
+    end
+  end
+end
+end
+
+function chatAllowed(cat)
+  return chatSettings.enabled and (cat == nil or chatSettings.cats[cat] ~= false)
+end
+
+-- Nachricht mit Uhrzeit in die Warteschlange (nur Haupt-Dashboard).
+-- cat = Meldungsart (siehe CHAT_CATS), nil = immer (z.B. Test)
+function chat(text, cat)
+  if not chatBox or not isMain() or not chatAllowed(cat) then return end
+  text = "[" .. osDate("%H:%M") .. "] " .. text
+  if chatSettings.mode == "players" then
+    for name, on in pairs(chatSettings.players) do
+      if on then push(chatQueue, { text = text, to = name }, 40) end
+    end
+  else
+    push(chatQueue, { text = text }, 40)
+  end
+end
+
+-- Sendet die Warteschlange langsam ab (die Chat Box hat einen Cooldown)
+function chatLoop()
+  while true do
+    local m = chatQueue[1]
+    if chatBox and m then
+      local ok, res
+      if m.to and chatBox.sendMessageToPlayer then
+        ok, res = pcall(chatBox.sendMessageToPlayer, m.text, m.to, cfg.chatPrefix, "[]", "&6", cfg.chatRange)
+      else
+        ok, res = pcall(chatBox.sendMessage, m.text, cfg.chatPrefix, "[]", "&6", cfg.chatRange)
+      end
+      -- res == nil bedeutet meist Cooldown: spaeter nochmal versuchen
+      if not ok or res then table.remove(chatQueue, 1) end
+    end
+    sleep(cfg.chatInterval)
+  end
+end
+
+-- Farm-Aenderungen sammeln und nach 2 s als eine Nachricht schicken
+local farmChanges, farmChangeAt, farmChatQuietUntil = {}, 0, 0
+
+function noteFarmChange(name, on)
+  if not chatAllowed("farms") or os.epoch("utc") < farmChatQuietUntil then return end
+  farmChanges[#farmChanges + 1] = { name, on }
+  farmChangeAt = os.epoch("utc")
+end
+
+function flushFarmChanges()
+  if #farmChanges == 0 or os.epoch("utc") - farmChangeAt < 2000 then return end
+  local on, off = {}, {}
+  for _, c in ipairs(farmChanges) do
+    if c[2] then on[#on + 1] = c[1] else off[#off + 1] = c[1] end
+  end
+  local parts = {}
+  if #on > 0 then parts[#parts + 1] = "AN: " .. table.concat(on, ", ") end
+  if #off > 0 then parts[#parts + 1] = "AUS: " .. table.concat(off, ", ") end
+  chat("Farmen " .. table.concat(parts, " | "), "farms")
+  farmChanges = {}
+end
+
+-- ------------------------------------------------------------
+--  Peripherie
+-- ------------------------------------------------------------
+
+local modemName
+for _, name in ipairs(peripheral.getNames()) do
+  if peripheral.getType(name) == "modem" and peripheral.call(name, "isWireless") then
+    modemName = name
+    break
+  end
+end
+if modemName then rednet.open(modemName) end
+
+local mon, monName
+if cfg.monitor then
+  mon = peripheral.wrap(cfg.monitor)
+  monName = cfg.monitor
+else
+  mon = peripheral.find("monitor")
+  monName = mon and peripheral.getName(mon)
+end
+
+-- AE2 (Advanced Peripherals ME Bridge) ----------------------------
+
+local me
+
+function isME(t)
+  t = (t or ""):lower()
+  return t == "mebridge" or t == "me_bridge"
+end
+
+function detectME()
+  if cfg.meBridge then
+    me = peripheral.wrap(cfg.meBridge)
+  else
+    me = peripheral.find("meBridge") or peripheral.find("me_bridge")
+  end
+end
+
+-- Energie --------------------------------------------------------
+
+local STORAGE_PATTERNS = { "induction", "energy", "cell", "battery", "capacitor", "accumulator",
+                           "cube", "flux", "draconic", "pylon", "storage" }
+local sources = {}   -- { label, read, factor, stored, cap, rate, rateBuf }
+local aeFEFound = false   -- true, sobald die ME Bridge FE-Zellen meldet
+
+local srcHint, detectEnergy, handleEnergyMsg
+do
+function rawReader(p)
+  if not p then return nil end
+  if p.getEnergy and p.getMaxEnergy then            -- Mekanism
+    return function() return p.getEnergy(), p.getMaxEnergy() end
+  elseif p.getEnergy and p.getEnergyCapacity then   -- Forge Energy (CC generisch)
+    return function() return p.getEnergy(), p.getEnergyCapacity() end
+  elseif p.getEnergyStored and p.getMaxEnergyStored then  -- Draconic Pylon u.a.
+    return function() return p.getEnergyStored(), p.getMaxEnergyStored() end
+  end
+end
+
+-- Die ME Bridge heisst je nach Advanced-Peripherals-Version unterschiedlich
+-- (z.B. ATM10 / MC 1.21: getStoredEnergy + getEnergyCapacity).
+local AE_METHODS = {
+  { "getEnergyStorage", "getMaxEnergyStorage" },
+  { "getStoredEnergy",  "getEnergyCapacity" },
+  { "getStoredEnergy",  "getMaxEnergyStorage" },
+  { "getEnergyStorage", "getEnergyCapacity" },
+  { "getEnergy",        "getEnergyCapacity" },
+  { "getEnergy",        "getMaxEnergy" },
+}
+
+-- FE in AppliedFlux-Zellen (z.B. "256M ME FE Storage Cell") ist fuer AE2 eine
+-- Ressource wie Items, nicht AE-Energie. Die ME Bridge liefert ueber getCells()
+-- die belegten Bytes jeder Zelle; 1 Byte entspricht 1048576 FE.
+function isFECell(c)
+  local t = tostring(c.type or ""):lower()
+  local item = c.item
+  local iname = tostring(type(item) == "table" and (item.name or item.displayName) or item or ""):lower()
+  return t:find("appflux", 1, true) or t:find("energy", 1, true) or t == "fe" or t:find(":fe", 1, true)
+      or iname:find("appflux", 1, true) or iname:find("fe_storage", 1, true) or iname:find(":fe_", 1, true)
+end
+
+function sumFECells(list, acc)
+  for _, c in pairs(list) do
+    if type(c) == "table" and isFECell(c) then
+      acc.n = acc.n + 1
+      acc.stored = acc.stored + (tonumber(c.usedBytes) or 0) * cfg.feCellFactor
+      acc.cap = acc.cap + (tonumber(c.bytes) or tonumber(c.totalBytes) or 0) * cfg.feCellFactor
+    end
+  end
+end
+
+-- Erst getCells(); findet das keine FE-Zelle, die Zellen aus getDrives() pruefen
+function feCells(p)
+  local acc = { stored = 0, cap = 0, n = 0 }
+  if p.getCells then
+    local ok, cells = pcall(p.getCells)
+    if ok and type(cells) == "table" then sumFECells(cells, acc) end
+  end
+  if acc.n == 0 and p.getDrives then
+    local ok, drives = pcall(p.getDrives)
+    if ok and type(drives) == "table" then
+      for _, d in pairs(drives) do
+        local list = type(d) == "table" and (d.cells or d.items) or nil
+        if type(list) == "table" then sumFECells(list, acc) end
+      end
+    end
+  end
+  if acc.n == 0 then return nil end
+  return acc.stored, acc.cap, acc.n
+end
+
+-- AE2-Gesamtenergie: AE-Energiespeicher (in AE, mal aeFactor) + FE-Zellen.
+-- Die Faktoren sind hier schon eingerechnet (Quelle mit Faktor 1 anlegen).
+-- true, sobald die ME Bridge FE-Zellen meldet (sonst nur der AE-Puffer messbar)
+local AE_HINT = "FE-Zellen nicht lesbar"
+
+function srcHint(src)
+  if src.ae and not aeFEFound then return AE_HINT end
+end
+
+function aeReader(p)
+  if not p then return nil end
+  local get, max
+  for _, m in ipairs(AE_METHODS) do
+    if p[m[1]] and p[m[2]] then get, max = p[m[1]], p[m[2]]; break end
+  end
+  local cells = (p.getCells ~= nil or p.getDrives ~= nil) and cfg.feCells
+  if not get and not cells then return nil end
+  return function()
+    local stored, cap = 0, 0
+    if get then
+      local e, m = get(), max()
+      if type(e) == "number" then stored = e * cfg.aeFactor end
+      if type(m) == "number" then cap = m * cfg.aeFactor end
+    end
+    if cells then
+      local fs, fc = feCells(p)
+      aeFEFound = fs ~= nil
+      if fs then stored, cap = stored + fs, cap + fc end
+    end
+    return stored, cap
+  end
+end
+
+function labelFor(t, name)
+  t = (t or ""):lower()
+  if t:find("draconic") or t:find("rf_storage") or t:find("pylon") then return "Draconic" end
+  if t:find("induction") then return "Induction" end
+  if t:find("cube") then return "Energy Cube" end
+  if t:find("cell") then return "Energy Cell" end
+  if t:find("battery") then return "Batterie" end
+  return name
+end
+
+function addSource(label, read, factor)
+  local base, n = label, 2
+  local function taken(l)
+    for _, s in ipairs(sources) do if s.label == l then return true end end
+  end
+  while taken(label) do label = base .. " " .. n; n = n + 1 end
+  sources[#sources + 1] = { label = label, read = read, factor = factor or 1 }
+end
+
+function detectLocalEnergy()
+  sources = {}
+  local list = cfg.energy
+  if type(list) == "string" then list = { list } end
+  if type(list) == "table" and #list > 0 then
+    for _, e in ipairs(list) do
+      local spec = type(e) == "table" and e or { peripheral = e }
+      local p = spec.peripheral and peripheral.wrap(spec.peripheral)
+      if p then
+        local t = peripheral.getType(spec.peripheral)
+        if isME(t) then
+          local r = aeReader(p)
+          if r then
+            addSource(spec.label or "AE2", r, spec.factor or 1)
+            sources[#sources].ae = true
+          end
+        else
+          local r = rawReader(p)
+          if r then addSource(spec.label or labelFor(t, spec.peripheral), r, spec.factor or cfg.energyFactor) end
+        end
+      end
+    end
+    return
+  end
+
+  if cfg.aeEnergy and me then
+    local r = aeReader(me)
+    if r then
+      addSource("AE2", r, 1)
+      sources[#sources].ae = true
+    end
+  end
+  local all, preferred = {}, {}
+  for _, n in ipairs(peripheral.getNames()) do
+    local t = peripheral.getType(n) or ""
+    if t ~= "monitor" and t ~= "modem" and t ~= "computer" and t ~= "turtle" and not isME(t) then
+      local r = rawReader(peripheral.wrap(n))
+      if r then
+        local src = { n = n, t = t, r = r }
+        all[#all + 1] = src
+        local lt = t:lower()
+        for _, pat in ipairs(STORAGE_PATTERNS) do
+          if lt:find(pat, 1, true) then preferred[#preferred + 1] = src; break end
+        end
+      end
+    end
+  end
+  for _, s in ipairs((#preferred > 0) and preferred or all) do
+    addSource(labelFor(s.t, s.n), s.r, cfg.energyFactor)
+  end
+end
+
+-- Speicher, die ein Energie-Sender per Funk meldet (Schluessel: Computer-ID)
+local remotes = {}
+
+function detectEnergy()
+  detectLocalEnergy()
+  for _, id in ipairs((function()
+    local ids = {}
+    for k in pairs(remotes) do ids[#ids + 1] = k end
+    table.sort(ids)
+    return ids
+  end)()) do
+    sources[#sources + 1] = remotes[id]
+  end
+end
+
+function handleEnergyMsg(sender, msg)
+  if type(msg.stored) ~= "number" or type(msg.cap) ~= "number" then return end
+  local src = remotes[sender]
+  if not src then
+    local label = tostring(msg.label or ("Funk #" .. sender))
+    for _, s in ipairs(sources) do
+      if s.label == label then label = label .. " #" .. sender; break end
+    end
+    src = { label = label, factor = 1, remote = true, id = sender }
+    src.read = function()
+      if os.clock() - src.seen > cfg.energyTimeout then error("keine Funkdaten") end
+      return src.rStored, src.rCap
+    end
+    remotes[sender] = src
+    sources[#sources + 1] = src
+    src.isNew = true
+  end
+  src.rStored, src.rCap, src.rRate = msg.stored, msg.cap, msg.rate
+  src.seen = os.clock()
+  local new = src.isNew
+  src.isNew = nil
+  return new
+end
+end
+
+function readEnergy()
+  if #sources == 0 then return nil end
+  local stored, cap, any = 0, 0, false
+  for _, s in ipairs(sources) do
+    local ok, e, m = pcall(s.read)
+    if ok and type(e) == "number" and type(m) == "number" then
+      s.stored, s.cap = e * s.factor, m * s.factor
+      stored, cap, any = stored + s.stored, cap + s.cap, true
+    else
+      s.stored, s.cap = nil, nil
+    end
+  end
+  if not any then return nil end
+  return stored, cap
+end
+
+function rateUpdate(obj, c, v)
+  obj.rateBuf = obj.rateBuf or {}
+  local buf = obj.rateBuf
+  buf[#buf + 1] = { c, v }
+  while #buf > 2 and c - buf[1][1] > cfg.rateWindow do table.remove(buf, 1) end
+  if #buf >= 2 then
+    local a, b = buf[1], buf[#buf]
+    local ticks = (b[1] - a[1]) / 0.05
+    if ticks > 0 then return (b[2] - a[2]) / ticks end
+  end
+  return obj.rate
+end
+
+-- Autocrafts ---------------------------------------------------------
+
+-- Die Feldnamen unterscheiden sich je nach Advanced-Peripherals-Version,
+-- deshalb wird hier moeglichst tolerant ausgelesen.
+function parseJob(j, cpu)
+  local res = j.resource or j.output or j.item or j.request or j
+  local name
+  if type(res) == "table" then name = res.displayName or res.name end
+  name = name or j.displayName or j.name
+  local qty = j.quantity or j.amount or j.totalItem or j.count
+  if type(qty) ~= "number" and type(res) == "table" then qty = res.amount or res.count end
+  local prog = j.completion or j.progress
+  if type(prog) ~= "number" then prog = nil end
+  if prog and prog > 1 then prog = prog / 100 end
+  local crafted = tonumber(j.crafted)
+  if not prog and crafted and type(qty) == "number" and qty > 0 then prog = crafted / qty end
+  local elapsed
+  if type(j.elapsedTimeNanos) == "number" then elapsed = j.elapsedTimeNanos / 1e9 end
+  cpu = (type(j.cpu) == "table" and j.cpu) or cpu
+  local id = j.id
+  if id == nil and tonumber(j.bridge_id) and tonumber(j.bridge_id) >= 0 then id = j.bridge_id end
+  return {
+    id      = id,
+    name    = prettyName(name),
+    qty     = type(qty) == "number" and qty or nil,
+    crafted = crafted,
+    prog    = prog and clamp(prog, 0, 1) or nil,
+    elapsed = elapsed,
+    cpu     = type(cpu) == "table" and {
+      name = tostring(cpu.name or "?"), storage = tonumber(cpu.storage), co = tonumber(cpu.coProcessors),
+    } or nil,
+    missing = j.missingItems or j.missing,
+    item    = type(res) == "table" and res.name or nil,
+    fingerprint = type(res) == "table" and res.fingerprint or nil,
+  }
+end
+
+function readCrafts()
+  if not me then return nil, "Keine ME Bridge gefunden" end
+  local tasks, busy, total, cpuList = {}, 0, 0, {}
+  local ok, cpus = pcall(me.getCraftingCPUs)
+  if ok and type(cpus) == "table" then
+    for _, c in ipairs(cpus) do
+      total = total + 1
+      local job = type(c.craftingJob) == "table" and c.craftingJob or nil
+      cpuList[#cpuList + 1] = {
+        name = tostring(c.name or ("CPU " .. total)), busy = c.isBusy and true or false,
+        storage = tonumber(c.storage), co = tonumber(c.coProcessors), mode = c.selectionMode,
+        job = job and prettyName((type(job.resource) == "table" and (job.resource.displayName or job.resource.name)) or job.name) or nil,
+      }
+      if c.isBusy then
+        busy = busy + 1
+        if job then
+          tasks[#tasks + 1] = parseJob(job, c)
+        else
+          tasks[#tasks + 1] = { name = "Auftrag auf CPU " .. tostring(c.name or total), cpu = { name = tostring(c.name or total) } }
+        end
+      end
+    end
+  end
+  if me.getCraftingTasks then
+    local ok2, list = pcall(me.getCraftingTasks)
+    if ok2 and type(list) == "table" and #list > 0 then
+      tasks = {}
+      for _, t in ipairs(list) do tasks[#tasks + 1] = parseJob(t) end
+    end
+  elseif not ok then
+    return nil, "ME Bridge antwortet nicht"
+  end
+  return { tasks = tasks, busy = busy, total = total, cpus = cpuList }
+end
+
+-- Aufzaehlung von Item-Stacks als Text ("3x Iron Ingot, 64x Redstone")
+function stackList(list)
+  if type(list) ~= "table" then return nil end
+  local parts = {}
+  for _, st in pairs(list) do
+    if type(st) == "table" then
+      local c = tonumber(st.count or st.amount)
+      parts[#parts + 1] = (c and (fmtNum(c) .. "x ") or "") .. prettyName(st.displayName or st.name)
+    end
+  end
+  if #parts == 0 then return nil end
+  return table.concat(parts, ", ")
+end
+
+-- ------------------------------------------------------------
+--  Statistik (5-Sekunden-Werte fuer 15 min, Minutenwerte fuer 24 h)
+-- ------------------------------------------------------------
+
+
+local RANGES = {
+  { label = "15M", buf = "fine",   n = 180,  span = 900 },
+  { label = "1H",  buf = "coarse", n = 60,   span = 3600 },
+  { label = "6H",  buf = "coarse", n = 360,  span = 21600 },
+  { label = "24H", buf = "coarse", n = 1440, span = 86400 },
+}
+
+local stats = { metrics = {}, log = {}, lastFine = nil, lastCoarse = nil }
+local activeCrafts = {}
+
+function metric(name)
+  local m = stats.metrics[name]
+  if not m then
+    m = { fine = {}, coarse = {}, fs = 0, fc = 0, cs = 0, cc = 0 }
+    stats.metrics[name] = m
+  end
+  return m
+end
+
+function record(name, v)
+  if type(v) ~= "number" or v ~= v then return end
+  local m = metric(name)
+  m.fs, m.fc = m.fs + v, m.fc + 1
+  m.cs, m.cc = m.cs + v, m.cc + 1
+  m.last = v
+end
+
+local saveStats, loadStats, tickStats
+do
+local FINE_MS, FINE_N = 5000, 180
+local COARSE_MS, COARSE_N = 60000, 1440
+local STATS_FILE = fs.combine(DIR, "stats.db")
+function saveStats()
+  local data = { minute = stats.lastCoarse, metrics = {}, log = stats.log }
+  for name, m in pairs(stats.metrics) do data.metrics[name] = m.coarse end
+  local h = fs.open(STATS_FILE, "w")
+  if h then
+    h.write(textutils.serialize(data, { compact = true }))
+    h.close()
+  end
+end
+
+function loadStats()
+  if not fs.exists(STATS_FILE) then return end
+  local h = fs.open(STATS_FILE, "r")
+  local d = textutils.unserialize(h.readAll())
+  h.close()
+  if type(d) ~= "table" or type(d.metrics) ~= "table" then return end
+  local now = math.floor(os.epoch("utc") / COARSE_MS)
+  local gap = (type(d.minute) == "number") and clamp(now - d.minute, 0, COARSE_N) or 0
+  for name, pts in pairs(d.metrics) do
+    local m = metric(name)
+    local list = {}
+    for i = math.max(1, #pts + gap - COARSE_N + 1), #pts do list[#list + 1] = pts[i] end
+    for _ = 1, gap do list[#list + 1] = false end
+    m.coarse = list
+  end
+  if type(d.log) == "table" then stats.log = d.log end
+  stats.lastCoarse = now
+end
+
+function tickStats()
+  local now = os.epoch("utc")
+  local fSlot, cSlot = math.floor(now / FINE_MS), math.floor(now / COARSE_MS)
+  stats.lastFine = stats.lastFine or fSlot
+  stats.lastCoarse = stats.lastCoarse or cSlot
+  if fSlot ~= stats.lastFine then
+    local missed = clamp(fSlot - stats.lastFine - 1, 0, FINE_N)
+    for _, m in pairs(stats.metrics) do
+      push(m.fine, m.fc > 0 and round(m.fs / m.fc) or false, FINE_N)
+      for _ = 1, missed do push(m.fine, false, FINE_N) end
+      m.fs, m.fc = 0, 0
+    end
+    stats.lastFine = fSlot
+  end
+  if cSlot ~= stats.lastCoarse then
+    local missed = clamp(cSlot - stats.lastCoarse - 1, 0, COARSE_N)
+    for _, m in pairs(stats.metrics) do
+      push(m.coarse, m.cc > 0 and round(m.cs / m.cc) or false, COARSE_N)
+      for _ = 1, missed do push(m.coarse, false, COARSE_N) end
+      m.cs, m.cc = 0, 0
+    end
+    stats.lastCoarse = cSlot
+    saveStats()
+  end
+end
+end
+
+local craftDetails = {}   -- key -> { missing, used, emitted, debug, at }
+
+-- Menge eines Items im ME-System (fuer die Fortschritts-Schaetzung)
+function itemAmount(name, fingerprint)
+  if not me or not me.getItem or not name then return nil end
+  local filter = { name = name }
+  if fingerprint then filter.fingerprint = fingerprint end
+  local ok, r = pcall(me.getItem, filter)
+  if not ok or type(r) ~= "table" then
+    if fingerprint then return itemAmount(name, nil) end
+    return nil
+  end
+  return tonumber(r.count or r.amount)
+end
+
+function craftKey(t)
+  if t.id ~= nil then return "id:" .. tostring(t.id) end
+  return t.name .. "|" .. tostring(t.qty)
+end
+
+function trackCrafts(cr)
+  local now = os.epoch("utc")
+  local seen = {}
+  for _, t in ipairs(cr.tasks) do
+    local k = craftKey(t)
+    seen[k] = true
+    local a = activeCrafts[k]
+    if not a then
+      a = { name = t.name, qty = t.qty, start = now - (t.elapsed or 0) * 1000, samples = {} }
+      activeCrafts[k] = a
+    end
+    t.key = k
+    t.since = (now - a.start) / 1000
+    -- Liefert die Bridge keinen Fortschritt (normale Crafts aus dem Terminal),
+    -- schaetzen: wie viele des Ziel-Items sind seit Beginn ins ME-System gekommen?
+    if not t.prog and not t.crafted and t.item and t.qty and t.qty > 0 then
+      local cur = itemAmount(t.item, t.fingerprint)
+      if cur then
+        a.base = a.base or cur
+        a.best = math.max(a.best or 0, clamp(cur - a.base, 0, t.qty))
+        t.crafted = a.best
+        t.prog = a.best / t.qty
+        t.estimated = true
+      end
+    end
+    -- Rate aus dem Fortschritt der letzten Minute
+    local done = t.crafted or (t.prog and t.qty and t.prog * t.qty)
+    if done then
+      push(a.samples, { now, done }, 120)
+      while #a.samples > 2 and now - a.samples[1][1] > 60000 do table.remove(a.samples, 1) end
+      local first, last = a.samples[1], a.samples[#a.samples]
+      local dt = (last[1] - first[1]) / 1000
+      if dt >= 5 and last[2] > first[2] then
+        t.rate = (last[2] - first[2]) / dt
+        if t.qty then t.eta = math.max(0, t.qty - last[2]) / t.rate end
+      end
+      t.done = done
+    end
+    t.details = craftDetails[k]
+  end
+  for k, a in pairs(activeCrafts) do
+    if not seen[k] then
+      push(stats.log, { name = a.name, qty = a.qty, ended = now, dur = (now - a.start) / 1000 }, 200)
+      chat("Craft fertig: " .. (a.qty and (fmtNum(a.qty) .. "x ") or "") .. a.name
+           .. " (" .. fmtDur((now - a.start) / 1000) .. ")", "crafts")
+      activeCrafts[k] = nil
+      craftDetails[k] = nil
+    end
+  end
+end
+
+function series(name, r)
+  local m = stats.metrics[name]
+  local src = (m and m[r.buf]) or {}
+  local out = {}
+  local off = #src - r.n
+  for i = 1, r.n do out[i] = src[off + i] or false end
+  return out
+end
+
+function resample(vals, w)
+  local n = #vals
+  local out = {}
+  for c = 1, w do
+    local a = math.floor((c - 1) * n / w) + 1
+    local b = math.max(a, math.floor(c * n / w))
+    local s, k = 0, 0
+    for i = a, b do
+      local v = vals[i]
+      if v then s = s + v; k = k + 1 end
+    end
+    out[c] = k > 0 and s / k or false
+  end
+  return out
+end
+
+function summarize(vals)
+  local first, last, mn, mx, sum, n
+  for i = 1, #vals do
+    local v = vals[i]
+    if v then
+      first = first or v
+      last = v
+      mn = math.min(mn or v, v)
+      mx = math.max(mx or v, v)
+      sum, n = (sum or 0) + v, (n or 0) + 1
+    end
+  end
+  if not n then return nil end
+  return { first = first, last = last, min = mn, max = mx, avg = sum / n }
+end
+
+-- Wertebereich fuer Diagramme. fixLo/fixHi erzwingen Grenzen, zero = 0 einschliessen.
+function rangeOf(vals, fixLo, fixHi, zero)
+  local s = summarize(vals)
+  if not s then return nil end
+  local lo, hi = s.min, s.max
+  if zero then lo, hi = math.min(lo, 0), math.max(hi, 0) end
+  if fixLo then lo = math.min(lo, fixLo) end
+  if fixHi then hi = math.max(hi, fixHi) end
+  if hi - lo <= 0 then
+    local p = math.max(math.abs(hi) * 0.01, 1)
+    return lo - p, hi + p
+  end
+  local p = (hi - lo) * 0.1
+  if not fixLo and not (zero and lo == 0) then
+    lo = lo - p
+    if s.min >= 0 then lo = math.max(0, lo) end
+  end
+  if not fixHi and not (zero and hi == 0) then hi = hi + p end
+  return lo, hi
+end
+
+-- ------------------------------------------------------------
+--  Lager-Waechter, ME-Speicher, Spieler, Wetter
+-- ------------------------------------------------------------
+
+local stock = { items = {} }   -- { name, label, min, auto }
+local stockState = {}          -- name -> { count, hist, low, lastCraft, crafting, err }
+local stockHoldUntil = 0
+
+local saveStock, loadStock
+do
+local STOCK_FILE = fs.combine(DIR, "lager.db")
+function saveStock()
+  local h = fs.open(STOCK_FILE, "w")
+  h.write(textutils.serialize(stock))
+  h.close()
+  if not isMain() and sendCmd then
+    stockHoldUntil = os.epoch("utc") + 4000
+    sendCmd({ cmd = "stockSet", items = stock.items })
+  end
+end
+
+function loadStock()
+  if not fs.exists(STOCK_FILE) then return end
+  local h = fs.open(STOCK_FILE, "r")
+  local t = textutils.unserialize(h.readAll())
+  h.close()
+  if type(t) == "table" and type(t.items) == "table" then stock = t end
+end
+end
+
+function stockLabel(it) return it.label or prettyName(it.name) end
+
+function stockTrend(st)
+  if not st or not st.hist or #st.hist < 2 then return nil end
+  return st.hist[#st.hist][2] - st.hist[1][2]
+end
+
+local readStock
+do
+local lastStockRead = 0
+function readStock()
+  if not me or not me.getItem then return end
+  local now = os.epoch("utc")
+  if now - lastStockRead < 5000 then return end
+  lastStockRead = now
+  for _, it in ipairs(stock.items) do
+    local st = stockState[it.name] or { hist = {} }
+    stockState[it.name] = st
+    local ok, r = pcall(me.getItem, { name = it.name })
+    local cnt
+    if ok then cnt = (type(r) == "table") and tonumber(r.count or r.amount) or 0 end
+    if cnt then
+      st.count = cnt
+      st.hist[#st.hist + 1] = { now, cnt }
+      while #st.hist > 2 and now - st.hist[1][1] > 900000 do table.remove(st.hist, 1) end
+      if not it.label and type(r) == "table" and r.displayName then
+        it.label = prettyName(r.displayName)
+        saveStock()
+      end
+      local label = stockLabel(it)
+      if cnt < it.min then
+        if not st.low then
+          st.low = true
+          chat(string.format("Lager knapp: %s %s / %s", label, fmtNum(cnt), fmtNum(it.min)), "stock")
+        end
+        -- Auto-Craft (nur Haupt-Dashboard, hoechstens einmal pro Minute, nicht doppelt)
+        if it.auto and isMain() and me.craftItem and now - (st.lastCraft or 0) > 120000 then
+          local busy = false
+          if me.isCrafting then
+            local okc, c = pcall(me.isCrafting, { name = it.name })
+            busy = okc and c == true
+          end
+          if not busy then
+            local amount = math.max(1, math.min(it.min - cnt, cfg.stockMaxCraft))
+            local okc, res, err = pcall(me.craftItem, { name = it.name, count = amount })
+            st.lastCraft = now
+            if okc and res then
+              st.crafting, st.err = amount, nil
+              if not st.craftChatted then
+                st.craftChatted = true
+                chat(string.format("Auto-Craft gestartet: %sx %s", fmtNum(amount), label), "stock")
+              end
+            else
+              st.err = tostring(okc and err or res)
+            end
+          else
+            st.crafting = st.crafting or true
+          end
+        end
+      else
+        if st.low then chat(string.format("Lager wieder ok: %s %s", label, fmtNum(cnt)), "stock") end
+        st.low, st.crafting, st.err, st.craftChatted = false, nil, nil, nil
+      end
+    end
+  end
+end
+end
+
+-- Auslastung der ME-Speicherzellen (Bytes)
+local storage = nil
+local readStorage
+do
+local storageWarned = {}
+local lastStorageRead = 0
+local STORAGE_KINDS = { { "Item", "Items" }, { "Fluid", "Fluids" }, { "Chemical", "Chemie" } }
+
+function readStorage()
+  if not me then storage = nil return end
+  local now = os.epoch("utc")
+  if now - lastStorageRead < 10000 then return end
+  lastStorageRead = now
+  local list = {}
+  for _, k in ipairs(STORAGE_KINDS) do
+    local ft, fu = me["getTotal" .. k[1] .. "Storage"], me["getUsed" .. k[1] .. "Storage"]
+    if ft and fu then
+      local ok1, total = pcall(ft)
+      local ok2, used = pcall(fu)
+      if ok1 and ok2 and tonumber(total) and tonumber(total) > 0 then
+        local pct = tonumber(used) / tonumber(total) * 100
+        list[#list + 1] = { label = k[2], used = tonumber(used), total = tonumber(total) }
+        if pct >= cfg.chatStorageWarn and not storageWarned[k[1]] then
+          storageWarned[k[1]] = true
+          chat(string.format("ME-Speicher %s ist zu %d%% voll!", k[2], math.floor(pct)), "storage")
+        elseif pct < cfg.chatStorageWarn - 5 then
+          storageWarned[k[1]] = nil
+        end
+      end
+    end
+  end
+  storage = list
+end
+end
+
+-- Top-Zugaenge: alle 5 Minuten eine Bestandsaufnahme des ganzen ME-Systems,
+-- daraus die Items, von denen zuletzt am meisten dazugekommen ist.
+local topItems = { [15] = nil, [60] = nil, at = nil }
+local readTopItems
+do
+  local SNAP_MS, SNAP_N, TOP_N = 300000, 13, 40
+  local snaps, lastSnap = {}, -1e15
+
+  local function compute(minutes)
+    local cur = snaps[#snaps]
+    if not cur then return nil end
+    local base
+    for i = #snaps - 1, 1, -1 do
+      base = snaps[i]
+      if cur.t - snaps[i].t >= minutes * 60000 - 30000 then break end
+    end
+    if not base then return nil end
+    local rows = {}
+    for name, c in pairs(cur.counts) do
+      local d = c - (base.counts[name] or 0)
+      if d > 0 then rows[#rows + 1] = { name = name, label = cur.labels[name], delta = d, count = c } end
+    end
+    table.sort(rows, function(a, b) return a.delta > b.delta end)
+    while #rows > TOP_N do table.remove(rows) end
+    return { rows = rows, span = (cur.t - base.t) / 1000 }
+  end
+
+  function readTopItems()
+    if not me or not me.getItems then return end
+    local now = os.epoch("utc")
+    if now - lastSnap < SNAP_MS then return end
+    lastSnap = now
+    local ok, list = pcall(me.getItems)
+    if not ok or type(list) ~= "table" then return end
+    local counts, labels = {}, {}
+    for _, it in ipairs(list) do
+      if type(it) == "table" and it.name then
+        counts[it.name] = (counts[it.name] or 0) + (tonumber(it.count or it.amount) or 0)
+        labels[it.name] = labels[it.name] or (it.displayName and prettyName(it.displayName)) or prettyName(it.name)
+      end
+    end
+    push(snaps, { t = now, counts = counts, labels = labels }, SNAP_N)
+    topItems[15], topItems[60], topItems.at = compute(15), compute(60), now
+  end
+end
+
+-- Spieler online (Player Detector) und Wetter (Environment Detector)
+local playerDet, envDet
+local players = { names = {}, since = {} }
+local env = nil
+local detectExtras, readExtras
+do
+local lastExtraRead = 0
+
+function detectExtras()
+  playerDet = peripheral.find("player_detector") or peripheral.find("playerDetector")
+  envDet = peripheral.find("environment_detector") or peripheral.find("environmentDetector")
+end
+
+function readExtras()
+  local now = os.epoch("utc")
+  if now - lastExtraRead < 5000 then return end
+  lastExtraRead = now
+  if playerDet and playerDet.getOnlinePlayers then
+    local ok, list = pcall(playerDet.getOnlinePlayers)
+    if ok and type(list) == "table" then
+      local seen = {}
+      for _, n in ipairs(list) do
+        n = tostring(n)
+        seen[n] = true
+        players.since[n] = players.since[n] or now
+      end
+      for n in pairs(players.since) do if not seen[n] then players.since[n] = nil end end
+      local names = {}
+      for n in pairs(players.since) do names[#names + 1] = n end
+      table.sort(names, function(a, b) return players.since[a] < players.since[b] end)
+      players.names = names
+      players.ok = true
+    end
+  else
+    players.ok = false
+  end
+  if envDet then
+    local function call(fn)
+      local f = envDet[fn]
+      if type(f) == "function" then
+        local ok, v = pcall(f)
+        if ok then return v end
+      end
+    end
+    env = {
+      rain = call("isRaining"),
+      thunder = call("isThunder"),
+      moon = call("getMoonName"),
+    }
+  else
+    env = nil
+  end
+end
+end
+
+-- ------------------------------------------------------------
+--  NBT-Export: Items mit NBT-/Komponenten-Daten aus dem ME-System
+--  in eine Kiste an der ME Bridge legen (nur Haupt-Dashboard)
+-- ------------------------------------------------------------
+
+NBT_SIDES = { "up", "down", "north", "south", "east", "west" }
+nbtState = { last = nil, count = 0, kinds = 0, missed = 0, err = nil, running = false, now = false }
+do
+local NBT_DB = fs.combine(DIR, "nbtexport.db")
+
+local function saveNbt()
+  local h = fs.open(NBT_DB, "w")
+  h.write(textutils.serialize({ last = nbtState.last, count = nbtState.count,
+                                kinds = nbtState.kinds, missed = nbtState.missed }))
+  h.close()
+end
+
+if fs.exists(NBT_DB) then
+  local h = fs.open(NBT_DB, "r")
+  local t = textutils.unserialize(h.readAll())
+  h.close()
+  if type(t) == "table" then
+    for k, v in pairs(t) do nbtState[k] = v end
+  end
+end
+
+-- NBT in alten Versionen, Daten-Komponenten ab Minecraft 1.21
+local function hasData(it)
+  local d = it.components or it.nbt
+  if type(d) == "table" then return next(d) ~= nil end
+  return type(d) == "string" and d ~= ""
+end
+
+-- Genau diese Variante (Fingerprint) exportieren; die Bridge gibt oft nur
+-- einen Stack pro Aufruf heraus
+local function exportOne(it, total)
+  local filter = { name = it.name, fingerprint = it.fingerprint }
+  local done = 0
+  while done < total do
+    filter.count = total - done
+    local ok, n = pcall(me.exportItem, filter, cfg.nbtExportSide)
+    if type(n) == "table" then n = n.count or n.amount end
+    if not ok or type(n) ~= "number" or n <= 0 then break end
+    done = done + n
+  end
+  return done
+end
+
+-- Redstone-Signal am NBT-Storage-Computer schalten und auf dessen
+-- Bestaetigung warten (3 Versuche)
+local function nbtSignal(on)
+  if not modemName then return false end
+  for _ = 1, 3 do
+    rednet.broadcast({ type = "nbtRs", on = on, key = cfg.key }, cfg.protocol)
+    local timer = os.startTimer(2)
+    while true do
+      local ev, a, b, c = os.pullEvent()
+      if ev == "rednet_message" and c == cfg.protocol and type(b) == "table"
+         and b.type == "nbtAck" and b.key == cfg.key and b.on == on then
+        os.cancelTimer(timer)
+        return true
+      elseif ev == "timer" and a == timer then
+        break
+      end
+    end
+  end
+  return false
+end
+
+local function exportAll()
+  local ok, list = pcall(me.getItems)
+  if not ok or type(list) ~= "table" then
+    nbtState.err = "Itemliste nicht lesbar"
+    return
+  end
+  local skip = {}
+  for _, n in ipairs(cfg.nbtExportSkip or {}) do skip[n] = true end
+  local count, kinds, missed = 0, 0, 0
+  for _, it in ipairs(list) do
+    -- ohne Fingerprint wuerde die Bridge auch die normalen Items dieser Sorte nehmen
+    if type(it) == "table" and it.name and it.fingerprint and not skip[it.name] and hasData(it) then
+      local want = tonumber(it.count or it.amount) or 0
+      local got = exportOne(it, want)
+      if got > 0 then count, kinds = count + got, kinds + 1 end
+      missed = missed + (want - got)
+    end
+  end
+  nbtState.last, nbtState.count, nbtState.kinds, nbtState.missed = os.epoch("utc"), count, kinds, missed
+  nbtState.err = nil
+  saveNbt()
+  if count > 0 or missed > 0 then
+    chat("NBT-Export: " .. count .. " Items (" .. kinds .. " Sorten) in die Kiste"
+         .. (missed > 0 and (", " .. missed .. " passten nicht rein") or ""), "nbt")
+  end
+end
+
+function runNbtExport()
+  if not me or not me.getItems or not me.exportItem then
+    nbtState.err = "Keine ME Bridge"
+    return
+  end
+  if cfg.nbtStorage then
+    if not nbtSignal(true) then
+      nbtState.err = "NBT-Storage antwortet nicht"
+      return
+    end
+    sleep(cfg.nbtStorageWait)
+  end
+  local ok, err = pcall(exportAll)
+  if not ok then nbtState.err = tostring(err) end
+  if cfg.nbtStorage and not nbtSignal(false) then
+    -- der NBT-Storage-Computer schaltet nach seiner Hoechstdauer selbst ab
+    nbtState.err = "NBT-Storage: Signal AUS nicht bestaetigt"
+    chat("NBT-Export: Redstone-Signal AUS wurde nicht bestaetigt!", "nbt")
+  end
+end
+
+-- Laeuft parallel zum Rest, damit ein langer Export das Dashboard nicht anhaelt
+function nbtLoop()
+  local retryAt, failed = 0, false
+  while true do
+    local now = os.epoch("utc")
+    local due = (nbtState.last == nil or now - nbtState.last >= cfg.nbtExportInterval * 1000)
+      and now >= retryAt
+    if isMain() and (nbtState.now or (cfg.nbtExport and due)) then
+      nbtState.now, nbtState.running = false, true
+      local before = nbtState.last
+      local ok, err = pcall(runNbtExport)
+      nbtState.running = false
+      if not ok then nbtState.err = tostring(err) end
+      if nbtState.last == before then
+        -- fehlgeschlagen: in einer Minute nochmal, Chat-Meldung nur beim ersten Mal
+        retryAt = os.epoch("utc") + 60000
+        if not failed then chat("NBT-Export fehlgeschlagen: " .. tostring(nbtState.err), "nbt") end
+        failed = true
+      else
+        failed = false
+      end
+    end
+    sleep(nbtState.now and 0 or 5)
+  end
+end
+
+function nbtStatus()
+  if nbtState.running then return "laeuft gerade..." end
+  if nbtState.err then return "Fehler: " .. nbtState.err end
+  if not nbtState.last then return "noch nie" end
+  return osDate("%d.%m. %H:%M", math.floor(nbtState.last / 1000)) .. ": " .. nbtState.count .. " Items"
+end
+end
+
+-- ------------------------------------------------------------
+--  Farmen (Rednet)
+-- ------------------------------------------------------------
+
+local farms = {}    -- id -> { id, name, on, lastSeen, pending }
+-- Reihenfolge der Liste. Eintraege: { kind = "farm", id = n } oder
+-- { kind = "folder", name = "...", items = { farm-ids }, collapsed = bool }
+local layout = {}
+-- Lag-Schutz: unter offBelow TPS alle Farmen aus, ab onAbove TPS die vorher
+-- laufenden wieder an. Die Bedingung muss "delay" Sekunden lang erfuellt sein.
+local auto = { enabled = false, offBelow = 13, onAbove = 19, delay = 10,
+               tripped = false, saved = {}, trippedAt = nil }
+local autoCondSince = nil
+local DB = fs.combine(DIR, "farms.db")
+
+local layoutHoldUntil = 0
+
+sendCmd = function(msg)
+  if not modemName then return end
+  msg.type, msg.key = "cmd", cfg.key
+  rednet.broadcast(msg, cfg.protocol)
+end
+
+function saveFarmsLocal()
+  local t = { farms = {}, layout = layout, auto = auto }
+  for id, f in pairs(farms) do t.farms[#t.farms + 1] = { id = id, name = f.name, on = f.on } end
+  local h = fs.open(DB, "w")
+  h.write(textutils.serialize(t))
+  h.close()
+end
+
+-- Speichern nach einer Aenderung durch den Benutzer. Auf einem Neben-Dashboard
+-- geht die neue Reihenfolge/Einstellung zusaetzlich ans Haupt-Dashboard.
+function saveFarms()
+  saveFarmsLocal()
+  if not isMain() then
+    layoutHoldUntil = os.epoch("utc") + 4000
+    sendCmd({ cmd = "layoutSet", layout = layout,
+              auto = { enabled = auto.enabled, offBelow = auto.offBelow, onAbove = auto.onAbove, delay = auto.delay } })
+  end
+end
+
+local applySync, applyCmd   -- weiter unten definiert
+
+-- Jede Farm genau einmal in der Liste; neue Farmen hinten anhaengen
+function ensureLayout()
+  local seen, out = {}, {}
+  for _, e in ipairs(layout) do
+    if type(e) == "table" and e.kind == "folder" then
+      local items = {}
+      for _, id in ipairs(e.items or {}) do
+        if farms[id] and not seen[id] then seen[id] = true; items[#items + 1] = id end
+      end
+      e.items = items
+      e.name = tostring(e.name or "Ordner")
+      out[#out + 1] = e
+    elseif type(e) == "table" and e.kind == "farm" and farms[e.id] and not seen[e.id] then
+      seen[e.id] = true
+      out[#out + 1] = e
+    end
+  end
+  local new = {}
+  for id, f in pairs(farms) do if not seen[id] then new[#new + 1] = f end end
+  table.sort(new, function(a, b) return a.name:lower() < b.name:lower() end)
+  for _, f in ipairs(new) do out[#out + 1] = { kind = "farm", id = f.id } end
+  layout = out
+end
+
+function loadFarms()
+  if not fs.exists(DB) then return end
+  local h = fs.open(DB, "r")
+  local t = textutils.unserialize(h.readAll())
+  h.close()
+  if type(t) ~= "table" then return end
+  local list = t.farms or t   -- alte Version: einfache Liste
+  for _, f in ipairs(list) do
+    if type(f) == "table" and f.id then
+      farms[f.id] = { id = f.id, name = f.name or ("Farm #" .. f.id), on = f.on, lastSeen = -1e9 }
+    end
+  end
+  if type(t.layout) == "table" then layout = t.layout end
+  if type(t.auto) == "table" then
+    for k, v in pairs(t.auto) do auto[k] = v end
+  end
+  ensureLayout()
+end
+
+function isOnline(f)
+  return f.lastSeen and (os.clock() - f.lastSeen) <= cfg.farmTimeout
+end
+
+function send(id, msg)
+  if not modemName then return end
+  msg.key = cfg.key
+  rednet.send(id, msg, cfg.protocol)
+end
+
+function broadcastPing()
+  if modemName then rednet.broadcast({ type = "ping", key = cfg.key }, cfg.protocol) end
+end
+
+function handleMsg(sender, msg, proto)
+  if proto ~= cfg.protocol or type(msg) ~= "table" or msg.key ~= cfg.key then return false end
+  if msg.type == "energy" then
+    return handleEnergyMsg(sender, msg) and "newEnergy" or false
+  end
+  if msg.type == "sync" then
+    if not isMain() then applySync(sender, msg) end
+    return false
+  end
+  if msg.type == "cmd" then
+    if isMain() then applyCmd(msg) end
+    return false
+  end
+  if msg.type ~= "status" then return false end
+  local f = farms[sender]
+  local name = tostring(msg.name or ("Farm #" .. sender))
+  local isNew = f == nil
+  local changed = isNew or (f.name ~= name)
+  if not f then f = { id = sender }; farms[sender] = f end
+  f.name = name
+  local newOn = msg.on and true or false
+  if not isNew and f.on ~= nil and f.on ~= newOn then noteFarmChange(name, newOn) end
+  f.on = newOn
+  f.lastSeen = os.clock()
+  f.pending = nil
+  if isNew then ensureLayout() end
+  if changed then saveFarmsLocal() end
+  return true
+end
+
+function setFarm(f, on)
+  if not f then return end
+  f.pending = on
+  f.pendingSince = os.clock()
+  send(f.id, { type = "set", on = on })
+end
+
+-- Ordner-Hilfen ------------------------------------------------------
+
+function folderList()
+  local l = {}
+  for _, e in ipairs(layout) do if e.kind == "folder" then l[#l + 1] = e end end
+  return l
+end
+
+function folderOf(id)
+  for _, e in ipairs(layout) do
+    if e.kind == "folder" then
+      for i, fid in ipairs(e.items) do if fid == id then return e, i end end
+    end
+  end
+end
+
+function removeFromLayout(id)
+  local fo, i = folderOf(id)
+  if fo then table.remove(fo.items, i) return end
+  for k, e in ipairs(layout) do
+    if e.kind == "farm" and e.id == id then table.remove(layout, k) return end
+  end
+end
+
+-- Farm in den naechsten Ordner schieben (ohne Ordner -> Ordner 1 -> ... -> ohne Ordner)
+function cycleFolder(id)
+  local fl, cur, nextF = folderList(), folderOf(id), nil
+  if not cur then
+    nextF = fl[1]
+  else
+    for i, f in ipairs(fl) do if f == cur then nextF = fl[i + 1] end end
+  end
+  removeFromLayout(id)
+  if nextF then
+    nextF.items[#nextF.items + 1] = id
+    nextF.collapsed = false
+  else
+    layout[#layout + 1] = { kind = "farm", id = id }
+  end
+  saveFarms()
+end
+
+function moveIn(list, i, d)
+  local j = i + d
+  if j < 1 or j > #list then return end
+  list[i], list[j] = list[j], list[i]
+  saveFarms()
+end
+
+function addFolder()
+  local names = {}
+  for _, f in ipairs(folderList()) do names[f.name] = true end
+  local n = 1
+  while names["Ordner " .. n] do n = n + 1 end
+  layout[#layout + 1] = { kind = "folder", name = "Ordner " .. n, items = {}, collapsed = false }
+  saveFarms()
+end
+
+-- Ordner loeschen: seine Farmen kommen an seine Stelle
+function deleteFolder(e)
+  for i, x in ipairs(layout) do
+    if x == e then
+      table.remove(layout, i)
+      for k = #e.items, 1, -1 do table.insert(layout, i, { kind = "farm", id = e.items[k] }) end
+      break
+    end
+  end
+  saveFarms()
+end
+
+function setFolder(e, on)
+  for _, id in ipairs(e.items) do setFarm(farms[id], on) end
+end
+
+function renameFolder(e)
+  state.renaming = e.name
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("Neuer Name fuer Ordner '" .. e.name .. "':")
+  print("(Enter = speichern, leer = abbrechen)")
+  write("> ")
+  local n = read(nil, nil, nil, e.name)
+  if n and n ~= "" then e.name = n:sub(1, 24) end
+  state.renaming = nil
+  saveFarms()
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("Ordnername gespeichert. [Q] Beenden")
+end
+
+-- Lag-Schutz -----------------------------------------------------------
+
+function autoRestore()
+  if not isMain() then sendCmd({ cmd = "autoRestore" }) return end
+  chat(string.format("Lag-Schutz beendet - %d Farmen wieder an", #(auto.saved or {})), "lag")
+  farmChatQuietUntil = os.epoch("utc") + 20000
+  for _, id in ipairs(auto.saved or {}) do setFarm(farms[id], true) end
+  auto.tripped, auto.saved, auto.trippedAt = false, {}, nil
+  autoCondSince = nil
+  saveFarms()
+end
+
+function autoTick(tps)
+  if not isMain() then return end
+  if not auto.enabled or not tps then autoCondSince = nil return end
+  local now = os.epoch("utc") / 1000   -- echte Sekunden (Spielzeit laeuft bei Lag langsamer)
+  local cond
+  if auto.tripped then cond = tps >= auto.onAbove else cond = tps < auto.offBelow end
+  if not cond then autoCondSince = nil return end
+  autoCondSince = autoCondSince or now
+  if now - autoCondSince < auto.delay then return end
+  autoCondSince = nil
+  if auto.tripped then
+    autoRestore()
+  else
+    auto.saved = {}
+    for id, f in pairs(farms) do
+      if f.on then
+        auto.saved[#auto.saved + 1] = id
+        setFarm(f, false)
+      end
+    end
+    auto.tripped, auto.trippedAt = true, os.epoch("utc")
+    chat(string.format("Lag-Schutz: TPS %.1f - %d Farmen abgeschaltet", tps, #auto.saved), "lag")
+    farmChatQuietUntil = os.epoch("utc") + 20000
+    saveFarms()
+  end
+end
+
+-- ------------------------------------------------------------
+--  Haupt-/Neben-Dashboard
+-- ------------------------------------------------------------
+
+local syncData, syncAt = nil, nil
+
+function buildSync()
+  local srcs = {}
+  for _, src in ipairs(sources) do
+    srcs[#srcs + 1] = { label = src.label, stored = src.stored, cap = src.cap, rate = src.rate,
+                        remote = src.remote, ae = src.ae, id = src.id }
+  end
+  local st = {}
+  for name, x in pairs(stockState) do
+    st[name] = { count = x.count, trend = stockTrend(x), low = x.low, crafting = x.crafting, err = x.err }
+  end
+  return {
+    type = "sync", key = cfg.key,
+    layout = layout, auto = auto, autoCond = autoCondSince,
+    energy = state.energy, rate = state.rate, sources = srcs, aeFE = aeFEFound,
+    crafts = state.crafts, craftErr = state.craftErr,
+    stock = stock.items, stockState = st, storage = storage, topItems = topItems,
+    players = players, env = env, chat = chatSettings,
+  }
+end
+
+applySync = function(sender, msg)
+  syncData, syncAt = msg, os.epoch("utc")
+  local now = os.epoch("utc")
+  if now >= layoutHoldUntil then
+    if type(msg.layout) == "table" then layout = msg.layout; ensureLayout() end
+    if type(msg.auto) == "table" then for k, v in pairs(msg.auto) do auto[k] = v end end
+    autoCondSince = msg.autoCond
+  end
+  if now >= stockHoldUntil and type(msg.stock) == "table" then stock.items = msg.stock end
+  stockState = type(msg.stockState) == "table" and msg.stockState or {}
+  storage = msg.storage
+  if type(msg.topItems) == "table" then topItems = msg.topItems end
+  if type(msg.players) == "table" then players = msg.players end
+  env = msg.env
+  if type(msg.chat) == "table" and os.epoch("utc") >= (state.chatHoldUntil or 0) then chatSettings = msg.chat end
+  aeFEFound = msg.aeFE and true or false
+end
+
+applyCmd = function(msg)
+  if msg.cmd == "layoutSet" and type(msg.layout) == "table" then
+    layout = msg.layout
+    ensureLayout()
+    if type(msg.auto) == "table" then
+      for _, k in ipairs({ "enabled", "offBelow", "onAbove", "delay" }) do
+        if msg.auto[k] ~= nil then auto[k] = msg.auto[k] end
+      end
+    end
+    saveFarms()
+  elseif msg.cmd == "autoRestore" then
+    if auto.tripped then autoRestore() end
+  elseif msg.cmd == "chatSet" and type(msg.settings) == "table" then
+    chatSettings = msg.settings
+    saveChat()
+  elseif msg.cmd == "chatTest" then
+    chat("Test-Nachricht vom Neben-Dashboard")
+  elseif msg.cmd == "stockSet" and type(msg.items) == "table" then
+    stock.items = msg.items
+    saveStock()
+  end
+end
+
+-- ------------------------------------------------------------
+--  Zeichen-Grundlagen
+-- ------------------------------------------------------------
+
+local out, win, W, H
+local buttons = {}
+
+function chooseScale()
+  if type(cfg.textScale) == "number" then
+    mon.setTextScale(cfg.textScale)
+    return
+  end
+  for s = 5, 0.5, -0.5 do
+    mon.setTextScale(s)
+    local w, h = mon.getSize()
+    if w >= cfg.minWidth and h >= cfg.minHeight then return end
+  end
+  mon.setTextScale(0.5)
+end
+
+function setupScreen()
+  if mon then
+    chooseScale()
+    out = mon
+  else
+    out = term.native()
+  end
+  W, H = out.getSize()
+  win = window.create(out, 1, 1, W, H, false)
+end
+
+function addButton(x1, y1, x2, y2, fn)
+  buttons[#buttons + 1] = { x1 = x1, y1 = y1, x2 = x2, y2 = y2, fn = fn }
+end
+
+function fill(x1, y1, x2, y2, bg)
+  if x2 < x1 or y2 < y1 then return end
+  win.setBackgroundColor(bg)
+  local s = string.rep(" ", x2 - x1 + 1)
+  for y = y1, y2 do
+    win.setCursorPos(x1, y)
+    win.write(s)
+  end
+end
+
+function put(x, y, s, fg, bg)
+  win.setBackgroundColor(bg or colors.black)
+  win.setTextColor(fg or colors.white)
+  win.setCursorPos(x, y)
+  win.write(s)
+end
+
+function drawButton(x1, y1, x2, y2, label, fg, bg, fn)
+  fill(x1, y1, x2, y2, bg)
+  local w = x2 - x1 + 1
+  label = fit(label, w)
+  put(x1 + math.floor((w - #label) / 2), y1 + math.floor((y2 - y1) / 2), label, fg, bg)
+  addButton(x1, y1, x2, y2, fn)
+end
+
+function bar(x, y, w, frac, col)
+  if w <= 0 then return end
+  frac = clamp(frac or 0, 0, 1)
+  local n = math.floor(frac * w + 0.5)
+  fill(x, y, x + n - 1, y, col)
+  fill(x + n, y, x + w - 1, y, colors.gray)
+end
+
+function panel(x, y, w, h, title, accent)
+  fill(x, y, x + w - 1, y, accent)
+  put(x + 1, y, fit(title, w - 2), colors.black, accent)
+  fill(x, y + 1, x + w - 1, y + h - 1, colors.black)
+  return x + 1, y + 1, w - 2, h - 1
+end
+
+-- Grosse Ziffern (3x5 Raster, skaliert) --------------------------------
+
+local bigLayout, bigNumber, drawBig
+do
+local GLYPHS = {
+  ["0"] = { "###", "#.#", "#.#", "#.#", "###" },
+  ["1"] = { ".#.", "##.", ".#.", ".#.", "###" },
+  ["2"] = { "###", "..#", "###", "#..", "###" },
+  ["3"] = { "###", "..#", ".##", "..#", "###" },
+  ["4"] = { "#.#", "#.#", "###", "..#", "..#" },
+  ["5"] = { "###", "#..", "###", "..#", "###" },
+  ["6"] = { "###", "#..", "###", "#.#", "###" },
+  ["7"] = { "###", "..#", "..#", "..#", "..#" },
+  ["8"] = { "###", "#.#", "###", "#.#", "###" },
+  ["9"] = { "###", "#.#", "###", "..#", "###" },
+  ["."] = { ".", ".", ".", ".", "#" },
+  ["%"] = { "#.#", "..#", ".#.", "#..", "#.#" },
+  ["+"] = { "...", ".#.", "###", ".#.", "..." },
+  ["-"] = { "...", "...", "###", "...", "..." },
+  [" "] = { ".", ".", ".", ".", "." },
+  ["k"] = { "#..", "#.#", "##.", "#.#", "#.#" },
+  ["M"] = { "#...#", "##.##", "#.#.#", "#...#", "#...#" },
+  ["G"] = { "###", "#..", "#.#", "#.#", "###" },
+  ["T"] = { "###", ".#.", ".#.", ".#.", ".#." },
+  ["P"] = { "###", "#.#", "###", "#..", "#.." },
+  ["E"] = { "###", "#..", "###", "#..", "###" },
+  ["F"] = { "###", "#..", "###", "#..", "#.." },
+}
+
+function glyphsOf(s)
+  local g = {}
+  for i = 1, #s do
+    local gl = GLYPHS[s:sub(i, i)]
+    if gl then g[#g + 1] = gl end
+  end
+  return g
+end
+
+function bigWidth(s, pw)
+  local g = glyphsOf(s)
+  local w = 0
+  for i, gl in ipairs(g) do
+    w = w + #gl[1] * pw
+    if i < #g then w = w + pw end
+  end
+  return w
+end
+
+-- Groesste Pixelgroesse, mit der der Text in maxW x maxH passt
+function bigLayout(s, maxW, maxH)
+  for ph = math.floor(maxH / 5), 1, -1 do
+    for _, pw in ipairs({ ph * 2, ph + math.floor(ph / 2), ph }) do
+      local w = bigWidth(s, pw)
+      if w <= maxW then return pw, ph, w end
+    end
+  end
+end
+
+-- Groesste Darstellung, die passt; bei Platzmangel mit weniger Nachkommastellen
+function bigNumber(value, sign, maxW, maxH)
+  for d = 2, 0, -1 do
+    local s = sign .. fmtNumD(math.abs(value), d)
+    if sign == "" and value < 0 then s = "-" .. fmtNumD(-value, d) end
+    local pw, ph, bw = bigLayout(s, maxW, maxH)
+    if pw then return s, pw, ph, bw end
+  end
+end
+
+function drawBig(x, y, s, col, pw, ph)
+  local cx = x
+  for _, gl in ipairs(glyphsOf(s)) do
+    for r = 1, 5 do
+      local row = gl[r]
+      for c = 1, #row do
+        if row:sub(c, c) == "#" then
+          fill(cx + (c - 1) * pw, y + (r - 1) * ph, cx + c * pw - 1, y + r * ph - 1, col)
+        end
+      end
+    end
+    cx = cx + #gl[1] * pw + pw
+  end
+end
+end
+
+-- Balkendiagramm mit 3-facher vertikaler Aufloesung (Teletext-Zeichen) --
+
+local renderBars
+do
+local toBlit = colors.toBlit or function(c)
+  return ("0123456789abcdef"):sub(math.floor(math.log(c) / math.log(2) + 0.5) + 1, math.floor(math.log(c) / math.log(2) + 0.5) + 1)
+end
+
+local BIT = { 1, 2, 4 }        -- unten, mitte, oben
+local PATTERN = {
+  [1] = { 143, true },         -- unten
+  [2] = { 140, false },        -- mitte
+  [3] = { 131, true },         -- unten + mitte
+  [4] = { 131, false },        -- oben
+  [5] = { 140, true },         -- oben + unten
+  [6] = { 143, false },        -- oben + mitte
+}
+
+function renderBars(x, y, w, h, vals, lo, hi, colorOf)
+  if w <= 0 or h <= 0 then return end
+  local total = h * 3
+  local span = hi - lo
+  if span <= 0 then span = 1 end
+  local function lvl(v) return clamp(math.floor((v - lo) / span * total + 0.5), 0, total) end
+  local base = 0
+  if lo < 0 and hi > 0 then base = lvl(0) elseif hi <= 0 then base = total end
+  local bgB = toBlit(colors.black)
+  local rows = {}
+  for r = 1, h do rows[r] = { {}, {}, {} } end
+  for c = 1, w do
+    local v = vals[c]
+    local from, to, cB = 0, 0, bgB
+    if v then
+      local l = lvl(v)
+      from, to = math.min(base, l), math.max(base, l)
+      if from == to then
+        if to < total then to = to + 1 else from = from - 1 end
+      end
+      cB = toBlit(colorOf(v, c))
+    end
+    for r = 1, h do
+      local bottom = (h - r) * 3
+      local bits = 0
+      if v then
+        for k = 0, 2 do
+          local t = bottom + k
+          if t >= from and t < to then bits = bits + BIT[k + 1] end
+        end
+      end
+      local ch, fg, bg = " ", bgB, bgB
+      if bits == 7 then
+        bg = cB
+      elseif bits > 0 then
+        local p = PATTERN[bits]
+        ch = string.char(p[1])
+        if p[2] then fg, bg = bgB, cB else fg, bg = cB, bgB end
+      end
+      local row = rows[r]
+      row[1][c], row[2][c], row[3][c] = ch, fg, bg
+    end
+  end
+  for r = 1, h do
+    win.setCursorPos(x, y + r - 1)
+    win.blit(table.concat(rows[r][1]), table.concat(rows[r][2]), table.concat(rows[r][3]))
+  end
+end
+end
+
+function trendColor(vals)
+  return function(v, c)
+    local p = vals[c - 1]
+    if p and v > p then return colors.lime elseif p and v < p then return colors.red end
+    return colors.green
+  end
+end
+
+function tpsAxis(v) return string.format("%.0f", v) end
+function energyAxis(v) return fmtNumD(v, 2) end
+function tpsColors() return function(v) return tpsColor(v) end end
+
+-- Balkendiagramm mit Achsen: Werte links (oben, Mitte, unten), Zeit unten.
+-- raw = Messreihe, r = Zeitraum aus RANGES, colorFn(vals) liefert die Farbfunktion.
+function axisGraph(x, y, w, h, raw, r, fmt, colorFn, fixLo, fixHi, zero)
+  local probeLo, probeHi = rangeOf(raw, fixLo, fixHi, zero)
+  if not probeLo then
+    put(x, y, fit("Sammle Daten...", w), colors.gray)
+    return
+  end
+  if h < 3 or w < 14 then   -- zu klein fuer Achsen
+    local vals = resample(raw, w)
+    local lo, hi = rangeOf(vals, fixLo, fixHi, zero)
+    if lo then renderBars(x, y, w, h, vals, lo, hi, colorFn(vals)) end
+    return
+  end
+  local labW = math.min(12, math.max(#fmt(probeLo), #fmt(probeHi)) + 1)
+  local gx, gw = x + labW + 1, w - labW - 1
+  local gh = h - 1
+  local vals = resample(raw, gw)
+  local lo, hi = rangeOf(vals, fixLo, fixHi, zero)
+  if not lo then return end
+  fill(x + labW, y, x + labW, y + gh - 1, colors.gray)
+  renderBars(gx, y, gw, gh, vals, lo, hi, colorFn(vals))
+  put(x, y, fit(fmt(hi), labW), colors.lightGray)
+  if gh >= 5 then put(x, y + math.floor((gh - 1) / 2), fit(fmt((lo + hi) / 2), labW), colors.gray) end
+  put(x, y + gh - 1, fit(fmt(lo), labW), colors.lightGray)
+  local ly = y + h - 1
+  put(gx, ly, "-" .. spanLabel(r.span), colors.gray)
+  local mid = "-" .. spanLabel(r.span / 2)
+  if gw >= 24 then put(gx + math.floor(gw / 2) - math.floor(#mid / 2), ly, mid, colors.gray) end
+  put(x + w - 5, ly, "jetzt", colors.gray)
+end
+
+-- ------------------------------------------------------------
+--  Kopfzeile mit Reitern
+-- ------------------------------------------------------------
+
+local TABS = {
+  { "dash",   "DASHBOARD", "DASH",  "DB" },
+  { "energy", "ENERGIE",   "STROM", "EN" },
+  { "stock",  "LAGER",     "LAGER", "LA" },
+  { "info",   "INFO",      "INFO",  "IN" },
+  { "stats",  "STATISTIK", "STATS", "ST" },
+  { "farms",  "FARMEN",    "FARM",  "FA" },
+  { "chat",   "CHAT",      "CHAT",  "CH" },
+  { "setup",  "EINSTELLUNGEN", "SETUP", "SE" },
+}
+local HH = 1   -- Hoehe der Kopfzeile (3 Zeilen bei grossen Monitoren)
+
+local updateArmedUntil = 0
+local doUpdate   -- wird weiter unten definiert (braucht draw)
+
+-- erster Klick fragt "SICHER?", zweiter Klick (innerhalb 5 s) startet das Update
+function updateClick()
+  if os.epoch("utc") < updateArmedUntil then
+    updateArmedUntil = 0
+    doUpdate()
+  else
+    updateArmedUntil = os.epoch("utc") + 5000
+  end
+end
+
+function header()
+  HH = (H >= 24) and 3 or 1
+  local headBg, accentBg = themeColor("headerColor", "blue"), themeColor("accentColor", "lightBlue")
+  fill(1, 1, W, HH, headBg)
+  -- Beschriftung: lang, kurz oder sehr kurz - je nachdem, was mit dem UPDATE-Knopf passt
+  local function width(i, gap)
+    local w = 0
+    for _, t in ipairs(TABS) do w = w + #t[i] + 2 + gap end   -- " NAME " + Abstand
+    return w - gap
+  end
+  -- Varianten von schoen nach platzsparend: Beschriftung, Abstand, UPDATE-Knopf
+  local idx, gap, withUpdate = 4, 0, false
+  for _, v in ipairs({ { 2, 1, true }, { 3, 1, true }, { 3, 0, true }, { 3, 1, false }, { 3, 0, false }, { 4, 1, true } }) do
+    if width(v[1], v[2]) + (v[3] and 9 or 0) <= W then idx, gap, withUpdate = v[1], v[2], v[3]; break end
+  end
+  state.updateInHeader = withUpdate
+  local x = 1
+  for _, t in ipairs(TABS) do
+    local lbl = " " .. t[idx] .. " "
+    local active = state.screen == t[1]
+    drawButton(x, 1, x + #lbl - 1, HH, lbl, active and colors.black or colors.white,
+               active and accentBg or headBg, function() state.screen = t[1] end)
+    x = x + #lbl + gap
+  end
+  -- UPDATE-Knopf: erster Klick fragt "SICHER?", zweiter Klick (innerhalb 5 s) startet das Update
+  local armed = os.epoch("utc") < updateArmedUntil
+  local ulbl = armed and " SICHER? " or " UPDATE "
+  local ux = W - #ulbl + 1
+  if withUpdate and ux > x then
+    drawButton(ux, 1, W, HH, ulbl, colors.black, armed and colors.yellow or colors.lime, updateClick)
+  else
+    ux = W + 1
+  end
+  local clock = osDate("%H:%M")
+  if ux - x >= #clock + 2 then put(ux - #clock - 1, math.ceil(HH / 2), clock, colors.white, headBg) end
+end
+
+function rateColor(r)
+  return (r and r > 0 and colors.lime) or (r and r < 0 and colors.red) or colors.lightGray
+end
+
+function etaText(stored, r)
+  if not r then return "Trend wird berechnet..." end
+  if r < 0 and stored > 0 then return "leer in " .. fmtDur(stored / -r / (state.tps or 20)) end
+  if r > 0 then return "laedt" end
+  return "stabil"
+end
+
+function fmtDiff(v, u)
+  if not v then return "-" end
+  return (v >= 0 and "+" or "-") .. fmtNum(math.abs(v), u)
+end
+
+function changeOver(key, r)
+  local sm = summarize(series(key, r))
+  if sm then return sm.last - sm.first end
+end
+
+-- ------------------------------------------------------------
+--  Dashboard
+-- ------------------------------------------------------------
+
+function drawServer(x, y, w, h)
+  local ix, iy, iw, ih = panel(x, y, w, h, "SERVER-PERFORMANCE", colors.cyan)
+  local last = iy + ih - 1
+  local tps = state.tps
+  if not tps then put(ix, iy, "Messe...", colors.lightGray) return end
+  local col = tpsColor(tps)
+  local s = string.format("%.1f", tps)
+  local lag = string.format("Lag %d%%", math.floor((1 - tps / 20) * 100 + 0.5))
+  local hist = summarize(series("tps", RANGES[1]))
+  local histTxt = hist and string.format("15 min:  Mittel %.1f   Min %.1f", hist.avg, hist.min)
+  local histCol = colors.lightGray
+  if auto.tripped then histTxt, histCol = "LAG-SCHUTZ AKTIV - Farmen abgeschaltet", colors.red end
+
+  -- Nebeneinander: grosse Zahl links, Verlauf rechts (flache, breite Panels)
+  if ih >= 6 and ih <= 10 then
+    local pw, ph, bw = bigLayout(s, iw - 24, ih - 1)
+    if pw then
+      drawBig(ix, iy, s, col, pw, ph)
+      local lx = ix + bw + 2
+      put(lx, iy, "TPS", colors.white)
+      put(lx, iy + 1, "von 20", colors.gray)
+      put(lx, iy + 3, lag, col)
+      local gx = lx + 9
+      local gw = ix + iw - gx
+      axisGraph(gx, iy, gw, ph * 5, series("tps", RANGES[1]), RANGES[1], tpsAxis, tpsColors, 0, 20)
+      if histTxt and iy + ph * 5 <= last then put(ix, iy + ph * 5, fit(histTxt, iw), histCol) end
+      return
+    end
+  end
+
+  local cy = iy
+  local pw, ph, bw
+  local bigH = math.floor(ih * 0.5)
+  if bigH >= 5 then pw, ph, bw = bigLayout(s, iw - 9, bigH) end
+  if pw then
+    drawBig(ix, cy, s, col, pw, ph)
+    put(ix + bw + 2, cy, "TPS", colors.white)
+    put(ix + bw + 2, cy + 1, "von 20", colors.gray)
+    put(ix + bw + 2, cy + 3, lag, col)
+    cy = cy + ph * 5 + 1
+  else
+    put(ix, cy, "TPS ", colors.white)
+    put(ix + 4, cy, string.format("%5.2f", tps), col)
+    put(ix + 9, cy, " / 20", colors.gray)
+    if iw >= 16 + #lag then put(ix + iw - #lag, cy, lag, col) end
+    cy = cy + 1
+  end
+
+  if cy <= last then bar(ix, cy, iw, tps / 20, col); cy = cy + 1 end
+  if cy <= last and histTxt then
+    put(ix, cy, fit(histTxt, iw), histCol)
+    cy = cy + 1
+  end
+  if last - cy >= 2 then
+    axisGraph(ix, cy + 1, iw, last - cy, series("tps", RANGES[1]), RANGES[1], tpsAxis, tpsColors, 0, 20)
+  end
+end
+
+function compactRate(r)
+  return (r >= 0 and "+" or "-") .. fmtNum(math.abs(r)) .. "/t"
+end
+
+-- Zeichnet einen Energiewert in den Bereich: Menge gross, darunter die Rate
+-- (gross, wenn Platz ist), die Veraenderung ueber 15m/1h/24h und den Verlauf.
+function energyTitle()
+  local u = cfg.energyUnit
+  if #sources == 1 then return sources[1].label:upper() .. " (" .. u .. ")" end
+  return "ENERGIE GESAMT (" .. u .. ")"
+end
+
+function noEnergyText()
+  if #sources == 0 and modemName then return "Warte auf Daten vom Energie-Sender..." end
+  return "Kein Energiespeicher gefunden"
+end
+
+function energyBlock(x, y, w, h, key, value, rate, showDiff, hint)
+  if hint and h >= 3 then
+    put(x, y + h - 1, fit(hint, w), colors.gray)
+    h = h - 1
+  end
+  local last = y + h - 1
+  local u = cfg.energyUnit
+  if not value then
+    put(x, y, fit("keine Daten (Sender aus / Chunk entladen?)", w), colors.red)
+    return
+  end
+  local cy = y
+  local s = fmtNum(value)
+  local rateDone = false
+
+  -- 1) Menge
+  local vMax = (h >= 7) and math.max(5, math.floor(h * 0.45)) or ((h >= 5) and 5 or 0)
+  local pw, ph, bw
+  if vMax >= 5 then
+    local bs
+    bs, pw, ph, bw = bigNumber(value, "", w, vMax)
+    if bs then s = bs end
+  end
+  if pw then
+    drawBig(x, cy, s, colors.yellow, pw, ph)
+    local sx, sw = x + bw + 2, w - bw - 2
+    local below = last - (cy + ph * 5) + 1
+    if sw >= 2 then put(sx, cy + ph * 5 - 1, fit(u, sw), colors.white) end
+    if below < 1 and rate and sw >= 9 then
+      put(sx, cy, fit(compactRate(rate), sw), rateColor(rate))
+      rateDone = true
+    end
+    cy = cy + ph * 5
+  else
+    put(x, cy, fit(fmtNum(value, u), w), colors.yellow)
+    cy = cy + 1
+  end
+
+  -- 2) Rate
+  if rate and not rateDone and cy <= last then
+    local rs
+    local rem = last - cy + 1
+    local rMax = math.min(ph and ph * 5 or 0, rem - (showDiff and 1 or 0))
+    local rpw, rph, rbw
+    if rMax >= 5 then rs, rpw, rph, rbw = bigNumber(rate, rate >= 0 and "+" or "-", w - #u - 3, rMax) end
+    if rpw then
+      if rem - rph * 5 - (showDiff and 1 or 0) >= 2 then cy = cy + 1 end
+      drawBig(x, cy, rs, rateColor(rate), rpw, rph)
+      put(x + rbw + 1, cy + rph * 5 - 1, u .. "/t", colors.white)
+      if rate < 0 and w - rbw - 1 >= 12 then
+        put(x + rbw + 1, cy, fit(etaText(value, rate), w - rbw - 1), colors.lightGray)
+      end
+      cy = cy + rph * 5
+    else
+      local txt = fmtRate(rate, u)
+      put(x, cy, fit(txt, w), rateColor(rate))
+      local eta = etaText(value, rate)
+      if #txt + 3 + #eta <= w then put(x + w - #eta, cy, eta, colors.lightGray) end
+      cy = cy + 1
+    end
+  end
+
+  -- 3) Veraenderung (bricht um, wenn Zeilen frei sind)
+  if showDiff and cy <= last then
+    local px = x
+    for _, d in ipairs({ { "15m ", RANGES[1] }, { "1h ", RANGES[2] }, { "24h ", RANGES[4] } }) do
+      local dv = changeOver(key, d[2])
+      local txt = fmtDiff(dv, u)
+      local len = #d[1] + #txt
+      if px + len - 1 > x + w - 1 then
+        if px == x or cy + 1 > last then break end
+        cy, px = cy + 1, x
+      end
+      put(px, cy, d[1], colors.gray)
+      put(px + #d[1], cy, txt, (dv and dv < 0) and colors.red or colors.lime)
+      px = px + len + 3
+    end
+    cy = cy + 1
+  end
+
+  -- 4) Verlauf mit dem restlichen Platz
+  if last - cy + 1 >= 4 then
+    local gy = cy + 1
+    axisGraph(x, gy, w, last - gy + 1, series(key, RANGES[1]), RANGES[1], energyAxis, trendColor)
+  end
+end
+
+function drawEnergy(x, y, w, h)
+  local u = cfg.energyUnit
+  local ix, iy, iw, ih = panel(x, y, w, h, energyTitle(), colors.orange)
+  local last = iy + ih - 1
+  local e = state.energy
+  if not e then
+    put(ix, iy, fit(noEnergyText(), iw), colors.red)
+    put(ix, iy + 1, fit("Tipp: Programm 'scan' ausfuehren", iw), colors.gray)
+    return
+  end
+  local multi = #sources > 1
+  local reserve = multi and (#sources + 1) or 0
+  local bh = ih - reserve
+  energyBlock(ix, iy, iw, bh, "energy", e.stored, state.rate, bh >= 7)
+
+  if multi then
+    local cy = iy + bh + 1
+    local labW = 0
+    for _, src in ipairs(sources) do labW = math.max(labW, #src.label) end
+    labW = math.min(labW, 14)
+    for _, src in ipairs(sources) do
+      if cy > last then break end
+      put(ix, cy, fit(src.label, labW), colors.white)
+      if src.stored then
+        local val = fmtNum(src.stored, u)
+        put(ix + labW + 2, cy, val, colors.yellow)
+        if srcHint(src) and labW + 2 + #val + 12 <= iw then
+          put(ix + labW + 3 + #val, cy, "(nur Puffer)", colors.gray)
+        end
+        if src.rate then
+          local rs = fmtRate(src.rate, u)
+          local used = labW + 2 + #val + ((srcHint(src) and labW + 2 + #val + 12 <= iw) and 13 or 0)
+          if used + 2 + #rs <= iw then put(ix + iw - #rs, cy, rs, rateColor(src.rate)) end
+        end
+      else
+        put(ix + labW + 2, cy, "keine Daten", colors.red)
+      end
+      cy = cy + 1
+    end
+  end
+end
+
+function drawCrafts(x, y, w, h)
+  local cr = state.crafts
+  local title = "AE2 AUTOCRAFTS"
+  if cr and cr.total > 0 then title = title .. string.format("  (CPUs %d/%d belegt)", cr.busy, cr.total) end
+  local ix, iy, iw, ih = panel(x, y, w, h, title, colors.purple)
+  local last = iy + ih - 1
+  if not cr then put(ix, iy, fit(state.craftErr or "Lade...", iw), colors.red) return end
+  local tasks = cr.tasks
+  local cy = iy
+
+  if ih >= 12 then
+    local s = tostring(#tasks)
+    local pw, ph, bw = bigLayout(s, math.floor(iw / 3), math.min(10, math.floor(ih * 0.3)))
+    if pw then
+      drawBig(ix, cy, s, #tasks > 0 and colors.magenta or colors.gray, pw, ph)
+      put(ix + bw + 2, cy, #tasks == 1 and "aktiver Craft" or "aktive Crafts", colors.white)
+      if cr.total > 0 then
+        put(ix + bw + 2, cy + 1, string.format("%d von %d CPUs belegt", cr.busy, cr.total), colors.lightGray)
+      end
+      cy = cy + ph * 5 + 1
+    end
+  end
+
+  if #tasks == 0 then put(ix, cy, fit("Keine aktiven Auftraege", iw), colors.gray) return end
+  local avail = last - cy + 1
+  local rowsPer = (avail >= #tasks * 3 and 3) or ((avail >= #tasks * 2 or avail >= 6) and 2) or 1
+  local maxTasks = math.floor(avail / rowsPer)
+  local overflow = #tasks > maxTasks
+  if overflow then maxTasks = math.floor((avail - 1) / rowsPer) end
+  for i = 1, math.min(#tasks, maxTasks) do
+    local t = tasks[i]
+    local ry = cy + (i - 1) * rowsPer
+    local right = ""
+    if t.qty then right = "x" .. fmtNum(t.qty) end
+    if t.elapsed or t.since then right = right .. "  " .. fmtDur(t.elapsed or t.since) end
+    put(ix, ry, fit(t.name, iw - #right - 1), colors.white)
+    if #right > 0 then put(ix + iw - #right, ry, right, colors.lightGray) end
+    if rowsPer >= 2 then
+      if t.prog then
+        bar(ix, ry + 1, iw - 5, t.prog, colors.magenta)
+        put(ix + iw - 4, ry + 1, string.format("%3d%%", math.floor(t.prog * 100)), colors.magenta)
+      else
+        put(ix, ry + 1, "in Arbeit...", colors.gray)
+      end
+    end
+  end
+  if overflow then
+    put(ix, last, string.format("+ %d weitere", #tasks - maxTasks), colors.lightGray)
+  end
+end
+
+-- Hoehe des Farm-Felds: Titel + "Alle" + eine Zeile je Ordner (3 Zeilen hoch, wenn Platz ist)
+function farmPanelHeight(maxH)
+  local n = #folderList()
+  if 1 + 3 * (n + 1) <= maxH then return 1 + 3 * (n + 1), 3 end
+  return math.max(2, math.min(maxH, 2 + n)), 1
+end
+
+function drawFarmPanel(x, y, w, h, rH)
+  local total, on = 0, 0
+  for _, f in pairs(farms) do
+    total = total + 1
+    if f.on then on = on + 1 end
+  end
+  local title = string.format("FARMEN  %d/%d an", on, total)
+  if auto.tripped then title = title .. "  - LAG-SCHUTZ AKTIV" end
+  local ix, iy, iw, ih = panel(x, y, w, h, title, auto.tripped and colors.red or colors.green)
+  local last = iy + ih - 1
+  if total == 0 then put(ix, iy, fit("Noch keine Farmen gefunden", iw), colors.gray) return end
+
+  local function row(yy, label, sub, onLbl, offLbl, onFn, offFn)
+    local offW, onW = #offLbl + 2, #onLbl + 2
+    drawButton(ix + iw - offW, yy, ix + iw - 1, yy + rH - 1, offLbl, colors.white, colors.red, offFn)
+    drawButton(ix + iw - offW - onW - 1, yy, ix + iw - offW - 2, yy + rH - 1, onLbl, colors.white, colors.green, onFn)
+    local avail = iw - offW - onW - 2
+    local my = yy + math.floor((rH - 1) / 2)
+    put(ix, my, fit(label, avail), colors.white)
+    if #sub > 0 and #label + 1 + #sub <= avail then put(ix + #label + 1, my, sub, colors.lightGray) end
+  end
+
+  local yy = iy
+  row(yy, "Alle Farmen", "", "AN", "AUS",
+      function() for _, f in pairs(farms) do setFarm(f, true) end end,
+      function() for _, f in pairs(farms) do setFarm(f, false) end end)
+  yy = yy + rH
+  local folders = folderList()
+  for i, e in ipairs(folders) do
+    if yy + rH - 1 > last then
+      put(ix, last, string.format("+ %d weitere Ordner (Reiter FARMEN)", #folders - i + 1), colors.gray)
+      break
+    end
+    local fon = 0
+    for _, id in ipairs(e.items) do if farms[id] and farms[id].on then fon = fon + 1 end end
+    row(yy, e.name, string.format("%d/%d", fon, #e.items), "AN", "AUS",
+        function() setFolder(e, true) end, function() setFolder(e, false) end)
+    yy = yy + rH
+  end
+end
+
+function drawDash()
+  header()
+  local top = HH + 1
+  local bh = H - top + 1
+  if W >= 56 then
+    local lw = math.floor(W / 2)
+    local rw = W - lw - 1
+    local sh = math.max(6, math.floor(bh * 0.42))
+    drawServer(1, top, lw, sh)
+    drawCrafts(1, top + sh + 1, lw, bh - sh - 1)
+    local fh, rH = farmPanelHeight(math.max(3, bh - 10))
+    drawEnergy(lw + 2, top, rw, bh - fh - 1)
+    drawFarmPanel(lw + 2, top + bh - fh, rw, fh, rH)
+  else
+    local sh = clamp(math.floor(bh * 0.3 + 0.5), 4, 8)
+    local fh, rH = farmPanelHeight(math.max(3, bh - sh - 9))
+    local eh = clamp(math.floor(bh * 0.45 + 0.5), 5, 14)
+    eh = math.max(5, math.min(eh, bh - sh - fh - 4))
+    drawServer(1, top, W, sh)
+    drawEnergy(1, top + sh, W, eh)
+    drawCrafts(1, top + sh + eh, W, bh - sh - eh - fh)
+    drawFarmPanel(1, top + bh - fh, W, fh, rH)
+  end
+end
+
+-- ------------------------------------------------------------
+--  Energie-Seite: Summe und jeder Speicher gross, mit Verlauf
+-- ------------------------------------------------------------
+
+local BAND_COLORS = { colors.magenta, colors.red, colors.cyan, colors.lime, colors.lightBlue }
+
+function drawEnergyScreen()
+  header()
+  local top = HH + 1
+  local u = cfg.energyUnit
+  local e = state.energy
+  if not e then
+    put(2, top + 1, fit(noEnergyText(), W - 2), colors.red)
+    put(2, top + 2, fit("Tipp: Programm 'scan' ausfuehren", W - 2), colors.gray)
+    return
+  end
+  local bodyH = H - top + 1
+
+  if #sources <= 1 then
+    local ix, iy, iw, ih = panel(1, top, W, bodyH, energyTitle(), colors.orange)
+    energyBlock(ix, iy, iw, ih, "energy", e.stored, state.rate, true)
+    return
+  end
+
+  -- Summe oben, die einzelnen Speicher darunter nebeneinander
+  local cols = math.min(#sources, math.max(1, math.floor(W / 22)))
+  local rowsN = math.ceil(#sources / cols)
+  local sumH = math.max(7, math.floor(bodyH * 0.55))
+  local srcH = math.floor((bodyH - sumH - 1 - (rowsN - 1)) / rowsN)
+  if srcH < 4 then
+    srcH = 4
+    sumH = math.max(3, bodyH - rowsN * (srcH + 1))
+  end
+
+  local ix, iy, iw, ih = panel(1, top, W, sumH, "GESAMT (" .. u .. ")", colors.orange)
+  energyBlock(ix, iy, iw, ih, "energy", e.stored, state.rate, true)
+
+  local cw = math.floor((W - (cols - 1)) / cols)
+  for i, src in ipairs(sources) do
+    local c = (i - 1) % cols
+    local r = math.floor((i - 1) / cols)
+    local x = 1 + c * (cw + 1)
+    local w = (c == cols - 1) and (W - x + 1) or cw
+    local y = top + sumH + 1 + r * (srcH + 1)
+    if y + srcH - 1 > H then break end
+    local title = src.label:upper() .. (src.remote and " (Funk)" or "") .. (srcHint(src) and " (nur Puffer)" or "")
+    local bx, by, bw, bh2 = panel(x, y, w, srcH, title, BAND_COLORS[(i - 1) % #BAND_COLORS + 1])
+    energyBlock(bx, by, bw, bh2, "e:" .. src.label, src.stored, src.rate, true, srcHint(src))
+  end
+end
+
+-- ------------------------------------------------------------
+--  Statistik
+-- ------------------------------------------------------------
+
+function metricDefs()
+  local u = cfg.energyUnit
+  local function energyFmt(v) return fmtNum(v, u) end
+  local defs = {
+    { key = "tps", label = "TPS", lo = 0, hi = 20,
+      fmt = function(v) return string.format("%.1f", v) end,
+      color = function() return function(v) return tpsColor(v) end end },
+    { key = "energy", label = "Energie", fmt = energyFmt, delta = true, color = trendColor },
+  }
+  if #sources > 1 then
+    for _, s in ipairs(sources) do
+      defs[#defs + 1] = { key = "e:" .. s.label, label = s.label, fmt = energyFmt, delta = true, color = trendColor }
+    end
+  end
+  defs[#defs + 1] = { key = "rate", label = "Rate", zero = true,
+    fmt = function(v) return fmtRate(v, u) end,
+    color = function() return function(v) return v >= 0 and colors.lime or colors.red end end }
+  defs[#defs + 1] = { key = "crafts", label = "Crafts", lo = 0, fmt = function(v) return fmtNum(v) end,
+    color = function() return function() return colors.magenta end end }
+  defs[#defs + 1] = { key = "cpus", label = "CPUs", lo = 0, fmt = function(v) return fmtNum(v) end,
+    color = function() return function() return colors.purple end end }
+  defs[#defs + 1] = { key = "log", label = "Craft-Log", log = true }
+  return defs
+end
+
+function drawLog(x, y, w, h)
+  put(x + 1, y, "Zuletzt beendete Auftraege", colors.lightGray)
+  if #stats.log == 0 then
+    put(x + 1, y + 2, "Noch keine beendeten Crafts aufgezeichnet", colors.gray)
+    return
+  end
+  for i = 1, math.min(#stats.log, h - 2) do
+    local e = stats.log[#stats.log - i + 1]
+    local ry = y + 1 + i
+    local t = osDate("%H:%M", math.floor(e.ended / 1000))
+    local right = (e.qty and ("x" .. fmtNum(e.qty) .. "  ") or "") .. fmtDur(e.dur)
+    put(x + 1, ry, t, colors.lightGray)
+    put(x + 8, ry, fit(e.name, w - 9 - #right - 1), colors.white)
+    put(x + w - #right, ry, right, colors.gray)
+  end
+end
+
+function drawStats()
+  header()
+  local defs = metricDefs()
+  state.statIdx = clamp(state.statIdx, 1, #defs)
+  local d = defs[state.statIdx]
+  local bh = (H >= 24) and 3 or 1
+  local y = HH + 2
+
+  -- Kennzahl blaettern: [<] [ NAME ] [>]
+  local lblW = 0
+  for _, dd in ipairs(defs) do lblW = math.max(lblW, #dd.label) end
+  lblW = lblW + 4
+  drawButton(1, y, 5, y + bh - 1, "<", colors.white, colors.gray, function()
+    state.statIdx = (state.statIdx - 2) % #defs + 1
+  end)
+  drawButton(7, y, 6 + lblW, y + bh - 1, d.label, colors.black, colors.yellow, function()
+    state.statIdx = state.statIdx % #defs + 1
+  end)
+  drawButton(8 + lblW, y, 12 + lblW, y + bh - 1, ">", colors.white, colors.gray, function()
+    state.statIdx = state.statIdx % #defs + 1
+  end)
+
+  if d.log then drawLog(1, y + bh + 1, W, H - (y + bh + 1) + 1) return end
+
+  -- Zeitraum (gleiche Zeile, wenn Platz ist)
+  local rx, ry = 14 + lblW, y
+  if rx + #RANGES * 6 - 2 > W then rx, ry = 1, y + bh + 1 end
+  for i, r in ipairs(RANGES) do
+    local active = i == state.rangeIdx
+    drawButton(rx, ry, rx + 4, ry + bh - 1, r.label, active and colors.black or colors.white,
+               active and colors.lightBlue or colors.gray, function() state.rangeIdx = i end)
+    rx = rx + 6
+  end
+
+  local r = RANGES[state.rangeIdx]
+  local raw = series(d.key, r)
+  local s = summarize(raw)
+
+  -- Kennzahlen-Zeile
+  local sy = ry + bh + 1
+  if s then
+    local m = stats.metrics[d.key]
+    local parts = {
+      { "Aktuell ", d.fmt(m and m.last or s.last), colors.white },
+      { "Min ", d.fmt(s.min), colors.lightGray },
+      { "Max ", d.fmt(s.max), colors.lightGray },
+      { "Mittel ", d.fmt(s.avg), colors.lightGray },
+    }
+    if d.delta then
+      local diff = s.last - s.first
+      parts[#parts + 1] = { "Diff ", (diff >= 0 and "+" or "-") .. d.fmt(math.abs(diff)),
+                            diff >= 0 and colors.lime or colors.red }
+    end
+    local px = 1
+    for _, p in ipairs(parts) do
+      local len = #p[1] + #p[2]
+      if px + len - 1 > W then break end
+      put(px, sy, p[1], colors.gray)
+      put(px + #p[1], sy, p[2], p[3])
+      px = px + len + 3
+    end
+  end
+
+  -- Diagramm
+  local gy, gyEnd = sy + 2, H - 1
+  local gh = gyEnd - gy + 1
+  if gh < 2 then return end
+  if not s then
+    put(2, gy, "Noch keine Daten fuer diesen Zeitraum", colors.gray)
+    return
+  end
+  axisGraph(1, gy, W, H - gy + 1, raw, r, d.fmt, d.color, d.lo, d.hi, d.zero)
+end
+
+-- ------------------------------------------------------------
+--  Farm-Steuerung
+-- ------------------------------------------------------------
+
+function visibleRows()
+  local rows = {}
+  for i, e in ipairs(layout) do
+    if e.kind == "folder" then
+      rows[#rows + 1] = { kind = "folder", e = e, list = layout, idx = i }
+      if not e.collapsed then
+        for k, id in ipairs(e.items) do
+          rows[#rows + 1] = { kind = "farm", id = id, list = e.items, idx = k, indent = true }
+        end
+      end
+    else
+      rows[#rows + 1] = { kind = "farm", id = e.id, list = layout, idx = i }
+    end
+  end
+  return rows
+end
+
+-- Fusszeile: Buttons nebeneinander, bei Platzmangel Kurzbeschriftung; rechts Blaettern
+function footer(defs, pages, rowH, pageKey)
+  pageKey = pageKey or "page"
+  local fy1 = H - rowH + 1
+  local pagerW = (pages > 1) and 12 or 0
+  local longW = 0
+  for _, d in ipairs(defs) do longW = longW + #d[1] + 3 end
+  local short = longW - 1 + pagerW > W
+  local x = 1
+  for _, d in ipairs(defs) do
+    local lbl = short and d[2] or d[1]
+    drawButton(x, fy1, x + #lbl + 1, H, lbl, colors.white, d[3], d[4])
+    x = x + #lbl + 3
+  end
+  if pages > 1 then
+    local pg = string.format("%d/%d", state[pageKey], pages)
+    drawButton(W - 11, fy1, W - 9, H, "<", colors.white, colors.blue, function() state[pageKey] = state[pageKey] - 1 end)
+    put(W - 7, fy1 + math.floor((rowH - 1) / 2), pg, colors.white)
+    drawButton(W - 2, fy1, W, H, ">", colors.white, colors.blue, function() state[pageKey] = state[pageKey] + 1 end)
+  end
+end
+
+function drawAutoPage()
+  local rowH = (H >= 20) and 3 or 1
+  local y = HH + 2
+  local mid = math.floor((rowH - 1) / 2)
+
+  put(2, y + mid, "LAG-SCHUTZ", colors.white)
+  drawButton(W - 13, y, W - 1, y + rowH - 1, auto.enabled and "EIN" or "AUS",
+             colors.white, auto.enabled and colors.green or colors.red,
+             function() auto.enabled = not auto.enabled; autoCondSince = nil; saveFarms() end)
+  y = y + rowH + 1
+
+  local function stepper(label, valueTxt, minus, plus)
+    put(2, y + mid, fit(label, W - 24), colors.lightGray)
+    drawButton(W - 21, y, W - 17, y + rowH - 1, "-", colors.white, colors.gray, function() minus(); saveFarms() end)
+    put(W - 15 + math.floor((8 - #valueTxt) / 2), y + mid, valueTxt, colors.yellow)
+    drawButton(W - 5, y, W - 1, y + rowH - 1, "+", colors.white, colors.gray, function() plus(); saveFarms() end)
+    y = y + rowH + 1
+  end
+  stepper("Alle aus unter TPS", string.format("%.1f", auto.offBelow),
+    function() auto.offBelow = math.max(1, auto.offBelow - 0.5) end,
+    function() auto.offBelow = math.min(auto.onAbove - 0.5, auto.offBelow + 0.5) end)
+  stepper("Wieder an ab TPS", string.format("%.1f", auto.onAbove),
+    function() auto.onAbove = math.max(auto.offBelow + 0.5, auto.onAbove - 0.5) end,
+    function() auto.onAbove = math.min(20, auto.onAbove + 0.5) end)
+  stepper("Verzoegerung", auto.delay .. " s",
+    function() auto.delay = math.max(0, auto.delay - 5) end,
+    function() auto.delay = math.min(300, auto.delay + 5) end)
+
+  -- Status
+  local tpsTxt = state.tps and string.format("%.1f", state.tps) or "?"
+  put(2, y, "TPS jetzt: ", colors.gray)
+  put(13, y, tpsTxt, state.tps and tpsColor(state.tps) or colors.white)
+  y = y + 1
+  local status, col
+  if auto.tripped then
+    status = string.format("AUSGELOEST um %s - %d Farmen aus",
+      osDate("%H:%M", math.floor((auto.trippedAt or os.epoch("utc")) / 1000)), #(auto.saved or {}))
+    col = colors.red
+  elseif not auto.enabled then
+    status, col = "Lag-Schutz ist ausgeschaltet", colors.gray
+  else
+    status, col = "Bereit - ueberwacht die TPS", colors.lime
+  end
+  if autoCondSince then
+    status = status .. string.format(" (%d/%d s)", math.floor(os.epoch("utc") / 1000 - autoCondSince), auto.delay)
+  end
+  if y < H - rowH then put(2, y, fit(status, W - 2), col) end
+
+  local defs = { { "ZURUECK", "ZURUECK", colors.blue, function() state.farmView = "list" end } }
+  if auto.tripped then
+    defs[#defs + 1] = { "JETZT WIEDER AN", "WIEDER AN", colors.green, autoRestore }
+  end
+  footer(defs, 1, rowH)
+end
+
+function drawFarms()
+  header()
+  if state.farmView == "auto" then drawAutoPage() return end
+  local editing = state.farmView == "edit"
+
+  local online, active, total = 0, 0, 0
+  for _, f in pairs(farms) do
+    total = total + 1
+    if isOnline(f) then online = online + 1 end
+    if f.on then active = active + 1 end
+    if f.pending ~= nil and os.clock() - (f.pendingSince or 0) > 5 then f.pending = nil end
+  end
+  local info = string.format("%d Farmen | %d online | %d an", total, online, active)
+  put(2, HH + 1, fit(info, W - 2), colors.lightGray)
+  local aTxt, aCol
+  if auto.tripped then aTxt, aCol = "LAG-SCHUTZ AKTIV", colors.red
+  elseif auto.enabled then aTxt, aCol = string.format("Lag-Schutz <%g / >=%g", auto.offBelow, auto.onAbove), colors.lime
+  else aTxt, aCol = "Lag-Schutz aus", colors.gray end
+  if #info + #aTxt + 4 <= W then put(W - #aTxt, HH + 1, aTxt, aCol) end
+  if state.renaming then
+    put(2, HH + 1, fit("Neuen Namen fuer '" .. state.renaming .. "' am Computer eintippen", W - 2), colors.yellow)
+  end
+
+  local rowH = (H >= 20) and 3 or 1
+  local listTop, listBot = HH + 2, H - rowH - 1
+  local per = math.max(1, math.floor((listBot - listTop + 1) / rowH))
+  local rows = visibleRows()
+  local pages = math.max(1, math.ceil(#rows / per))
+  state.page = clamp(state.page, 1, pages)
+
+  if #rows == 0 then
+    put(2, listTop + 1, fit("Noch keine Farmen gefunden - Farm-Computer starten!", W - 2), colors.yellow)
+  end
+
+  local folders = folderList()
+  for i = 1, per do
+    local row = rows[(state.page - 1) * per + i]
+    if not row then break end
+    local y1 = listTop + (i - 1) * rowH
+    local y2 = y1 + rowH - 1
+    local my = y1 + math.floor((rowH - 1) / 2)
+
+    if row.kind == "folder" then
+      local e = row.e
+      local bg = colors.blue
+      fill(1, y1, W, y2, bg)
+      local on = 0
+      for _, id in ipairs(e.items) do if farms[id] and farms[id].on then on = on + 1 end end
+      local count = string.format("%d/%d an", on, #e.items)
+      if editing then
+        local bx = W - 1
+        drawButton(bx - 3, y1, bx, y2, "X", colors.white, colors.red, function() deleteFolder(e) end)
+        drawButton(bx - 11, y1, bx - 5, y2, "NAME", colors.black, colors.lightGray, function() renameFolder(e) end)
+        drawButton(bx - 16, y1, bx - 13, y2, "v", colors.white, colors.gray, function() moveIn(row.list, row.idx, 1) end)
+        drawButton(bx - 21, y1, bx - 18, y2, "^", colors.white, colors.gray, function() moveIn(row.list, row.idx, -1) end)
+        put(2, my, fit(e.name, W - 25), colors.white, bg)
+      else
+        addButton(1, y1, W, y2, function() e.collapsed = not e.collapsed; saveFarms() end)
+        drawButton(W - 6, y1, W - 1, y2, "AUS", colors.white, colors.red, function() setFolder(e, false) end)
+        drawButton(W - 13, y1, W - 8, y2, "AN", colors.white, colors.green, function() setFolder(e, true) end)
+        local head = (e.collapsed and "[+] " or "[-] ") .. e.name
+        put(2, my, fit(head, W - 17 - #count - 2), colors.white, bg)
+        put(W - 15 - #count, my, count, on > 0 and colors.lime or colors.lightGray, bg)
+      end
+    else
+      local f = farms[row.id]
+      local bg = (i % 2 == 1) and colors.gray or colors.black
+      fill(1, y1, W, y2, bg)
+      local x0 = row.indent and 4 or 2
+      if row.indent then fill(1, y1, 2, y2, colors.blue) end
+      if editing then
+        local fo = folderOf(row.id)
+        local fl = fo and fo.name or "ohne Ordner"
+        local bw = math.min(16, math.max(12, #fl + 2))
+        local bx = W - 1
+        drawButton(bx - bw + 1, y1, bx, y2, fit(fl, bw - 2), colors.black,
+                   #folders > 0 and colors.lightBlue or colors.lightGray,
+                   function() if #folderList() > 0 then cycleFolder(row.id) end end)
+        drawButton(bx - bw - 4, y1, bx - bw - 1, y2, "v", colors.white, colors.blue, function() moveIn(row.list, row.idx, 1) end)
+        drawButton(bx - bw - 9, y1, bx - bw - 6, y2, "^", colors.white, colors.blue, function() moveIn(row.list, row.idx, -1) end)
+        put(x0, my, fit(f.name, bx - bw - 10 - x0), colors.white, bg)
+      else
+        local on = isOnline(f)
+        local status = on and "ONLINE" or "OFFLINE"
+        local bw = clamp(math.floor(W / 4), 6, 14)
+        local toggle = function() setFarm(f, not f.on) end
+        addButton(1, y1, W, y2, toggle)
+        put(x0, my, fit(f.name, W - bw - #status - 3 - x0), colors.white, bg)
+        put(W - bw - #status - 2, my, status, on and colors.lime or colors.red, bg)
+        local label, bcol
+        if f.pending ~= nil then label, bcol = "...", colors.yellow
+        elseif f.on then label, bcol = "AN", colors.green
+        else label, bcol = "AUS", colors.red end
+        if not on and f.pending == nil then bcol = colors.lightGray end
+        drawButton(W - bw, y1, W - 1, y2, label, colors.white, bcol, toggle)
+      end
+    end
+  end
+
+  local defs
+  if editing then
+    defs = {
+      { "+ ORDNER", "+ORD", colors.blue, addFolder },
+      { "OFFLINE ENTF.", "OFFL.", colors.gray, function()
+          for id, f in pairs(farms) do if not isOnline(f) then farms[id] = nil end end
+          ensureLayout()
+          saveFarms()
+        end },
+      { "FERTIG", "OK", colors.green, function() state.farmView = "list" end },
+    }
+  else
+    defs = {
+      { "ALLE AN", "AN", colors.green, function() for _, f in pairs(farms) do setFarm(f, true) end end },
+      { "ALLE AUS", "AUS", colors.red, function() for _, f in pairs(farms) do setFarm(f, false) end end },
+      { "BEARBEITEN", "EDIT", colors.blue, function() state.farmView = "edit" end },
+      { "LAG-SCHUTZ", "LAG", auto.tripped and colors.red or colors.purple, function() state.farmView = "auto" end },
+    }
+  end
+  footer(defs, pages, rowH)
+end
+
+-- ------------------------------------------------------------
+--  LAGER-Seite: ME-Speicher und Lager-Waechter
+-- ------------------------------------------------------------
+
+local NICE = { 0, 1, 16, 32, 64, 128, 256, 500, 1000, 2500, 5000, 10000, 25000, 50000,
+               100000, 250000, 500000, 1000000, 5000000 }
+
+function niceStep(v, d)
+  if d > 0 then
+    for _, n in ipairs(NICE) do if n > v then return n end end
+    return v * 2
+  end
+  for i = #NICE, 1, -1 do if NICE[i] < v then return NICE[i] end end
+  return 0
+end
+
+function addStockItem()
+  state.renaming = "Lager-Item"
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("Neues Lager-Item")
+  print("Item-ID eingeben, z.B. minecraft:iron_ingot")
+  print("(Tab ergaenzt, leer = abbrechen)")
+  local names = {}
+  if me and me.getItems then
+    local ok, list = pcall(me.getItems)
+    if ok and type(list) == "table" then
+      for _, it in ipairs(list) do if it.name then names[#names + 1] = it.name end end
+    end
+  end
+  local completion = require("cc.completion")
+  write("> ")
+  local id = read(nil, nil, function(t) return completion.choice(t, names) end)
+  if id and id ~= "" then
+    write("Mindestmenge [64]: ")
+    local m = tonumber(read()) or 64
+    write("Automatisch nachcraften? (j/n) [n]: ")
+    local a = (read() or ""):lower():sub(1, 1) == "j"
+    stock.items[#stock.items + 1] = { name = id, min = m, auto = a }
+    saveStock()
+  end
+  state.renaming = nil
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("Lager gespeichert. [Q] Beenden")
+end
+
+-- Liste der Items mit dem groessten Zuwachs
+function drawTopList(y)
+  local tw = state.topWin or 15
+  local data = topItems[tw] or topItems[tostring(tw)]
+  local footRows = (H >= 20) and 3 or 1
+  local listBot = H - footRows - 1
+  if data and data.rows then
+    local age = topItems.at and math.floor((os.epoch("utc") - topItems.at) / 60000) or 0
+    local mins = math.floor(data.span / 60 + 0.5)
+    local spanTxt = (mins >= 60) and (string.format("%g Std", math.floor(mins / 6 + 0.5) / 10)) or (mins .. " min")
+    local head = "Meiste Zugaenge der letzten " .. spanTxt
+    put(2, y, fit(head, W - 2), colors.white)
+    local stand = "Stand vor " .. age .. " min"
+    if #head + #stand + 4 <= W then put(W - #stand, y, stand, colors.gray) end
+  else
+    put(2, y, fit("Sammle Daten - erste Auswertung nach 5 Minuten", W - 2), colors.gray)
+  end
+  y = y + 1
+  local rows = (data and data.rows) or {}
+  local per = math.max(1, listBot - y + 1)
+  local pages = math.max(1, math.ceil(#rows / per))
+  state.topPage = clamp(state.topPage or 1, 1, pages)
+  if data and #rows == 0 then put(2, y + 1, "Keine Zugaenge in diesem Zeitraum", colors.gray) end
+  for i = 1, per do
+    local idx = (state.topPage - 1) * per + i
+    local r = rows[idx]
+    if not r then break end
+    local ry = y + i - 1
+    local bg = (i % 2 == 1) and colors.gray or colors.black
+    fill(1, ry, W, ry, bg)
+    local perH = data.span > 0 and r.delta / data.span * 3600 or nil
+    local right = "+" .. fmtNum(r.delta)
+    local rate = perH and (fmtNum(perH) .. "/h") or ""
+    local cnt = fmtNum(r.count)
+    local rightTxt = string.format("%8s %9s %8s", right, rate, cnt)
+    local rank = string.format("%2d.", idx)
+    put(1, ry, rank, colors.lightGray, bg)
+    put(5, ry, fit(r.label or prettyName(r.name), W - #rightTxt - 6), colors.white, bg)
+    put(W - #rightTxt, ry, string.format("%8s", right), colors.lime, bg)
+    put(W - #rightTxt + 9, ry, string.format("%9s", rate), colors.lightGray, bg)
+    put(W - 7, ry, string.format("%8s", cnt), colors.yellow, bg)
+  end
+  footer({
+    { "15 MIN", "15M", tw == 15 and colors.lightBlue or colors.gray, function() state.topWin = 15; state.topPage = 1 end },
+    { "1 STUNDE", "1H", tw == 60 and colors.lightBlue or colors.gray, function() state.topWin = 60; state.topPage = 1 end },
+    { "MEINE ITEMS", "MEINE", colors.blue, function() state.stockView = "mine" end },
+  }, pages, footRows, "topPage")
+end
+
+function drawStockScreen()
+  header()
+  local y = HH + 1
+  -- ME-Speicher
+  if storage and #storage > 0 then
+    for _, k in ipairs(storage) do
+      local pct = k.total > 0 and k.used / k.total or 0
+      local col = (pct * 100 >= cfg.chatStorageWarn and colors.red) or (pct >= 0.75 and colors.yellow) or colors.lime
+      local txt = string.format("%d%%  %sB / %sB", math.floor(pct * 100), fmtNum(k.used), fmtNum(k.total))
+      put(2, y, k.label, colors.white)
+      bar(10, y, W - 11 - #txt - 1, pct, col)
+      put(W - #txt, y, txt, col)
+      y = y + 1
+    end
+  else
+    put(2, y, "ME-Speicher: keine Daten", colors.gray)
+    y = y + 1
+  end
+  y = y + 1
+
+  if (state.stockView or "top") == "top" then drawTopList(y) return end
+
+  local rowH = (H >= 20) and 3 or 1
+  local listTop, listBot = y, H - rowH - 1
+  local per = math.max(1, math.floor((listBot - listTop + 1) / rowH))
+  local items = stock.items
+  local pages = math.max(1, math.ceil(#items / per))
+  state.stockPage = clamp(state.stockPage or 1, 1, pages)
+  local editing = state.stockEdit
+
+  if state.renaming then
+    put(2, listTop, fit("Eingabe am Computer: " .. state.renaming, W - 2), colors.yellow)
+  elseif #items == 0 then
+    put(2, listTop, fit("Noch keine Lager-Items. Mit '+ ITEM' hinzufuegen.", W - 2), colors.gray)
+  end
+
+  for i = 1, per do
+    local idx = (state.stockPage - 1) * per + i
+    local it = items[idx]
+    if not it or state.renaming then break end
+    local st = stockState[it.name] or {}
+    local y1 = listTop + (i - 1) * rowH
+    local y2 = y1 + rowH - 1
+    local my = y1 + math.floor((rowH - 1) / 2)
+    local bg = (i % 2 == 1) and colors.gray or colors.black
+    fill(1, y1, W, y2, bg)
+
+    local bx = W - 1
+    if editing then
+      drawButton(bx - 4, y1, bx, y2, "X", colors.white, colors.red, function()
+        table.remove(stock.items, idx)
+        saveStock()
+      end)
+      bx = bx - 6
+    else
+      drawButton(bx - 5, y1, bx, y2, "AUTO", it.auto and colors.white or colors.lightGray,
+                 it.auto and colors.green or colors.black, function()
+        it.auto = not it.auto
+        saveStock()
+      end)
+      drawButton(bx - 9, y1, bx - 7, y2, "+", colors.white, colors.blue, function()
+        it.min = niceStep(it.min, 1)
+        saveStock()
+      end)
+      drawButton(bx - 13, y1, bx - 11, y2, "-", colors.white, colors.blue, function()
+        it.min = niceStep(it.min, -1)
+        saveStock()
+      end)
+      bx = bx - 15
+    end
+
+    -- Bestand / Minimum / Trend
+    local cnt = st.count
+    local info = (cnt and fmtNum(cnt) or "?") .. " / " .. fmtNum(it.min)
+    local trend = st.trend or stockTrend(st)
+    local tTxt = trend and ((trend >= 0 and "+" or "-") .. fmtNum(math.abs(trend))) or ""
+    local status, scol = "", colors.lightGray
+    if st.err then status, scol = "Fehler", colors.red
+    elseif st.crafting then status, scol = "craftet", colors.magenta
+    elseif st.low then status, scol = "KNAPP", colors.red end
+
+    local right = info .. (tTxt ~= "" and ("  " .. tTxt) or "")
+    local rx = bx - #right
+    local nameW = rx - 3
+    if #status > 0 then nameW = nameW - #status - 1 end
+    put(2, my, fit(stockLabel(it), nameW), st.low and colors.red or colors.white, bg)
+    if #status > 0 then put(2 + math.min(#stockLabel(it), nameW) + 1, my, status, scol, bg) end
+    put(rx, my, info, (cnt and cnt < it.min) and colors.red or colors.yellow, bg)
+    if tTxt ~= "" then put(rx + #info + 2, my, tTxt, trend >= 0 and colors.lime or colors.red, bg) end
+  end
+
+  footer({
+    { "TOP-ZUGAENGE", "TOP", colors.blue, function() state.stockView = "top" end },
+    { "+ ITEM", "+", colors.blue, addStockItem },
+    { editing and "FERTIG" or "BEARBEITEN", editing and "OK" or "EDIT", editing and colors.green or colors.gray,
+      function() state.stockEdit = not state.stockEdit end },
+  }, pages, rowH, "stockPage")
+end
+
+-- ------------------------------------------------------------
+--  INFO-Seite: Welt, Spieler, Tagesbilanz
+-- ------------------------------------------------------------
+
+function midnightEpoch()
+  local t = osDate("*t")
+  return os.epoch("utc") - ((t.hour * 60 + t.min) * 60 + t.sec) * 1000
+end
+
+function energyToday()
+  if not state.energy then return nil end
+  local m = stats.metrics["energy"]
+  if not m then return nil end
+  local t = osDate("*t")
+  local mins = t.hour * 60 + t.min
+  local c = m.coarse
+  local full = #c >= mins
+  for i = math.max(1, #c - mins + 1), #c do
+    if c[i] then return state.energy.stored - c[i], full and "seit 00:00" or "seit Aufzeichnung" end
+  end
+end
+
+function craftsToday()
+  local since = midnightEpoch()
+  local n, tally = 0, {}
+  for _, e in ipairs(stats.log) do
+    if e.ended and e.ended >= since then
+      n = n + 1
+      tally[e.name] = (tally[e.name] or 0) + (e.qty or 1)
+    end
+  end
+  local best, bestN = nil, 0
+  for name, q in pairs(tally) do if q > bestN then best, bestN = name, q end end
+  return n, best, bestN
+end
+
+function drawInfoScreen()
+  header()
+  local top = HH + 1
+  local bh = H - top + 1
+  local u = cfg.energyUnit
+
+  local function worldPanel(x, y, w, h)
+    local ix, iy, iw = panel(x, y, w, h, "WELT", colors.cyan)
+    local tm = textutils.formatTime(os.time(), true)
+    put(ix, iy, fit("Tag " .. os.day() .. ", " .. tm .. " Uhr", iw), colors.white)
+    if env then
+      local wtxt = (env.thunder and "Gewitter") or (env.rain and "Regen") or "Klar"
+      put(ix, iy + 1, fit("Wetter: " .. wtxt, iw), env.thunder and colors.red or (env.rain and colors.lightBlue or colors.yellow))
+      if env.moon and h >= 4 then put(ix, iy + 2, fit("Mond: " .. tostring(env.moon), iw), colors.lightGray) end
+    else
+      put(ix, iy + 1, fit("Wetter: Environment Detector fehlt", iw), colors.gray)
+    end
+  end
+
+  local function todayPanel(x, y, w, h)
+    local ix, iy, iw, ih = panel(x, y, w, h, "HEUTE", colors.orange)
+    local cy = iy
+    local d, lbl = energyToday()
+    put(ix, cy, "Energie ", colors.gray)
+    if d then
+      put(ix + 8, cy, fit(fmtDiff(d, u) .. " (" .. lbl .. ")", iw - 8), d >= 0 and colors.lime or colors.red)
+    else
+      put(ix + 8, cy, "keine Daten", colors.gray)
+    end
+    cy = cy + 1
+    local n, best, bestN = craftsToday()
+    if cy <= iy + ih - 1 then
+      put(ix, cy, "Crafts  ", colors.gray)
+      put(ix + 8, cy, fit(n .. " beendet" .. (best and (", meist " .. fmtNum(bestN) .. "x " .. best) or ""), iw - 8), colors.white)
+      cy = cy + 1
+    end
+    if cy <= iy + ih - 1 then
+      local total, on = 0, 0
+      for _, f in pairs(farms) do total = total + 1; if f.on then on = on + 1 end end
+      put(ix, cy, "Farmen  ", colors.gray)
+      put(ix + 8, cy, string.format("%d/%d an", on, total), colors.white)
+      cy = cy + 1
+    end
+    if cy <= iy + ih - 1 and state.tps then
+      local hist = summarize(series("tps", RANGES[4]))
+      put(ix, cy, "TPS 24h ", colors.gray)
+      if hist then put(ix + 8, cy, fit(string.format("Mittel %.1f, Min %.1f", hist.avg, hist.min), iw - 8), colors.white) end
+    end
+  end
+
+  local function playerPanel(x, y, w, h)
+    local list = players.names or {}
+    local ix, iy, iw, ih = panel(x, y, w, h, string.format("SPIELER ONLINE (%d)", #list), colors.lime)
+    if not players.ok and not syncData then
+      put(ix, iy, fit("Player Detector fehlt", iw), colors.gray)
+      return
+    end
+    if #list == 0 then put(ix, iy, "Niemand online", colors.gray) return end
+    local now = os.epoch("utc")
+    for i, n in ipairs(list) do
+      if i > ih then break end
+      local since = players.since and players.since[n]
+      local dur = since and fmtDur((now - since) / 1000) or ""
+      put(ix, iy + i - 1, fit(n, iw - #dur - 1), colors.white)
+      put(ix + iw - #dur, iy + i - 1, dur, colors.gray)
+    end
+  end
+
+  if W >= 56 then
+    local lw = math.floor(W / 2)
+    local rw = W - lw - 1
+    local wh = 5
+    worldPanel(1, top, lw, wh)
+    todayPanel(1, top + wh + 1, lw, bh - wh - 1)
+    playerPanel(lw + 2, top, rw, bh)
+  else
+    local wh, th = 4, 6
+    worldPanel(1, top, W, wh)
+    todayPanel(1, top + wh, W, th)
+    playerPanel(1, top + wh + th, W, bh - wh - th)
+  end
+  if not state.updateInHeader then
+    local armed = os.epoch("utc") < updateArmedUntil
+    local ulbl = armed and " SICHER? " or " UPDATE "
+    drawButton(W - #ulbl + 1, H, W, H, ulbl, colors.black, armed and colors.yellow or colors.lime, updateClick)
+  end
+end
+
+-- ------------------------------------------------------------
+--  CHAT-Seite: Meldungen ein-/ausschalten, Empfaenger waehlen
+-- ------------------------------------------------------------
+
+local drawChatScreen
+do
+function chatPlayers()
+  local seen, list = {}, {}
+  local function add(n) if n and not seen[n] then seen[n] = true; list[#list + 1] = n end end
+  for _, n in ipairs(players.names or {}) do add(n) end
+  for _, n in ipairs(chatSettings.known or {}) do add(n) end
+  for n in pairs(chatSettings.players or {}) do add(n) end
+  table.sort(list, function(a, b) return a:lower() < b:lower() end)
+  return list
+end
+
+function changedChat()
+  if not isMain() then state.chatHoldUntil = os.epoch("utc") + 4000 end
+  saveChat()
+end
+
+function addChatPlayer()
+  state.renaming = "Spielername"
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("Spielername fuer Chat-Nachrichten (leer = abbrechen):")
+  write("> ")
+  local n = read()
+  if n and n ~= "" then
+    chatSettings.known = chatSettings.known or {}
+    chatSettings.known[#chatSettings.known + 1] = n
+    chatSettings.players[n] = true
+    changedChat()
+  end
+  state.renaming = nil
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("Gespeichert. [Q] Beenden")
+end
+
+function drawChatScreen()
+  header()
+  local rowH = (H >= 20) and 3 or 1
+  local mid = math.floor((rowH - 1) / 2)
+  local y = HH + 1
+  if not isMain() then
+    put(2, y, fit("Einstellungen gelten fuer das Haupt-Dashboard", W - 2), colors.gray)
+  elseif not chatBox then
+    put(2, y, fit("Keine Chat Box gefunden - Meldungen werden nicht gesendet", W - 2), colors.red)
+  elseif state.renaming then
+    put(2, y, fit("Eingabe am Computer: " .. state.renaming, W - 2), colors.yellow)
+  end
+  y = y + 1
+
+  if (state.chatView or "msgs") == "msgs" then
+    -- Hauptschalter und Test
+    put(2, y + mid, "Chat-Bot", colors.white)
+    drawButton(W - 20, y, W - 9, y + rowH - 1, chatSettings.enabled and "EIN" or "AUS", colors.white,
+               chatSettings.enabled and colors.green or colors.red,
+               function() chatSettings.enabled = not chatSettings.enabled; changedChat() end)
+    drawButton(W - 7, y, W - 1, y + rowH - 1, "TEST", colors.black, colors.lightGray, function()
+      if isMain() then chat("Test-Nachricht vom Dashboard") else sendCmd({ cmd = "chatTest" }) end
+    end)
+    y = y + rowH + 1
+    -- Meldungsarten als Knopf-Raster (2 Spalten)
+    local cols = (W >= 40) and 2 or 1
+    local cw = math.floor((W - (cols - 1)) / cols)
+    local nrows = math.ceil(#CHAT_CATS / cols)
+    local avail = (H - rowH - 1) - y + 1
+    local crow = clamp(math.floor((avail + 1) / nrows) - 1, 1, rowH)   -- Knopfhoehe nach Platz
+    for i, c in ipairs(CHAT_CATS) do
+      local col = (i - 1) % cols
+      local row = math.floor((i - 1) / cols)
+      local x1 = 1 + col * (cw + 1)
+      local y1 = y + row * (crow + 1)
+      if y1 + crow - 1 > H - rowH - 1 then break end
+      local on = chatSettings.cats[c[1]] ~= false
+      local bg = (not chatSettings.enabled and colors.gray) or (on and colors.green or colors.red)
+      drawButton(x1, y1, x1 + cw - 1, y1 + crow - 1, c[2] .. ": " .. (on and "EIN" or "AUS"), colors.white, bg,
+                 function() chatSettings.cats[c[1]] = not on; changedChat() end)
+    end
+    footer({
+      { "EMPFAENGER", "EMPF.", colors.blue, function() state.chatView = "to" end },
+    }, 1, rowH)
+  else
+    -- Empfaenger
+    local all = chatSettings.mode ~= "players"
+    local half = math.floor((W - 1) / 2)
+    drawButton(1, y, half, y + rowH - 1, "AN ALLE", all and colors.black or colors.white,
+               all and colors.lightBlue or colors.gray, function() chatSettings.mode = "all"; changedChat() end)
+    drawButton(half + 2, y, W, y + rowH - 1, "NUR AUSGEWAEHLTE", (not all) and colors.black or colors.white,
+               (not all) and colors.lightBlue or colors.gray, function() chatSettings.mode = "players"; changedChat() end)
+    y = y + rowH + 1
+    local list = chatPlayers()
+    if #list == 0 then
+      put(2, y, fit("Keine Spieler bekannt - '+ SPIELER' oder Player Detector", W - 2), colors.gray)
+    end
+    local cols = (W >= 54) and 3 or ((W >= 34) and 2 or 1)
+    local cw = math.floor((W - (cols - 1)) / cols)
+    local online = {}
+    for _, n in ipairs(players.names or {}) do online[n] = true end
+    for i, n in ipairs(list) do
+      local col = (i - 1) % cols
+      local row = math.floor((i - 1) / cols)
+      local x1 = 1 + col * (cw + 1)
+      local y1 = y + row * (rowH + 1)
+      if y1 + rowH - 1 > H - rowH - 1 then break end
+      local sel = chatSettings.players[n] and true or false
+      local bg = all and colors.gray or (sel and colors.green or colors.black)
+      drawButton(x1, y1, x1 + cw - 1, y1 + rowH - 1, (online[n] and "* " or "") .. n, colors.white, bg,
+                 function() chatSettings.players[n] = not sel or nil; changedChat() end)
+    end
+    footer({
+      { "MELDUNGEN", "MELD.", colors.blue, function() state.chatView = "msgs" end },
+      { "+ SPIELER", "+", colors.gray, addChatPlayer },
+    }, 1, rowH)
+  end
+end
+end
+
+-- ------------------------------------------------------------
+--  EINSTELLUNGEN-Seite
+-- ------------------------------------------------------------
+
+local drawSetupScreen
+do
+  local SCALES = { { 36, 18 }, { 44, 20 }, { 50, 24 }, { 57, 24 }, { 66, 30 }, { 80, 38 } }
+  local COLOR_NAMES = { "blue", "lightBlue", "cyan", "green", "lime", "purple", "magenta",
+                        "red", "orange", "yellow", "brown", "gray", "black" }
+  local COLOR_DE = { blue = "Blau", lightBlue = "Hellblau", cyan = "Tuerkis", green = "Gruen", lime = "Hellgruen",
+                     purple = "Lila", magenta = "Magenta", red = "Rot", orange = "Orange", yellow = "Gelb",
+                     brown = "Braun", gray = "Grau", black = "Schwarz" }
+
+  local function scaleLevel()
+    for i, sc in ipairs(SCALES) do
+      if cfg.minWidth <= sc[1] and cfg.minHeight <= sc[2] then return i end
+    end
+    return #SCALES
+  end
+
+  local function setScale(i)
+    i = clamp(i, 1, #SCALES)
+    saveSetting("minWidth", SCALES[i][1])
+    saveSetting("minHeight", SCALES[i][2])
+    saveSetting("textScale", "auto")
+    setupScreen()
+  end
+
+  local function nextColor(key, default)
+    local cur = cfg[key] or default
+    for i, n in ipairs(COLOR_NAMES) do
+      if n == cur then saveSetting(key, COLOR_NAMES[i % #COLOR_NAMES + 1]) return end
+    end
+    saveSetting(key, COLOR_NAMES[1])
+  end
+
+  local function tzLabel()
+    local o = tzOffset()
+    local txt = "UTC" .. (o >= 0 and "+" or "-") .. string.format("%g", math.abs(o))
+    return txt .. "  (" .. osDate("%H:%M") .. " Uhr)"
+  end
+
+  local function textSetting(key, prompt)
+    state.renaming = prompt
+    term.setBackgroundColor(colors.black)
+    term.setTextColor(colors.white)
+    term.clear()
+    term.setCursorPos(1, 1)
+    print(prompt .. " (Enter = speichern, leer = abbrechen):")
+    write("> ")
+    local v = read(nil, nil, nil, tostring(cfg[key] or ""))
+    if v and v ~= "" then saveSetting(key, v) end
+    state.renaming = nil
+    term.clear()
+    term.setCursorPos(1, 1)
+    print("Einstellung gespeichert. [Q] Beenden")
+  end
+
+  -- Jede Zeile: Beschriftung, Wert und entweder -/+ oder ein Knopf
+  local function rows()
+    return {
+      { "Zeitzone", tzLabel(),
+        minus = function() saveSetting("timeOffset", math.max(-12, tzOffset() - 1)) end,
+        plus = function() saveSetting("timeOffset", math.min(14, tzOffset() + 1)) end },
+      { "Rolle", isMain() and "HAUPT-Dashboard" or "NEBEN-Dashboard (Spiegel)",
+        button = "WECHSELN", fn = function()
+          saveSetting("role", isMain() and "mirror" or "main")
+          syncData, syncAt = nil, nil
+        end },
+      { "Schriftgroesse", "Stufe " .. (#SCALES - scaleLevel() + 1) .. " von " .. #SCALES,
+        minus = function() setScale(scaleLevel() + 1) end,
+        plus = function() setScale(scaleLevel() - 1) end },
+      { "Farbe Kopfzeile", COLOR_DE[cfg.headerColor or "blue"] or tostring(cfg.headerColor),
+        button = "AENDERN", fn = function() nextColor("headerColor", "blue") end },
+      { "Farbe Akzent", COLOR_DE[cfg.accentColor or "lightBlue"] or tostring(cfg.accentColor),
+        button = "AENDERN", fn = function() nextColor("accentColor", "lightBlue") end },
+      { "Chat: TPS-Warnung unter", string.format("%.1f", cfg.chatTps),
+        minus = function() saveSetting("chatTps", math.max(5, cfg.chatTps - 0.5)) end,
+        plus = function() saveSetting("chatTps", math.min(20, cfg.chatTps + 0.5)) end },
+      { "Chat: Energie sinkt seit", cfg.chatEnergySeconds .. " s",
+        minus = function() saveSetting("chatEnergySeconds", math.max(5, cfg.chatEnergySeconds - 5)) end,
+        plus = function() saveSetting("chatEnergySeconds", math.min(600, cfg.chatEnergySeconds + 5)) end },
+      { "Chat: Name vor Nachrichten", tostring(cfg.chatPrefix),
+        button = "AENDERN", fn = function() textSetting("chatPrefix", "Name vor Chat-Nachrichten") end },
+      { "Farm offline nach", cfg.farmTimeout .. " s",
+        minus = function() saveSetting("farmTimeout", math.max(5, cfg.farmTimeout - 5)) end,
+        plus = function() saveSetting("farmTimeout", math.min(300, cfg.farmTimeout + 5)) end },
+      { "Titel", tostring(cfg.title),
+        button = "AENDERN", fn = function() textSetting("title", "Titel des Dashboards") end },
+      { "Update-Quelle", tostring(cfg.updateUrl),
+        button = "AENDERN", fn = function() textSetting("updateUrl", "Adresse fuer UPDATE (Ordner mit install.lua)") end },
+      { "NBT-Export", cfg.nbtExport and "AN" or "AUS",
+        button = cfg.nbtExport and "AUSSCHALTEN" or "EINSCHALTEN",
+        fn = function() saveSetting("nbtExport", not cfg.nbtExport) end },
+      { "NBT-Export alle", string.format("%g h", cfg.nbtExportInterval / 3600),
+        minus = function() saveSetting("nbtExportInterval", math.max(900, cfg.nbtExportInterval - 900)) end,
+        plus = function() saveSetting("nbtExportInterval", math.min(86400, cfg.nbtExportInterval + 900)) end },
+      { "NBT-Export Kiste (von Bridge)", tostring(cfg.nbtExportSide),
+        button = "AENDERN", fn = function()
+          local i = 1
+          for k, v in ipairs(NBT_SIDES) do if v == cfg.nbtExportSide then i = k end end
+          saveSetting("nbtExportSide", NBT_SIDES[i % #NBT_SIDES + 1])
+        end },
+      { "NBT-Export: Redstone-Computer", cfg.nbtStorage and "AN" or "AUS",
+        button = "WECHSELN", fn = function() saveSetting("nbtStorage", not cfg.nbtStorage) end },
+      { "NBT-Export: Wartezeit nach Signal", cfg.nbtStorageWait .. " s",
+        minus = function() saveSetting("nbtStorageWait", math.max(0, cfg.nbtStorageWait - 1)) end,
+        plus = function() saveSetting("nbtStorageWait", math.min(120, cfg.nbtStorageWait + 1)) end },
+      { "NBT-Export zuletzt", nbtStatus(),
+        button = "JETZT", fn = function() nbtState.now = true end },
+    }
+  end
+
+  function drawSetupScreen()
+    header()
+    local rowH = (H >= 20) and 3 or 1
+    local mid = math.floor((rowH - 1) / 2)
+    local top = HH + 1
+    if state.renaming then
+      put(2, top, fit("Eingabe am Computer: " .. state.renaming, W - 2), colors.yellow)
+    else
+      put(2, top, fit("Gilt nur fuer diesen Computer, sofort aktiv", W - 2), colors.gray)
+    end
+    local list = rows()
+    local listTop, listBot = top + 1, H - rowH - 1
+    local per = math.max(1, math.floor((listBot - listTop + 1) / rowH))
+    local pages = math.max(1, math.ceil(#list / per))
+    state.setupPage = clamp(state.setupPage or 1, 1, pages)
+    for i = 1, per do
+      local r = list[(state.setupPage - 1) * per + i]
+      if not r then break end
+      local y1 = listTop + (i - 1) * rowH
+      local y2 = y1 + rowH - 1
+      local bg = (i % 2 == 1) and colors.gray or colors.black
+      fill(1, y1, W, y2, bg)
+      local ctrlW
+      if r.minus then
+        ctrlW = 10
+        drawButton(W - 9, y1, W - 6, y2, "-", colors.white, colors.blue, r.minus)
+        drawButton(W - 4, y1, W - 1, y2, "+", colors.white, colors.blue, r.plus)
+      else
+        ctrlW = #r.button + 3
+        drawButton(W - ctrlW + 1, y1, W - 1, y2, r.button, colors.black, colors.lightGray, r.fn)
+      end
+      -- Wert rechtsbuendig vor den Knoepfen, Beschriftung bekommt den Rest
+      local val = fit(r[2], math.max(4, W - ctrlW - 14))
+      local vx = W - ctrlW - #val
+      put(vx, y1 + mid, val, colors.yellow, bg)
+      put(2, y1 + mid, fit(r[1], vx - 4), colors.white, bg)
+    end
+    footer({
+      { "NEUSTART", "NEU", colors.red, function()
+          saveStats()
+          saveFarms()
+          os.reboot()
+        end },
+    }, pages, rowH, "setupPage")
+  end
+end
+
+-- ------------------------------------------------------------
+--  Ablauf
+-- ------------------------------------------------------------
+
+function draw()
+  buttons = {}
+  win.setVisible(false)
+  win.setBackgroundColor(colors.black)
+  win.clear()
+  if state.screen == "farms" then drawFarms()
+  elseif state.screen == "stats" then drawStats()
+  elseif state.screen == "energy" then drawEnergyScreen()
+  elseif state.screen == "stock" then drawStockScreen()
+  elseif state.screen == "info" then drawInfoScreen()
+  elseif state.screen == "chat" then drawChatScreen()
+  elseif state.screen == "setup" then drawSetupScreen()
+  else drawDash() end
+  if not isMain() and (not syncAt or os.epoch("utc") - syncAt > 15000) then
+    fill(1, H, W, H, colors.red)
+    put(2, H, fit("Keine Verbindung zum Haupt-Dashboard", W - 2), colors.white, colors.red)
+  end
+  if state.banner and os.epoch("utc") < state.banner.untilT then
+    local text = " " .. state.banner.text .. " "
+    local bw = math.min(W - 2, #text + 4)
+    local bx, by = math.floor((W - bw) / 2) + 1, math.floor(H / 2) - 1
+    fill(bx, by, bx + bw - 1, by + 2, state.banner.color)
+    put(bx + math.floor((bw - math.min(#text, bw)) / 2), by + 1, fit(text, bw), colors.black, state.banner.color)
+  end
+  win.setVisible(true)
+end
+
+function banner(text, color, seconds)
+  state.banner = { text = text, color = color or colors.yellow, untilT = os.epoch("utc") + (seconds or 5) * 1000 }
+  draw()
+end
+
+-- Neueste install.lua laden und das Dashboard-Paket installieren
+doUpdate = function()
+  if not http then banner("HTTP ist auf dem Server deaktiviert", colors.red, 8) return end
+  banner("Lade Update...", colors.yellow, 30)
+  local url = cfg.updateUrl .. "install.lua?t=" .. os.epoch("utc")
+  local ok, res = pcall(http.get, url)
+  if not ok or not res then banner("Download fehlgeschlagen", colors.red, 8) return end
+  local code = res.readAll()
+  res.close()
+  if type(code) ~= "string" or not code:find("local PACKAGES", 1, true) then
+    banner("Download ungueltig (kein Installer)", colors.red, 8)
+    return
+  end
+  local fn, err = load(code, "install", "t", _ENV)
+  if not fn then banner("Fehler im Update: " .. tostring(err), colors.red, 10) return end
+  saveStats()
+  saveFarms()
+  local h = fs.open("install.lua", "w")
+  h.write(code)
+  h.close()
+  banner("Installiere Update - Neustart gleich...", colors.lime, 30)
+  fn("dashboard")
+end
+
+function click(x, y)
+  for i = #buttons, 1, -1 do
+    local b = buttons[i]
+    if x >= b.x1 and x <= b.x2 and y >= b.y1 and y <= b.y2 then
+      b.fn()
+      draw()
+      return
+    end
+  end
+end
+
+function infoTerm()
+  if not mon then return end
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("== " .. cfg.title .. " ==")
+  print("Monitor:   " .. tostring(monName) .. " (" .. W .. "x" .. H .. ")")
+  print("Energie:   " .. #sources .. " Speicher")
+  for _, s in ipairs(sources) do print("  - " .. s.label .. (s.remote and " (Funk #" .. s.id .. ")" or "")) end
+  print("ME Bridge: " .. (me and peripheral.getName(me) or "nicht gefunden"))
+  print("Funkmodem: " .. (modemName or "NICHT GEFUNDEN"))
+  print("Chat Box:  " .. (chatBox and peripheral.getName(chatBox) or "nicht gefunden"))
+  print("Spieler:   " .. (playerDet and peripheral.getName(playerDet) or "kein Player Detector"))
+  print("Wetter:    " .. (envDet and peripheral.getName(envDet) or "kein Environment Detector"))
+  print("Rolle:     " .. (isMain() and "HAUPT-Dashboard" or "Neben-Dashboard (Spiegel)"))
+  print("NBT-Export: " .. (cfg.nbtExport and ("AN, Kiste " .. cfg.nbtExportSide .. " der Bridge") or "aus"))
+  print("")
+  print("[Q] Beenden")
+end
+
+local chatChecks
+do
+-- Chat-Meldungen fuer TPS und Energie
+local tpsLow, tpsAlertAt = false, 0
+local energyNegSince, energyPosSince, energyAlert, energyAlertAt = nil, nil, false, -1e15
+
+function chatChecks()
+  if not chatBox then return end
+  local now = os.epoch("utc")
+  local tps = state.tps
+  if tps then
+    if not tpsLow and tps < cfg.chatTps and now - tpsAlertAt > 60000 then
+      tpsLow, tpsAlertAt = true, now
+      chat(string.format("Server-Lag: TPS bei %.1f", tps), "tps")
+    elseif tpsLow and tps >= cfg.chatTps + 0.5 then
+      tpsLow = false
+      chat(string.format("TPS wieder normal: %.1f", tps), "tps")
+    end
+  end
+  local r, e = state.rate, state.energy
+  if r and e then
+    local label = (#sources == 1) and sources[1].label or "Energie"
+    local u = cfg.energyUnit
+    if r < 0 then
+      energyPosSince = nil
+      energyNegSince = energyNegSince or now
+      if not energyAlert and now - energyNegSince >= cfg.chatEnergySeconds * 1000
+         and now - energyAlertAt >= cfg.chatEnergyPause * 1000 then
+        energyAlert, energyAlertAt = true, now
+        chat(string.format("%s sinkt: %s (%s, %s)", label, fmtRate(r, u), fmtNum(e.stored, u), etaText(e.stored, r)), "energy")
+      end
+    else
+      energyNegSince = nil
+      if energyAlert then
+        energyPosSince = energyPosSince or now
+        if now - energyPosSince >= cfg.chatEnergySeconds * 1000 then
+          energyAlert, energyPosSince = false, nil
+          chat(string.format("%s steigt wieder: %s", label, fmtRate(r, u)), "energy")
+        end
+      end
+    end
+  end
+  flushFarmChanges()
+end
+end
+
+local checkFarmOnline
+do
+local startedAt = os.epoch("utc")
+
+function checkFarmOnline()
+  if not chatAllowed("offline") or os.epoch("utc") - startedAt < 60000 then
+    for _, f in pairs(farms) do f.wasOnline = isOnline(f) end
+    return
+  end
+  for _, f in pairs(farms) do
+    local on = isOnline(f) and true or false
+    if f.wasOnline ~= nil and on ~= f.wasOnline then
+      chat(on and ("Farm wieder online: " .. f.name) or ("Farm OFFLINE: " .. f.name), "offline")
+    end
+    f.wasOnline = on
+  end
+end
+end
+
+-- Neben-Dashboard: Werte aus der letzten Sync-Nachricht uebernehmen
+function mirrorSources(list)
+  local out = {}
+  for _, x in ipairs(list or {}) do
+    out[#out + 1] = { label = x.label, stored = x.stored, cap = x.cap, rate = x.rate,
+                      remote = x.remote, ae = x.ae, id = x.id }
+  end
+  return out
+end
+
+function sampleLoop()
+  local marks = {}
+  local lastPing = -1e9
+  local lastSync = -1e15
+  while true do
+    tickStats()
+
+    -- TPS: Spiel-Ticks (os.clock) im Verhaeltnis zur echten Zeit
+    local c, r = os.clock(), os.epoch("utc")
+    push(marks, { c, r }, 11)
+    if #marks >= 2 then
+      local a, b = marks[1], marks[#marks]
+      local dReal = (b[2] - a[2]) / 1000
+      if dReal > 0 then state.tps = clamp(((b[1] - a[1]) / 0.05) / dReal, 0, 20) end
+    end
+    record("tps", state.tps)
+    autoTick(state.tps)
+
+    local sd = (not isMain()) and syncAt and os.epoch("utc") - syncAt < 15000 and syncData or nil
+    if isMain() then
+      local stored, cap = readEnergy()
+      if stored then
+        state.energy = { stored = stored, cap = cap }
+        state.rate = rateUpdate(state, c, stored)
+        for _, s in ipairs(sources) do
+          if s.stored then s.rate = (s.remote and s.rRate) or rateUpdate(s, c, s.stored) end
+        end
+      else
+        state.energy, state.rate = nil, nil
+      end
+    elseif sd and sd.energy then
+      state.energy, state.rate = sd.energy, sd.rate
+      sources = mirrorSources(sd.sources)
+    else
+      state.energy, state.rate = nil, nil
+    end
+    if state.energy then
+      record("energy", state.energy.stored)
+      record("rate", state.rate)
+      for _, s in ipairs(sources) do
+        if s.stored then record("e:" .. s.label, s.stored) end
+      end
+    end
+
+    if isMain() then
+      state.crafts, state.craftErr = readCrafts()
+      readStock()
+      readStorage()
+      readTopItems()
+      readExtras()
+      checkFarmOnline()
+    elseif sd then
+      state.crafts, state.craftErr = sd.crafts, sd.craftErr
+    else
+      state.crafts, state.craftErr = nil, "Keine Verbindung zum Haupt-Dashboard"
+    end
+    if state.crafts then
+      trackCrafts(state.crafts)
+      record("crafts", #state.crafts.tasks)
+      record("cpus", state.crafts.busy)
+    end
+
+    chatChecks()
+
+    if isMain() and modemName and r - lastSync >= cfg.syncInterval * 1000 then
+      rednet.broadcast(buildSync(), cfg.protocol)
+      lastSync = r
+    end
+
+    if c - lastPing >= cfg.pingInterval then
+      broadcastPing()
+      lastPing = c
+    end
+
+    draw()
+    sleep(cfg.sampleInterval)
+  end
+end
+
+function eventLoop()
+  while true do
+    local ev = { os.pullEvent() }
+    local e = ev[1]
+    if e == "monitor_touch" and mon and ev[2] == monName then
+      click(ev[3], ev[4])
+    elseif e == "mouse_click" and not mon then
+      click(ev[3], ev[4])
+    elseif e == "rednet_message" then
+      local res = handleMsg(ev[2], ev[3], ev[4])
+      if res == "newEnergy" then infoTerm()
+      elseif res and state.screen == "farms" then draw() end
+    elseif e == "monitor_resize" or e == "term_resize" then
+      local w, h = out.getSize()
+      if w ~= W or h ~= H then
+        setupScreen()
+        infoTerm()
+        draw()
+      end
+    elseif e == "peripheral" or e == "peripheral_detach" then
+      detectChat()
+      detectExtras()
+      detectME()
+      detectEnergy()
+      infoTerm()
+    elseif e == "key" and ev[2] == keys.q then
+      return
+    end
+  end
+end
+
+loadFarms()
+loadStats()
+loadStock()
+loadChat()
+detectChat()
+detectExtras()
+detectME()
+detectEnergy()
+setupScreen()
+infoTerm()
+
+while true do
+  local ok, err = pcall(parallel.waitForAny, sampleLoop, eventLoop, chatLoop, nbtLoop)
+  if ok or err == "Terminated" then break end
+  printError("Fehler: " .. tostring(err))
+  print("Neustart in 5 Sekunden...")
+  sleep(5)
+  setupScreen()
+end
+
+saveStats()
+if mon then
+  mon.setBackgroundColor(colors.black)
+  mon.clear()
+end
+term.setBackgroundColor(colors.black)
+term.clear()
+term.setCursorPos(1, 1)
+print("Dashboard beendet.")
