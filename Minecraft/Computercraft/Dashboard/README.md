@@ -7,7 +7,7 @@ Programme für CC:Tweaked: Dashboard mit Monitor, Energie-Sender, Farm-Steuerung
 Auf jedem Computer:
 
 ```
-wget run https://raw.githubusercontent.com/Bennitut/Bennitut/master/install.lua
+wget run https://raw.githubusercontent.com/Bennitut/Bennitut/master/Minecraft/Computercraft/Dashboard/install.lua
 ```
 
 Danach auswählen, was der Computer sein soll:

@@ -1,11 +1,11 @@
 -- Installer fuer das Basis-Dashboard (CC:Tweaked)
 -- Holt die Programme aus dem GitHub-Repository Bennitut/Bennitut.
 --
--- Erstinstallation:  wget run https://raw.githubusercontent.com/Bennitut/Bennitut/master/install.lua
+-- Erstinstallation:  wget run https://raw.githubusercontent.com/Bennitut/Bennitut/master/Minecraft/Computercraft/Dashboard/install.lua
 -- Spaeter:           install            (fragt, was installiert werden soll)
 --                    install dashboard  (oder energie / farm / nbt)
 
-local BASE = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/"
+local BASE = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/Minecraft/Computercraft/Dashboard/"
 
 -- Paket -> { Beschreibung, { Datei im Repository = Datei auf dem Computer } }
 local PACKAGES = {

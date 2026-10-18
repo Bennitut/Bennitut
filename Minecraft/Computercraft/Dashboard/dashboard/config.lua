@@ -46,7 +46,7 @@ return {
   farmTimeout = 15,       -- Sekunden ohne Antwort, bis eine Farm OFFLINE ist
 
   -- Quelle fuer den UPDATE-Knopf oben rechts (Ordner, in dem install.lua liegt)
-  updateUrl   = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/",
+  updateUrl   = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/Minecraft/Computercraft/Dashboard/",
 
   -- Chat-Bot: braucht eine Chat Box (Advanced Peripherals) am Computer/Kabel
   chat        = true,

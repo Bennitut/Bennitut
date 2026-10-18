@@ -33,7 +33,7 @@ local DEFAULTS = {
   rateWindow     = 10,
   pingInterval   = 5,
   farmTimeout    = 15,
-  updateUrl      = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/", -- Quelle fuer den UPDATE-Knopf
+  updateUrl      = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/Minecraft/Computercraft/Dashboard/", -- Quelle fuer den UPDATE-Knopf
   chat           = true,    -- Meldungen ueber eine Chat Box (Advanced Peripherals)
   chatPrefix     = "Basis",
   chatRange      = nil,     -- Reichweite in Bloecken, nil = ganzer Server
