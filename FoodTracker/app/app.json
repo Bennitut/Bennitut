@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "FoodTracker",
+    "slug": "foodtracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bennitut.foodtracker"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.bennitut.foodtracker"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FoodTracker liest Fotos von Mahlzeiten und Kassenbons, um dein Essen zu erfassen.",
+          "cameraPermission": "FoodTracker fotografiert Mahlzeiten und Kassenbons, um dein Essen zu erfassen.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "scheme": "foodtracker"
+  }
+}
