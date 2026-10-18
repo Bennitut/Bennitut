@@ -26,28 +26,39 @@ const ownRecipe = {
   source: { kind: "eigen" },
 };
 
-const basePlan = { days: 3, people: 2, kcalPerPersonPerDay: 2000, mealTypes: ["lunch", "dinner"] };
+const basePlan = { startDate: "2026-11-01", people: 2, kcalPerPersonPerDay: 2000, mealTypes: ["lunch", "dinner"] };
 
 describe("Planung", () => {
-  it("erstellt einen Plan ohne KI-Wünsche", async () => {
+  it("erstellt einen Monatsplan ohne KI-Wünsche", async () => {
     const res = await post("/api/plan", basePlan);
     expect(res.status).toBe(200);
     const { plan } = await res.json();
-    expect(plan.meals).toHaveLength(6);
+    expect(plan.startDate).toBe("2026-11-01");
+    expect(plan.weeks).toHaveLength(4);
+    expect(plan.weeks.flatMap((w: { meals: unknown[] }) => w.meals)).toHaveLength(60);
   });
 
   it("plant eigene Rezepte und fixierte Gerichte ein", async () => {
     const res = await post("/api/plan", {
       ...basePlan,
       recipes: [ownRecipe],
-      locked: [{ day: 1, mealType: "lunch", recipeId: "eigen_1" }],
+      locked: [{ day: 15, mealType: "lunch", recipeId: "eigen_1" }],
     });
     const { plan } = await res.json();
-    expect(plan.meals.find((m: { day: number; mealType: string }) => m.day === 1 && m.mealType === "lunch").recipeId).toBe("eigen_1");
+    const meals = plan.weeks.flatMap((w: { meals: { day: number; mealType: string; recipeId: string }[] }) => w.meals);
+    expect(meals.find((m: { day: number; mealType: string }) => m.day === 15 && m.mealType === "lunch").recipeId).toBe("eigen_1");
+  });
+
+  it("akzeptiert eigene Rezepte mit Foto und Videolink", async () => {
+    const withMedia = {
+      ...ownRecipe,
+      media: { image: { uri: "data:image/jpeg;base64,AAAA" }, videos: [{ platform: "tiktok", url: "https://www.tiktok.com/@koch/video/1" }] },
+    };
+    expect((await post("/api/plan", { ...basePlan, recipes: [withMedia] })).status).toBe(200);
   });
 
   it("lehnt ungültige Pläne und Rezepte mit unbekannten Zutaten ab", async () => {
-    expect((await post("/api/plan", { ...basePlan, days: 0 })).status).toBe(400);
+    expect((await post("/api/plan", { ...basePlan, startDate: "morgen" })).status).toBe(400);
     const bad = { ...ownRecipe, ingredients: [{ ingredientId: "einhorn", amount: 1 }] };
     expect((await post("/api/plan", { ...basePlan, recipes: [bad] })).status).toBe(400);
   });
@@ -105,14 +116,15 @@ describe("Community", () => {
 
 describe("Lieferdienst", () => {
   it("bestellt beim Demo-Lieferdienst und bucht die Lieferung in den Vorrat", async () => {
-    const { plan } = await (await post("/api/plan", { ...basePlan, days: 2, people: 1, mealTypes: ["dinner"] })).json();
-    const orderRes = await post("/api/delivery/orders", { providerId: "demo", items: plan.shoppingList });
+    const { plan } = await (await post("/api/plan", { ...basePlan, people: 1, mealTypes: ["dinner"] })).json();
+    const week = plan.weeks[0];
+    const orderRes = await post("/api/delivery/orders", { providerId: "demo", items: week.shoppingList });
     expect(orderRes.status).toBe(201);
     const order = await orderRes.json();
 
     const { order: delivered, pantry } = await (await request("GET", `/api/delivery/demo/orders/${order.id}`)).json();
     expect(delivered.status).toBe("geliefert");
-    expect(pantry).toHaveLength(plan.shoppingList.filter((i: { packs: number }) => i.packs > 0).length);
+    expect(pantry).toHaveLength(week.shoppingList.filter((i: { packs: number }) => i.packs > 0).length);
   });
 
   it("meldet unbekannte Lieferdienste", async () => {

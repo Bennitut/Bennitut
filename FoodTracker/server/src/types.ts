@@ -55,6 +55,8 @@ export interface Ingredient {
   openedShelfLifeDays?: number;
   diet: IngredientDiet;
   allergens: Allergen[];
+  /** Schweinefleisch oder daraus hergestellt (für halal/koscher). */
+  pork?: boolean;
 }
 
 export interface RecipeIngredient {
@@ -70,6 +72,27 @@ export interface RecipeText {
   steps?: string[];
   /** Zutaten außerhalb des Katalogs, z. B. Gewürze („1 TL Kreuzkümmel“). */
   otherIngredients?: string[];
+}
+
+/** Küchenrichtung eines Rezepts; steht in `tags` und dient für Vorlieben im Plan. */
+export const CUISINES = ["dach", "italienisch", "mediterran", "orientalisch", "indisch", "asiatisch", "mexikanisch", "international"] as const;
+export type Cuisine = (typeof CUISINES)[number];
+
+/** Religiöse Speiseregeln, die der Planer berücksichtigt. */
+export const FOOD_RULES = ["halal", "koscher"] as const;
+export type FoodRule = (typeof FOOD_RULES)[number];
+
+export interface RecipeVideo {
+  platform: "youtube" | "tiktok" | "instagram" | "web";
+  url: string;
+  title?: string;
+  author?: string;
+}
+
+export interface RecipeMedia {
+  /** Foto des Gerichts: URL oder data-URI (eigenes Foto). */
+  image?: { uri: string; credit?: string };
+  videos?: RecipeVideo[];
 }
 
 export type RecipeSource =
@@ -93,6 +116,7 @@ export interface Recipe {
   cookMinutes: number;
   tags: string[];
   source: RecipeSource;
+  media?: RecipeMedia;
 }
 
 export interface PantryItem {
@@ -126,6 +150,18 @@ export interface PlanRequest {
   locked: LockedMeal[];
   /** Gleiches Rezept höchstens so oft im Plan. */
   maxRepeats: number;
+  /** Religiöse Speiseregeln (z. B. kein Schweinefleisch). */
+  rules?: FoodRule[];
+  /** Bevorzugte Küchen (Rezept-Tags), werden öfter eingeplant. */
+  preferredTags?: string[];
+  /** Wie stark der Preis zählt: 0 = egal, 1 = normal, 3 = sparsam. */
+  priceFocus?: number;
+  /** Eiweißreiche Gerichte bevorzugen (z. B. Muskelaufbau). */
+  proteinFocus?: boolean;
+  /** Rezepte, die kürzlich dran waren und seltener vorkommen sollen. */
+  recentRecipeIds?: string[];
+  /** Rechenaufwand der Suche (1 = Standard); kleiner ist schneller, z. B. auf dem Handy. */
+  effort?: number;
   seed?: number;
 }
 
@@ -173,4 +209,19 @@ export interface MealPlan {
   dailyKcalPerPerson: number[];
   /** Zutaten, die nach Ablauf der Haltbarkeit eingeplant wurden. */
   spoilageWarnings: SpoilageWarning[];
+}
+
+export interface WeekPlan extends MealPlan {
+  /** Erster Tag dieser Woche im Monatsplan (0 = Starttag). */
+  startDay: number;
+  days: number;
+  /** Was nach dieser Woche voraussichtlich im Vorrat bleibt (Startvorrat der nächsten Woche). */
+  endPantry: PantryItem[];
+}
+
+/** Ein Monat, geplant und eingekauft in Wochenblöcken, damit Frisches frisch bleibt. */
+export interface MonthPlan {
+  /** Datum des ersten Tages (YYYY-MM-DD). */
+  startDate: string;
+  weeks: WeekPlan[];
 }

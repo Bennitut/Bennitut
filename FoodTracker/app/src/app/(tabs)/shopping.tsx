@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, styles } from "../../components/ui";
 import { api } from "../../lib/api";
+import { weekOfDay } from "../../lib/catalog";
+import { addDays, daysBetween, formatDay } from "../../lib/dates";
+import { today } from "../../lib/pantry";
 import { useI18n } from "../../lib/i18n";
 import { useStore } from "../../lib/store";
 import type { DeliveryProviderInfo } from "../../lib/types";
@@ -15,6 +18,9 @@ export default function ShoppingScreen() {
   const [providerId, setProviderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const todayIndex = plan ? daysBetween(plan.startDate, today()) : 0;
+  const [selectedWeek, setSelectedWeek] = useState(() => weekOfDay(Math.min(Math.max(0, todayIndex), 29)));
+  const week = plan?.weeks[Math.min(selectedWeek, (plan?.weeks.length ?? 1) - 1)];
 
   useEffect(() => {
     api
@@ -26,10 +32,10 @@ export default function ShoppingScreen() {
       .catch((e) => setError(i18n.error(e)));
   }, [i18n]);
 
-  const toBuy = (plan?.shoppingList.filter((i) => i.packs > 0) ?? []).sort((a, b) =>
+  const toBuy = (week?.shoppingList.filter((i) => i.packs > 0) ?? []).sort((a, b) =>
     i18n.ingredientName(a.ingredientId).localeCompare(i18n.ingredientName(b.ingredientId), i18n.language),
   );
-  const carryOver = plan?.shoppingList.filter((i) => i.durable && i.leftover > 0 && i.packs > 0) ?? [];
+  const carryOver = week?.shoppingList.filter((i) => i.durable && i.leftover > 0 && i.packs > 0) ?? [];
 
   // Der Demo-Anbieter ist übersetzt; echte Anbieter heißen überall gleich.
   const providerName = (p: DeliveryProviderInfo) => (p.id === "demo" ? t("shopping.providers.demo") : p.name);
@@ -64,6 +70,18 @@ export default function ShoppingScreen() {
 
   return (
     <Screen>
+      {plan && plan.weeks.length > 1 ? (
+        <ChipRow>
+          {plan.weeks.map((w, i) => (
+            <Chip
+              key={i}
+              label={`${t("plan.week", { n: i + 1 })} · ${formatDay(addDays(plan.startDate, w.startDay), i18n.language)}`}
+              selected={week === w}
+              onPress={() => setSelectedWeek(i)}
+            />
+          ))}
+        </ChipRow>
+      ) : null}
       <Card title={t("shopping.list")}>
         {!plan ? (
           <Muted>{t("shopping.needPlan")}</Muted>
@@ -80,9 +98,9 @@ export default function ShoppingScreen() {
             </View>
           ))
         )}
-        {plan && toBuy.length > 0 ? (
+        {week && toBuy.length > 0 ? (
           <Muted>
-            {t("shopping.sumHint", { price: i18n.price(plan.totalPrice) })} {t("common.estimatedPrices")}
+            {t("shopping.sumHint", { price: i18n.price(week!.totalPrice) })} {t("common.estimatedPrices")}
           </Muted>
         ) : null}
         {carryOver.map((item) => (

@@ -5,9 +5,10 @@ import { AnalysisError, analyzeMealPhoto, analyzeReceipt, generateRecipes, impor
 import { CommunityStore } from "./community/store.js";
 import { INGREDIENTS, RECIPES, ingredientById } from "./data/catalog.js";
 import { findProvider, linesFromShoppingList, pantryFromOrder, providers } from "./delivery/providers.js";
-import { PlanError, matchesPreferences, planMeals, recipeDiet } from "./planner/zeroWastePlanner.js";
+import { MONTH_DAYS, planMonth } from "./planner/monthPlanner.js";
+import { PlanError, matchesPreferences, recipeDiet } from "./planner/zeroWastePlanner.js";
 import { SocialFetchError, fetchSocialPost } from "./social/fetchPost.js";
-import { ALLERGENS, type Recipe } from "./types.js";
+import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
 const MediaType = z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const ImagePayload = z.object({ data: z.string().min(1), mediaType: MediaType });
@@ -42,6 +43,23 @@ export const RecipeBody = z.object({
   cookMinutes: z.number().min(0).max(1440),
   tags: z.array(z.string().max(40)).max(20),
   source: z.object({ kind: z.enum(["katalog", "eigen", "ki", "import", "community"]) }).passthrough(),
+  media: z
+    .object({
+      // Eigene Fotos kommen als data-URI und dürfen deshalb etwas größer sein.
+      image: z.object({ uri: z.string().max(700_000), credit: z.string().max(200).optional() }).optional(),
+      videos: z
+        .array(
+          z.object({
+            platform: z.enum(["youtube", "tiktok", "instagram", "web"]),
+            url: z.string().url().max(2000),
+            title: z.string().max(300).optional(),
+            author: z.string().max(200).optional(),
+          }),
+        )
+        .max(10)
+        .optional(),
+    })
+    .optional(),
 });
 const asRecipe = (r: z.infer<typeof RecipeBody>) => r as unknown as Recipe;
 
@@ -50,16 +68,20 @@ const Preferences = z.object({
   allergens: z.array(z.enum(ALLERGENS)).default([]),
   excludeIngredients: z.array(z.string()).default([]),
   maxCookMinutes: z.number().int().min(0).default(0),
+  rules: z.array(z.enum(FOOD_RULES)).default([]),
 });
 
 const PlanBody = Preferences.extend({
-  days: z.number().int().min(1).max(14),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  preferredTags: z.array(z.enum(CUISINES)).default([]),
+  priceFocus: z.number().min(0).max(5).default(1),
+  proteinFocus: z.boolean().default(false),
   people: z.number().int().min(1).max(10),
   kcalPerPersonPerDay: z.number().min(1000).max(5000),
   mealTypes: z.array(MealType).min(1),
   pantry: z.array(z.object({ ingredientId: z.string(), amount: z.number().positive() })).default([]),
   favoriteRecipeIds: z.array(z.string()).default([]),
-  locked: z.array(z.object({ day: z.number().int().min(0), mealType: MealType, recipeId: z.string() })).default([]),
+  locked: z.array(z.object({ day: z.number().int().min(0).max(MONTH_DAYS - 1), mealType: MealType, recipeId: z.string() })).default([]),
   maxRepeats: z.number().int().min(1).default(3),
   /** Eigene, importierte und favorisierte Community-Rezepte des Nutzers. */
   recipes: z.array(RecipeBody).max(500).default([]),
@@ -138,12 +160,13 @@ export function createApp({ communityFile }: { communityFile: string | null }) {
   });
 
   app.post("/api/plan", async (c) => {
-    const { preferences, language, recipes, ...request } = PlanBody.parse(await c.req.json());
-    const extraRecipes = preferences ? await generateRecipes(preferences, 6, language) : [];
-    const plan = planMeals({
+    const { preferences, language, recipes, startDate, ...request } = PlanBody.parse(await c.req.json());
+    const extraRecipes = preferences ? await generateRecipes(preferences, 8, language) : [];
+    const plan = planMonth({
       request,
       recipes: [...RECIPES, ...recipes.map(asRecipe), ...extraRecipes],
       ingredients: ingredientById,
+      startDate,
     });
     return c.json({ plan, extraRecipes });
   });

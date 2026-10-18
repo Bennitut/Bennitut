@@ -1,6 +1,8 @@
 import type { MealType, Recipe } from "../types.js";
 import { recipe } from "./recipeHelper.js";
+import { RECIPE_CUISINES } from "./recipeCuisines.js";
 import { CLASSIC_RECIPES } from "./recipesClassics.js";
+import { RECIPE_VIDEOS } from "./recipeVideos.js";
 
 const B: MealType[] = ["breakfast"];
 const LD: MealType[] = ["lunch", "dinner"];
@@ -241,4 +243,20 @@ const BASE_RECIPES: Recipe[] = [
       en: ["Cook the rice, adding the broccoli for the last 5 minutes.", "Fry the tempeh slices.", "Whisk peanut butter with soy sauce and a little water and drizzle over the bowl."] }),
 ];
 
-export const RECIPES: Recipe[] = [...BASE_RECIPES, ...CLASSIC_RECIPES];
+/** Küche als Tag sowie Kochvideo und Foto (Video-Vorschaubild) ergänzen. */
+function withExtras(recipe: Recipe): Recipe {
+  const video = RECIPE_VIDEOS[recipe.id];
+  const cuisine = RECIPE_CUISINES[recipe.id];
+  return {
+    ...recipe,
+    tags: cuisine ? [...recipe.tags, cuisine] : recipe.tags,
+    media: video
+      ? {
+          image: { uri: `https://i.ytimg.com/vi/${video.youtubeId}/hqdefault.jpg`, credit: `YouTube · ${video.channel}` },
+          videos: [{ platform: "youtube", url: `https://www.youtube.com/watch?v=${video.youtubeId}`, title: video.title, author: video.channel }],
+        }
+      : undefined,
+  };
+}
+
+export const RECIPES: Recipe[] = [...BASE_RECIPES, ...CLASSIC_RECIPES].map(withExtras);

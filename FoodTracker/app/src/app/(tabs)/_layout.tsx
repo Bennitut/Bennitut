@@ -8,13 +8,13 @@ const icon = (emoji: string) => () => <Text style={{ fontSize: 20 }}>{emoji}</Te
 
 export default function TabsLayout() {
   const { t } = useI18n();
-  const settingsButton = () => (
-    <Link href="/settings" accessibilityLabel={t("settings.title")} style={{ fontSize: 20, paddingHorizontal: 16 }}>
-      {t("settings.open")}
+  const profileButton = () => (
+    <Link href="/profile" accessibilityLabel={t("profile.title")} style={{ fontSize: 20, paddingHorizontal: 16 }}>
+      {t("profile.open")}
     </Link>
   );
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: colors.primary, headerShadowVisible: false, headerRight: settingsButton }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: colors.primary, headerShadowVisible: false, headerRight: profileButton }}>
       <Tabs.Screen name="index" options={{ title: t("tabs.today"), tabBarIcon: icon("📊") }} />
       <Tabs.Screen name="scan" options={{ title: t("tabs.scan"), tabBarIcon: icon("📷") }} />
       <Tabs.Screen name="plan" options={{ title: t("tabs.plan"), tabBarIcon: icon("🗓️") }} />

@@ -6,7 +6,7 @@ import type {
   Diet,
   LockedMeal,
   MealAnalysis,
-  MealPlan,
+  MonthPlan,
   MealType,
   Order,
   PantryItem,
@@ -93,20 +93,13 @@ export const api = {
       language,
     }),
 
-  plan: (
-    body: PlanPreferences & {
-      days: number;
-      people: number;
-      kcalPerPersonPerDay: number;
-      mealTypes: MealType[];
-      pantry: PantryItem[];
-      favoriteRecipeIds: string[];
-      locked: LockedMeal[];
-      recipes: Recipe[];
-      preferences?: string;
-      language: string;
-    },
-  ) => post<{ plan: MealPlan; extraRecipes: Recipe[] }>("/api/plan", body),
+  /** Monatsplan mit KI-Rezeptvorschlägen (ohne Wünsche plant die App selbst). */
+  plan: (body: Record<string, unknown> & { startDate: string; recipes: Recipe[]; preferences: string; language: string }) =>
+    post<{ plan: MonthPlan; extraRecipes: Recipe[] }>("/api/plan", {
+      ...body,
+      // Fotos eigener Rezepte braucht der Server nicht.
+      recipes: body.recipes.map(({ media: _media, ...r }) => r),
+    }),
 
   importRecipe: (body: { url?: string; caption?: string; frames: ImagePayload[]; language: string }) =>
     post<{ recipe: Recipe; author: string | null }>("/api/recipes/import", body),

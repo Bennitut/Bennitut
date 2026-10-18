@@ -1,17 +1,41 @@
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { IngredientPicker } from "../../components/IngredientPicker";
 import { Button, Card, Chip, ChipRow, ErrorText, Field, Screen, styles } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
 import { newId } from "../../lib/pantry";
 import { useStore } from "../../lib/store";
-import { MEAL_TYPES, type MealType, type Recipe } from "../../lib/types";
+import { MEAL_TYPES, type MealType, type Recipe, type RecipeVideo } from "../../lib/types";
 
 interface DraftIngredient {
   ingredientId: string;
   /** Menge für alle Portionen als Text, damit die Eingabe frei bleibt. */
   amount: string;
+}
+
+/** Plattform eines Video-Links; unbekannte Seiten gelten als "web". */
+function videoFromUrl(text: string): RecipeVideo | null {
+  const url = text.trim();
+  if (!/^https?:\/\/\S+$/i.test(url)) return null;
+  const host = url.replace(/^https?:\/\//i, "").split("/")[0]!.toLowerCase();
+  const platform: RecipeVideo["platform"] = /(^|\.)(youtube\.com|youtu\.be)$/.test(host)
+    ? "youtube"
+    : /(^|\.)tiktok\.com$/.test(host)
+      ? "tiktok"
+      : /(^|\.)instagram\.com$/.test(host)
+        ? "instagram"
+        : "web";
+  return { platform, url };
+}
+
+/** Verkleinert ein Foto, damit es als data-URI im Rezept (und beim Teilen) klein bleibt. */
+async function compressPhoto(uri: string): Promise<string | null> {
+  const image = await ImageManipulator.manipulate(uri).resize({ width: 800 }).renderAsync();
+  const saved = await image.saveAsync({ compress: 0.6, format: SaveFormat.JPEG, base64: true });
+  return saved.base64 ? `data:image/jpeg;base64,${saved.base64}` : null;
 }
 
 const parseNumber = (text: string) => parseFloat(text.replace(",", "."));
@@ -39,8 +63,27 @@ export default function RecipeEditorScreen() {
   );
   const [other, setOther] = useState(existingText?.otherIngredients.join("\n") ?? "");
   const [steps, setSteps] = useState(existingText?.steps.join("\n") ?? "");
+  const [photo, setPhoto] = useState(existing?.media?.image);
+  const [videoUrl, setVideoUrl] = useState(existing?.media?.videos?.[0]?.url ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const pickPhoto = async (source: "camera" | "library") => {
+    setError(null);
+    try {
+      if (source === "camera" && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+        return setError(t("scan.cameraDenied"));
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: "images", allowsEditing: true, aspect: [16, 9], quality: 1 };
+      const result = source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+      const asset = result.canceled ? undefined : result.assets[0];
+      if (!asset) return;
+      const uri = await compressPhoto(asset.uri);
+      if (uri) setPhoto({ uri });
+    } catch (e) {
+      setError(i18n.error(e));
+    }
+  };
 
   const toggleMealType = (m: MealType) =>
     setMealTypes((current) => (current.includes(m) ? current.filter((x) => x !== m) : [...current, m]));
@@ -53,6 +96,10 @@ export default function RecipeEditorScreen() {
     if (!name.trim()) return setError(t("editor.nameRequired"));
     if (parsed.length === 0) return setError(t("editor.ingredientRequired"));
     if (mealTypes.length === 0) return setError(t("editor.mealTypeRequired"));
+    const video = videoFromUrl(videoUrl);
+    // Weitere Videos (z. B. vom Import) bleiben erhalten; das erste ist das hier bearbeitete.
+    const otherVideos = (existing?.media?.videos ?? []).slice(1).filter((v) => v.url !== video?.url);
+    const videos = [...(video ? [video] : []), ...otherVideos];
 
     const recipe: Recipe = {
       id: existing?.id ?? `eigen_${newId()}`,
@@ -66,6 +113,7 @@ export default function RecipeEditorScreen() {
       cookMinutes: Math.max(0, Math.round(parseNumber(cookMinutes) || 0)),
       tags: existing?.tags ?? [],
       source: existing?.source ?? { kind: "eigen" },
+      ...(photo || videos.length > 0 ? { media: { ...(photo ? { image: photo } : {}), ...(videos.length > 0 ? { videos } : {}) } } : {}),
     };
     saveRecipe(recipe);
     router.dismissTo(`/recipe/${encodeURIComponent(recipe.id)}`);
@@ -96,6 +144,26 @@ export default function RecipeEditorScreen() {
               <Chip key={m} label={i18n.mealType(m)} selected={mealTypes.includes(m)} onPress={() => toggleMealType(m)} />
             ))}
           </ChipRow>
+        </Field>
+      </Card>
+
+      <Card title={t("editor.photo")}>
+        {photo ? <Image source={{ uri: photo.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 10 }} resizeMode="cover" /> : null}
+        <View style={styles.chipRow}>
+          <Button label={t("scan.takePhoto")} variant="secondary" onPress={() => pickPhoto("camera")} />
+          <Button label={t("editor.addPhoto")} variant="secondary" onPress={() => pickPhoto("library")} />
+          {photo ? <Button label={t("editor.removePhoto")} variant="secondary" onPress={() => setPhoto(undefined)} /> : null}
+        </View>
+        <Field label={t("editor.video")}>
+          <TextInput
+            style={styles.input}
+            value={videoUrl}
+            onChangeText={setVideoUrl}
+            autoCapitalize="none"
+            keyboardType="url"
+            placeholder="https://"
+            accessibilityLabel={t("editor.video")}
+          />
         </Field>
       </Card>
 

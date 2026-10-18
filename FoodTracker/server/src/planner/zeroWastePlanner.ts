@@ -52,6 +52,9 @@ const WEIGHTS = {
   repeat: 40,
   sameAsYesterday: 1.5,
   price: 0.05, // pro Euro
+  preferredCuisine: 1.5, // Bonus pro Mahlzeit aus einer bevorzugten Küche
+  recent: 3, // Malus pro Mahlzeit, die schon im Vorplan dran war
+  protein: 4, // Bonus pro Mahlzeit, gewichtet nach Eiweißanteil (nur bei Eiweiß-Fokus)
   favoriteFirst: 12, // Bonus, wenn ein Lieblingsrezept mindestens einmal vorkommt
   favoriteRepeat: 2, // kleiner Bonus für jede weitere Wiederholung
 };
@@ -91,20 +94,27 @@ function leftoverWeight(ingredient: Ingredient, planDays: number): number {
 /** Prüft, ob ein Rezept zu Ernährungsform, Allergien, Abneigungen und Zeitbudget passt. */
 export function matchesPreferences(
   recipe: Recipe,
-  request: Pick<PlanRequest, "diet" | "allergens" | "excludeIngredients" | "maxCookMinutes">,
+  request: Pick<PlanRequest, "diet" | "allergens" | "excludeIngredients" | "maxCookMinutes" | "rules">,
   ingredients: Map<string, Ingredient>,
 ): boolean {
   if (request.maxCookMinutes > 0 && recipe.cookMinutes > request.maxCookMinutes) return false;
   const allowed = ALLOWED_DIETS[request.diet];
-  return recipe.ingredients.every((ri) => {
-    const ingredient = ingredients.get(ri.ingredientId);
-    return (
-      ingredient !== undefined &&
+  const rules = request.rules ?? [];
+  const used = recipe.ingredients.map((ri) => ingredients.get(ri.ingredientId));
+  if (used.some((i) => i === undefined)) return false;
+  const list = used as Ingredient[];
+  if (rules.length > 0 && list.some((i) => i.pork)) return false;
+  if (rules.includes("koscher")) {
+    // Vereinfacht: keine Krebstiere, Fleisch nicht zusammen mit Milchprodukten.
+    if (list.some((i) => i.allergens.includes("krebstiere"))) return false;
+    if (list.some((i) => i.diet === "fleisch") && list.some((i) => i.allergens.includes("laktose"))) return false;
+  }
+  return list.every(
+    (ingredient) =>
       allowed.includes(ingredient.diet) &&
       !ingredient.allergens.some((a) => request.allergens.includes(a)) &&
-      !request.excludeIngredients.includes(ingredient.id)
-    );
-  });
+      !request.excludeIngredients.includes(ingredient.id),
+  );
 }
 
 /** Strengste Ernährungsform, zu der ein Rezept passt. */
@@ -148,17 +158,30 @@ export function planMeals({ request, recipes, ingredients }: PlannerInput): Meal
   const recipeKcal = usable.map((r) => recipeNutrients(r, ingredients).kcal);
   const favorites = new Set(request.favoriteRecipeIds);
   const isFavorite = usable.map((r) => favorites.has(r.id));
+  // Pro Rezept vorab: Bonus/Malus für Küche, Wiederholung aus dem Vorplan und Eiweißanteil.
+  const preferred = new Set(request.preferredTags ?? []);
+  const recent = new Set(request.recentRecipeIds ?? []);
+  const slotBonus = usable.map((r, i) => {
+    let bonus = r.tags.some((t) => preferred.has(t)) ? WEIGHTS.preferredCuisine : 0;
+    if (recent.has(r.id)) bonus -= WEIGHTS.recent;
+    if (request.proteinFocus) {
+      const n = recipeNutrients(r, ingredients);
+      bonus += WEIGHTS.protein * Math.min(1, (n.protein * 4) / Math.max(recipeKcal[i]!, 1) / 0.35);
+    }
+    return bonus;
+  });
   const slots = buildSlots(request, usable, ingredients);
   const pantry = aggregatePantry(request.pantry);
   const rng = mulberry32(request.seed ?? 42);
 
   const evaluate = (assignment: number[]): Evaluation =>
-    evaluateAssignment(assignment, slots, usable, recipeKcal, isFavorite, ingredients, pantry, request);
+    evaluateAssignment(assignment, slots, usable, recipeKcal, isFavorite, slotBonus, ingredients, pantry, request);
 
   let best: number[] = slots.map((s) => s.candidates[0]!);
   let bestEval: Evaluation | undefined = evaluate(best);
-  const restarts = 4;
-  const iterations = 2000 + slots.length * 250;
+  const effort = request.effort ?? 1;
+  const restarts = effort >= 1 ? 4 : 2;
+  const iterations = Math.round((2000 + slots.length * 250) * Math.min(effort * 2, 1));
 
   for (let restart = 0; restart < restarts; restart++) {
     let current = slots.map((s) => pick(s.candidates, rng));
@@ -223,11 +246,13 @@ function evaluateAssignment(
   recipes: Recipe[],
   recipeKcal: number[],
   isFavorite: boolean[],
+  slotBonus: number[],
   ingredients: Map<string, Ingredient>,
   pantry: Map<string, number>,
   request: PlanRequest,
 ): Evaluation {
   let cost = 0;
+  const priceWeight = WEIGHTS.price * (request.priceFocus ?? 1);
 
   // Portionsgröße pro Tag so wählen, dass der Kalorienbedarf getroffen wird.
   const dayKcal = new Array<number>(request.days).fill(0);
@@ -247,6 +272,7 @@ function evaluateAssignment(
   assignment.forEach((r, i) => {
     const slot = slots[i]!;
     counts.set(r, (counts.get(r) ?? 0) + 1);
+    cost -= slotBonus[r]!;
     for (const ri of recipes[r]!.ingredients) {
       needed.set(ri.ingredientId, (needed.get(ri.ingredientId) ?? 0) + ri.amount * request.people * portions[slot.day]!);
       lastUseDay.set(ri.ingredientId, Math.max(lastUseDay.get(ri.ingredientId) ?? 0, slot.day));
@@ -270,7 +296,7 @@ function evaluateAssignment(
     const packs = Math.ceil(toBuy / ingredient.packSize - 1e-9);
     const leftover = packs * ingredient.packSize - toBuy;
     cost += leftoverWeight(ingredient, request.days) * (leftover / ingredient.packSize);
-    cost += WEIGHTS.price * packs * ingredient.packPrice;
+    cost += priceWeight * packs * ingredient.packPrice;
     // Eingekauft wird an Tag 0; Verderbliches darf nur bis zum Ablauf eingeplant werden.
     if (packs > 0 && lastUseDay.get(id)! >= ingredient.shelfLifeDays) cost += WEIGHTS.spoilage;
   }

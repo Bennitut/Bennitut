@@ -1,208 +1,243 @@
 import { Link, router } from "expo-router";
-import { useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { Button, Card, Chip, ErrorText, Field, Muted, Screen, colors, styles } from "../../components/ui";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, colors, styles } from "../../components/ui";
 import { ApiError, api } from "../../lib/api";
-import { PlanError, matchesPreferences, planMeals } from "../../lib/catalog";
-import { aggregatePantry } from "../../lib/pantry";
+import { MONTH_WEEKS, PlanError, matchesPreferences, planMonth, weekOfDay } from "../../lib/catalog";
+import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
-import { useStore } from "../../lib/store";
-import type { LockedMeal, MealType } from "../../lib/types";
+import { aggregatePantry, today } from "../../lib/pantry";
+import { planOptions } from "../../lib/profile";
+import { mealKey, useStore } from "../../lib/store";
+import type { LockedMeal, MonthPlan, PlannedMeal, WeekPlan } from "../../lib/types";
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <Field label={label}>
-        <TextInput
-          style={styles.input}
-          keyboardType="number-pad"
-          defaultValue={String(value)}
-          onChangeText={(text) => {
-            const n = parseInt(text, 10);
-            if (!Number.isNaN(n) && n > 0) onChange(n);
-          }}
-        />
-      </Field>
-    </View>
-  );
-}
+/** Kleinere Suchtiefe auf dem Handy: gleiche Qualität, halbe Rechenzeit. */
+const DEVICE_EFFORT = 0.5;
 
-interface SwapTarget {
-  index: number;
-  day: number;
-  mealType: MealType;
-}
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function PlanScreen() {
   const store = useStore();
-  const { settings, updateSettings, pantry, plan, setPlan, eatenMeals, markMealEaten, toggleLock, recipes, userRecipes, favoriteIds, catalog, ingredients } =
-    store;
+  const { settings, pantry, plan, setPlan, eatenMeals, markMealEaten, toggleLock, recipes, userRecipes, favoriteIds, catalog, ingredients } = store;
   const i18n = useI18n();
   const { t } = i18n;
-  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [swap, setSwap] = useState<SwapTarget | null>(null);
-  const [alternatives, setAlternatives] = useState<string[] | null>(null);
-
-  const preferences = {
-    diet: settings.diet,
-    allergens: settings.allergens,
-    excludeIngredients: settings.excludeIngredients,
-    maxCookMinutes: settings.maxCookMinutes,
-  };
-
   const [notice, setNotice] = useState<string | null>(null);
+  const [swap, setSwap] = useState<PlannedMeal | null>(null);
+  const [alternatives, setAlternatives] = useState<string[]>([]);
+  const todayIndex = plan ? daysBetween(plan.startDate, today()) : 0;
+  const [selectedWeek, setSelectedWeek] = useState(() => weekOfDay(Math.max(0, todayIndex)));
+  const loading = progress !== null;
 
-  const createPlan = async (extraLock?: LockedMeal) => {
-    setLoading(true);
+  const options = planOptions(settings);
+
+  /**
+   * Plant den Monat ab Woche `fromWeek` (frühere Wochen bleiben, wie sie sind).
+   * Mit Wünschen schlägt Claude über den Server neue Rezepte vor; sonst rechnet das Handy selbst.
+   */
+  const createPlan = async (fromWeek = 0, extraLock?: LockedMeal) => {
+    if (!settings.onboarded) {
+      router.push("/onboarding");
+      return;
+    }
     setError(null);
     setNotice(null);
-    const locked: LockedMeal[] = (plan?.meals ?? [])
-      .filter((m) => m.locked && m.day < settings.days && settings.mealTypes.includes(m.mealType))
+    setProgress(fromWeek + 1);
+    const startDate = plan && (fromWeek > 0 || plan.startDate === today()) ? plan.startDate : today();
+    const keepWeeks = plan && fromWeek > 0 ? plan.weeks.slice(0, fromWeek) : [];
+    const locked: LockedMeal[] = (plan && plan.startDate === startDate ? plan.weeks.flatMap((w) => w.meals) : [])
+      .filter((m) => m.locked && settings.mealTypes.includes(m.mealType))
       .filter((m) => !(extraLock && m.day === extraLock.day && m.mealType === extraLock.mealType))
       .map(({ day, mealType, recipeId }) => ({ day, mealType, recipeId }));
     if (extraLock) locked.push(extraLock);
     const request = {
-      ...preferences,
-      days: settings.days,
+      ...options,
       people: settings.people,
       kcalPerPersonPerDay: settings.kcalPerPersonPerDay,
       mealTypes: settings.mealTypes,
       pantry: aggregatePantry(pantry),
       favoriteRecipeIds: favoriteIds,
       locked,
-      maxRepeats: 3,
+      effort: DEVICE_EFFORT,
     };
 
-    // Mit Wünschen schlägt Claude über den Server neue Rezepte vor; sonst plant das Handy selbst.
     const wishes = settings.preferences.trim();
-    if (wishes) {
+    if (wishes && fromWeek === 0) {
       try {
-        const result = await api.plan({ ...request, recipes: userRecipes, preferences: wishes, language: i18n.language });
+        const result = await api.plan({ ...request, startDate, recipes: userRecipes, preferences: wishes, language: i18n.language });
         setPlan(result.plan, result.extraRecipes);
-        setLoading(false);
+        setProgress(null);
         return;
       } catch (e) {
         if (!(e instanceof ApiError) || e.code !== "network") {
           setError(i18n.error(e));
-          setLoading(false);
+          setProgress(null);
           return;
         }
         setNotice(t("plan.aiOffline"));
       }
     }
 
-    // Kurz warten, damit die Ladeanzeige erscheint, bevor die Planung rechnet.
-    setTimeout(() => {
-      try {
-        const result = planMeals({ request, recipes: [...catalog.recipes, ...userRecipes], ingredients });
-        setPlan(result, []);
-      } catch (e) {
-        setError(e instanceof PlanError ? t(`errors.plan_${e.code}`) : i18n.error(e));
-      } finally {
-        setLoading(false);
+    try {
+      let month: MonthPlan = { startDate, weeks: keepWeeks };
+      for (let week = keepWeeks.length; week < MONTH_WEEKS.length; week++) {
+        setProgress(week + 1);
+        // Kurz Luft holen, damit die Fortschrittsanzeige erscheint.
+        await wait(30);
+        month = planMonth({
+          request,
+          recipes: [...catalog.recipes, ...userRecipes],
+          ingredients,
+          startDate,
+          keepWeeks: month.weeks,
+          untilWeek: week + 1,
+        });
       }
-    }, 50);
+      setPlan(month, []);
+      setSelectedWeek(Math.max(fromWeek, weekOfDay(Math.max(0, daysBetween(startDate, today())))));
+    } catch (e) {
+      setError(e instanceof PlanError ? t(`errors.plan_${e.code}`) : i18n.error(e));
+    } finally {
+      setProgress(null);
+    }
   };
 
-  const openSwap = (target: SwapTarget) => {
-    const recipeIds = [...new Map([...catalog.recipes, ...userRecipes].map((r) => [r.id, r])).values()]
-      .filter((r) => r.mealTypes.includes(target.mealType) && matchesPreferences(r, preferences, ingredients))
+  // Nach dem Fragebogen direkt den ersten Plan erstellen.
+  useEffect(() => {
+    if (store.pendingPlan && settings.onboarded) {
+      store.setPendingPlan(false);
+      createPlan(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.pendingPlan, settings.onboarded]);
+
+  const openSwap = (meal: PlannedMeal) => {
+    const ids = [...new Map([...catalog.recipes, ...userRecipes].map((r) => [r.id, r])).values()]
+      .filter((r) => r.mealTypes.includes(meal.mealType) && matchesPreferences(r, options, ingredients))
       .map((r) => r.id);
-    setSwap(target);
     // Favoriten zuerst.
-    setAlternatives(recipeIds.sort((a, b) => Number(favoriteIds.includes(b)) - Number(favoriteIds.includes(a))));
+    setAlternatives(ids.sort((a, b) => Number(favoriteIds.includes(b)) - Number(favoriteIds.includes(a))));
+    setSwap(meal);
   };
 
   const chooseAlternative = (recipeId: string) => {
     if (!swap) return;
     const target = swap;
     setSwap(null);
-    createPlan({ day: target.day, mealType: target.mealType, recipeId });
+    // Ab der Woche des getauschten Gerichts neu planen, damit die Einkäufe wieder aufgehen.
+    createPlan(weekOfDay(target.day), { day: target.day, mealType: target.mealType, recipeId });
   };
 
-  const days = plan ? [...new Set(plan.meals.map((m) => m.day))] : [];
-  const prefParts = [
-    t("plan.preferences", { diet: t(`diets.${settings.diet}`), meals: settings.mealTypes.map(i18n.mealType).join(", ") }),
+  const prefSummary = [
+    t(`diets.${settings.diet}`),
+    ...settings.rules.map((r) => t(`rules.${r}`)),
     settings.allergens.length > 0 ? t("plan.allergiesShort", { list: settings.allergens.map((a) => t(`allergens.${a}`)).join(", ") }) : null,
-    settings.maxCookMinutes > 0 ? t("plan.cookShort", { n: settings.maxCookMinutes }) : null,
+    t("common.perPerson", { kcal: settings.kcalPerPersonPerDay }),
   ].filter(Boolean);
+
+  const week: WeekPlan | undefined = plan?.weeks[selectedWeek];
+  const days = week ? Array.from({ length: week.days }, (_, i) => week.startDay + i) : [];
+  const allDailyKcal = plan ? plan.weeks.flatMap((w) => w.dailyKcalPerPerson) : [];
+  const monthWaste = plan ? plan.weeks.reduce((s, w) => s + w.wasteRatio, 0) / plan.weeks.length : 0;
+  const monthPrice = plan ? plan.weeks.reduce((s, w) => s + w.totalPrice, 0) : 0;
+  const avgKcal = allDailyKcal.length ? Math.round(allDailyKcal.reduce((a, b) => a + b, 0) / allDailyKcal.length) : 0;
+
+  const renderMeal = (meal: PlannedMeal) => {
+    const recipe = recipes.get(meal.recipeId);
+    const name = recipe ? i18n.recipe(recipe).name : meal.recipeName;
+    const eaten = eatenMeals.includes(mealKey(meal));
+    const image = recipe?.media?.image?.uri;
+    return (
+      <View key={mealKey(meal)} style={{ gap: 4, paddingVertical: 6, borderTopWidth: 1, borderColor: colors.border }}>
+        <Pressable onPress={() => router.push(`/recipe/${encodeURIComponent(meal.recipeId)}`)} style={[styles.row, { justifyContent: "flex-start" }]}>
+          {image ? <Image source={{ uri: image }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+          <View style={{ flex: 1, gap: 2 }}>
+            <Muted>
+              {i18n.mealType(meal.mealType)}
+              {meal.locked ? " · 🔒" : ""}
+              {favoriteIds.includes(meal.recipeId) ? " · ♥" : ""}
+            </Muted>
+            <Text style={[styles.text, { fontWeight: "600" }]}>{name}</Text>
+            <Muted>
+              {t("common.portions", { n: i18n.number(meal.portions) })} · {t("common.perPerson", { kcal: meal.nutrientsPerPortion.kcal })}
+            </Muted>
+          </View>
+        </Pressable>
+        {meal.extras.length > 0 ? (
+          <Text style={[styles.muted, { color: colors.primary }]}>
+            {t("plan.extras", { list: meal.extras.map((e) => `${i18n.amount(e.amount, e.unit)} ${i18n.ingredientName(e.ingredientId)}`).join(", ") })}
+          </Text>
+        ) : null}
+        <ChipRow>
+          <Chip label={eaten ? t("plan.eaten") : t("plan.markEaten")} selected={eaten} disabled={eaten} onPress={() => markMealEaten(meal, name)} />
+          <Chip label={meal.locked ? `🔒 ${t("plan.unlock")}` : t("plan.lock")} selected={meal.locked} onPress={() => toggleLock(meal)} />
+          <Chip label={`⇄ ${t("plan.swap")}`} onPress={() => openSwap(meal)} disabled={loading} />
+        </ChipRow>
+      </View>
+    );
+  };
 
   return (
     <Screen>
-      <Card title={t("plan.createTitle")}>
-        <View style={styles.row}>
-          <NumberField label={t("plan.kcal")} value={settings.kcalPerPersonPerDay} onChange={(n) => updateSettings({ kcalPerPersonPerDay: n })} />
-          <NumberField label={t("plan.people")} value={settings.people} onChange={(n) => updateSettings({ people: n })} />
-          <NumberField label={t("plan.days")} value={settings.days} onChange={(n) => updateSettings({ days: n })} />
-        </View>
-        <Text style={styles.text}>{prefParts.join(" · ")}</Text>
-        {favoriteIds.length > 0 ? <Muted>{t("plan.favoritesShort", { n: favoriteIds.length })}</Muted> : null}
-        <Link href="/settings" style={[styles.text, { color: colors.primary }]}>
-          {t("plan.editPreferences")} ›
-        </Link>
-        <TextInput
-          style={styles.input}
-          placeholder={t("plan.wishesPlaceholder")}
-          defaultValue={settings.preferences}
-          onChangeText={(preferences) => updateSettings({ preferences })}
-        />
-        <Muted>{t("plan.pantryHint", { n: pantry.length })}</Muted>
-        <Button label={plan ? t("plan.recreate") : t("plan.create")} onPress={() => createPlan()} loading={loading} />
-        {plan ? <Muted>{t("plan.replanHint")}</Muted> : null}
-        {notice ? <Text style={styles.warning}>{notice}</Text> : null}
-        <ErrorText message={error} />
-      </Card>
+      {!settings.onboarded ? (
+        <Card title={t("plan.onboardingTitle")}>
+          <Muted>{t("plan.onboardingText")}</Muted>
+          <Button label={t("plan.onboardingStart")} onPress={() => router.push("/onboarding")} />
+        </Card>
+      ) : (
+        <Card title={plan ? t("plan.monthSummary") : t("plan.createMonth")}>
+          <Text style={styles.text}>{prefSummary.join(" · ")}</Text>
+          <Link href="/onboarding" style={[styles.text, { color: colors.primary }]}>
+            {t("plan.editPreferences")} ›
+          </Link>
+          <TextInput
+            style={styles.input}
+            placeholder={t("plan.wishesPlaceholder")}
+            defaultValue={settings.preferences}
+            onChangeText={(preferences) => store.updateSettings({ preferences })}
+          />
+          <Muted>{t("plan.pantryHint", { n: aggregatePantry(pantry).length })}</Muted>
+          <Button label={plan ? t("plan.recreate") : t("plan.createMonth")} onPress={() => createPlan(0)} loading={loading} />
+          {loading ? <Muted>{t("plan.progress", { n: progress!, total: MONTH_WEEKS.length })}</Muted> : null}
+          {plan && !loading ? <Muted>{t("plan.replanHint")}</Muted> : null}
+          {notice ? <Text style={styles.warning}>{notice}</Text> : null}
+          <ErrorText message={error} />
+        </Card>
+      )}
 
       {plan ? (
-        <Card title={t("plan.summary")}>
+        <Card>
           <Text style={styles.text}>
-            {t("plan.waste", { pct: i18n.number(plan.wasteRatio * 100) })} · {t("plan.price", { price: i18n.price(plan.totalPrice) })}
+            {t("plan.waste", { pct: i18n.number(monthWaste * 100) })} · {t("plan.totalPrice", { price: i18n.price(monthPrice) })}
           </Text>
-          <Muted>
-            {t("plan.avgKcal", { kcal: Math.round(plan.dailyKcalPerPerson.reduce((a, b) => a + b, 0) / plan.dailyKcalPerPerson.length) })}
-          </Muted>
-          {plan.spoilageWarnings.map((w) => (
-            <Text key={w.ingredientId} style={styles.warning}>
+          <Muted>{t("plan.avgKcal", { kcal: avgKcal })}</Muted>
+          {plan.weeks.flatMap((w) => w.spoilageWarnings).map((w) => (
+            <Text key={`${w.ingredientId}-${w.day}`} style={styles.warning}>
               {t("plan.spoilage", { name: i18n.ingredientName(w.ingredientId), days: w.shelfLifeDays, day: w.day + 1 })}
             </Text>
           ))}
         </Card>
       ) : null}
 
+      {plan ? (
+        <ChipRow>
+          {plan.weeks.map((w, i) => (
+            <Chip
+              key={i}
+              label={`${t("plan.week", { n: i + 1 })} · ${formatDay(addDays(plan.startDate, w.startDay), i18n.language)}`}
+              selected={selectedWeek === i}
+              onPress={() => setSelectedWeek(i)}
+            />
+          ))}
+        </ChipRow>
+      ) : null}
+
+      {week ? <Muted>{t("plan.weekPrice", { price: i18n.price(week.totalPrice) })}</Muted> : null}
+
       {days.map((day) => (
-        <Card key={day} title={t("plan.day", { n: day + 1 })}>
-          {plan!.meals.map((meal, index) => {
-            if (meal.day !== day) return null;
-            const recipe = recipes.get(meal.recipeId);
-            const name = recipe ? i18n.recipe(recipe).name : meal.recipeName;
-            const eaten = eatenMeals.includes(index);
-            return (
-              <View key={index} style={{ gap: 4, paddingVertical: 6, borderTopWidth: index === 0 ? 0 : 1, borderColor: colors.border }}>
-                <Muted>
-                  {i18n.mealType(meal.mealType)}
-                  {meal.locked ? " · 🔒" : ""}
-                  {favoriteIds.includes(meal.recipeId) ? " · ♥" : ""}
-                </Muted>
-                <Pressable onPress={() => router.push(`/recipe/${encodeURIComponent(meal.recipeId)}`)}>
-                  <Text style={[styles.text, { fontWeight: "600" }]}>{name}</Text>
-                </Pressable>
-                <Muted>
-                  {t("common.portions", { n: i18n.number(meal.portions) })} · {t("common.perPerson", { kcal: meal.nutrientsPerPortion.kcal })}
-                </Muted>
-                {meal.extras.length > 0 ? (
-                  <Text style={[styles.muted, { color: colors.primary }]}>
-                    {t("plan.extras", { list: meal.extras.map((e) => `${i18n.amount(e.amount, e.unit)} ${i18n.ingredientName(e.ingredientId)}`).join(", ") })}
-                  </Text>
-                ) : null}
-                <View style={[styles.chipRow, { marginTop: 4 }]}>
-                  <Chip label={eaten ? t("plan.eaten") : t("plan.markEaten")} selected={eaten} disabled={eaten} onPress={() => markMealEaten(index, name)} />
-                  <Chip label={meal.locked ? `🔒 ${t("plan.unlock")}` : t("plan.lock")} selected={meal.locked} onPress={() => toggleLock(index)} />
-                  <Chip label={`⇄ ${t("plan.swap")}`} onPress={() => openSwap({ index, day: meal.day, mealType: meal.mealType })} disabled={loading} />
-                </View>
-              </View>
-            );
-          })}
+        <Card key={day} title={`${formatDay(addDays(plan!.startDate, day), i18n.language)}${day === todayIndex ? " · " + t("tabs.today") : ""}`}>
+          {week!.meals.filter((m) => m.day === day).map(renderMeal)}
         </Card>
       ))}
 
@@ -210,14 +245,12 @@ export default function PlanScreen() {
         <View style={[styles.screen, { padding: 16, gap: 12 }]}>
           <View style={styles.row}>
             <Text style={[styles.cardTitle, { flex: 1 }]}>
-              {swap ? t("plan.swapTitle", { meal: i18n.mealType(swap.mealType), day: swap.day + 1 }) : ""}
+              {swap && plan ? t("plan.swapTitle", { meal: i18n.mealType(swap.mealType), day: formatDay(addDays(plan.startDate, swap.day), i18n.language) }) : ""}
             </Text>
             <Button label={t("common.close")} variant="secondary" onPress={() => setSwap(null)} />
           </View>
           <Muted>{t("plan.swapHint")}</Muted>
-          {alternatives === null ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : alternatives.length === 0 ? (
+          {alternatives.length === 0 ? (
             <Muted>{t("plan.noAlternatives")}</Muted>
           ) : (
             <ScrollView contentContainerStyle={{ gap: 8, paddingBottom: 40 }}>
@@ -225,17 +258,21 @@ export default function PlanScreen() {
                 const recipe = recipes.get(id);
                 if (!recipe) return null;
                 return (
-                  <Pressable key={id} onPress={() => chooseAlternative(id)} style={styles.card} accessibilityRole="button">
-                    <Text style={styles.text}>
-                      {favoriteIds.includes(id) ? "♥ " : ""}
-                      {i18n.recipe(recipe).name}
-                    </Text>
-                    <Muted>{t("common.minutes", { n: recipe.cookMinutes })}</Muted>
+                  <Pressable key={id} onPress={() => chooseAlternative(id)} style={[styles.card, styles.row, { justifyContent: "flex-start" }]} accessibilityRole="button">
+                    {recipe.media?.image ? <Image source={{ uri: recipe.media.image.uri }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.text}>
+                        {favoriteIds.includes(id) ? "♥ " : ""}
+                        {i18n.recipe(recipe).name}
+                      </Text>
+                      <Muted>{t("common.minutes", { n: recipe.cookMinutes })}</Muted>
+                    </View>
                   </Pressable>
                 );
               })}
             </ScrollView>
           )}
+          {loading ? <ActivityIndicator color={colors.primary} /> : null}
         </View>
       </Modal>
     </Screen>

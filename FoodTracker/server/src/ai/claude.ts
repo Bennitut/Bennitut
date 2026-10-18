@@ -215,10 +215,17 @@ export async function importRecipe(input: {
     content,
   );
   if (!result.isRecipe || !result.recipe) throw new AnalysisError("not_a_recipe");
-  return toRecipe(result.recipe, `import_${Date.now().toString(36)}`, input.language, {
+  const recipe = toRecipe(result.recipe, `import_${Date.now().toString(36)}`, input.language, {
     kind: "import",
     ...(input.post ? { url: input.post.url, platform: input.post.platform } : { platform: "video" as const }),
   });
+  const thumbnail = input.post?.thumbnail ?? input.frames[Math.floor(input.frames.length / 2)];
+  recipe.media = {
+    // Vorschaubild bzw. ein Videobild als Foto; der Link führt zum Originalbeitrag.
+    ...(thumbnail && thumbnail.data.length < 600_000 ? { image: { uri: `data:${thumbnail.mediaType};base64,${thumbnail.data}` } } : {}),
+    ...(input.post ? { videos: [{ platform: input.post.platform, url: input.post.url, ...(input.post.author ? { author: input.post.author } : {}) }] } : {}),
+  };
+  return recipe;
 }
 
 export function translateRecipe(text: RecipeText, targetLanguage: string): Promise<RecipeText> {

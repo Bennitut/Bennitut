@@ -10,7 +10,10 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 |---|---|
 | **Foto einer Mahlzeit** | Claude erkennt die Lebensmittel, schätzt Mengen und Nährwerte → Eintrag im Tagebuch. |
 | **Foto eines Kassenbons** | Claude liest jede Position (REWE, BILLA, Migros …), ordnet sie Zutaten zu und rechnet Mengen um → Vorrat. |
-| **Ernährungsplan** | Plant Frühstück, Mittag- und Abendessen für 1–14 Tage passend zu Kalorienbedarf, Ernährungsform (alles, pescetarisch, vegetarisch, vegan), Allergien, Abneigungen und maximaler Kochzeit. Optional schlägt Claude neue Rezepte nach Wunsch vor. |
+| **Fragebogen** | Beim ersten Planen fragt die App nach Ernährungsweise (alles, pescetarisch, vegetarisch, vegan), religiösen Speiseregeln (halal, koscher), Unverträglichkeiten, Abneigungen, Ziel und Körperdaten (daraus der Kalorienbedarf), Personen, Mahlzeiten, Kochzeit, Lieblingsküchen, Budget und Abwechslung. |
+| **Monatsplan** | Plant immer 30 Tage in vier Wochenblöcken mit je eigener Einkaufsliste; Reste und Vorräte einer Woche gehen in die nächste. Der Plan richtet sich nach den Antworten aus dem Fragebogen. Optional schlägt Claude neue Rezepte nach Wunsch vor. |
+| **Profil (👤)** | Ernährungshistorie (7/30 Tage mit Kalorien pro Tag, Durchschnitt, Makros, häufigste Gerichte), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
+| **Bilder & Videos** | Jedes Katalogrezept hat ein Bild und ein passendes YouTube-Kochvideo; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
 | **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
 | **Instagram & TikTok** | Link zu einem Koch-Video einfügen → Claude liest Beschreibung, Vorschaubild und (optional) Einzelbilder aus dem gespeicherten Video und macht daraus ein Rezept mit Mengen. |
@@ -24,7 +27,7 @@ Kreislauf: **Plan → Einkaufsliste → Bestellung → Vorrat → Kochen/Essen �
 
 ## Sprachen und Regionen
 
-- **Oberfläche:** Deutsch, Englisch, Französisch, Italienisch, Spanisch – automatisch nach Gerätesprache, umstellbar in ⚙️ Einstellungen. Fehlende Übersetzungen fallen beim Kompilieren auf.
+- **Oberfläche:** Deutsch, Englisch, Französisch, Italienisch, Spanisch – automatisch nach Gerätesprache, umstellbar unter 👤 Profil → Sprache & Region. Fehlende Übersetzungen fallen beim Kompilieren auf.
 - **Regionale Begriffe:** In Österreich heißen Zutaten z. B. Erdäpfel, Paradeiser, Topfen, Schlagobers, Karfiol; in der Schweiz Rüebli, Poulet, Peperoni, Vollrahm, Randen – und es wird „ss“ statt „ß“ geschrieben.
 - **Währung:** Euro für Deutschland/Österreich, Franken für die Schweiz (Richtpreise).
 - **Rezepte übersetzen:** Jedes Rezept (auch eigene, importierte und Community-Rezepte) lässt sich per 🌐 von Claude in die eigene Sprache übersetzen; die Übersetzung wird gespeichert.
@@ -35,16 +38,17 @@ Kreislauf: **Plan → Einkaufsliste → Bestellung → Vorrat → Kochen/Essen �
 ```
 FoodTracker/
 ├── app/      Expo / React Native App (iOS + Android, TypeScript, Expo Router)
-│   ├── src/app/(tabs)/   Heute, Erfassen, Plan, Rezepte, Einkauf
+│   ├── src/app/(tabs)/   Heute, Erfassen, Plan, Rezepte, Vorrat, Einkauf
+│   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   └── src/i18n/         Übersetzungen (de, en, fr, it, es)
 └── server/   Backend (Node, Hono, TypeScript)
-    ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung)
+    ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
     ├── src/ai/           Claude: Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
-    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 101 Rezepte
+    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 101 Rezepte mit Küche, Bild und YouTube-Video
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
 ```
 
@@ -107,6 +111,11 @@ cd app && npm run typecheck
 6. Reste, die über das Planende hinaus noch mindestens eine Woche halten (Karotten, Kartoffeln,
    Reis …), gehen in den Vorrat und werden im nächsten Plan zuerst verbraucht.
 
+Der Monatsplan besteht aus vier Blöcken (7, 7, 8 und 8 Tage). Jeder Block wird so geplant und
+bekommt die haltbaren Reste und den Vorrat des vorherigen Blocks; Gerichte der Vorwoche werden
+etwas seltener gewählt, damit der Monat abwechslungsreich bleibt. Beim Tauschen wird nur ab der
+betroffenen Woche neu geplant. Auf dem Handy rechnet die App Woche für Woche mit Fortschrittsanzeige.
+
 Über 60 Testpläne (1–4 Personen, verschiedene Ernährungsformen) bleiben im Schnitt 0,3 %
 der verderblichen Einkäufe übrig, im schlechtesten Fall 4 %.
 
@@ -137,6 +146,11 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 - Community-Rezepte liegen in einer JSON-Datei, Nutzer:innen sind nur über eine anonyme
   Geräte-ID unterschieden. Für den echten Betrieb braucht es Konten, eine Datenbank und Moderation.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
+- Bilder der Katalogrezepte sind die Vorschaubilder der verlinkten YouTube-Videos (Quelle wird angezeigt).
+  TikTok und Instagram bieten keine offene Suche; dafür gibt es Suchlinks, bei importierten Rezepten den Originalbeitrag.
+- Für vegane Ernährung gibt es noch vergleichsweise wenige Katalogrezepte; Wiederholungen im Monat sind dann häufiger.
+- Halal/koscher prüft die Zutaten (kein Schweinefleisch, kein Fleisch mit Milch bzw. Meeresfrüchte bei koscher);
+  ob Fleisch zertifiziert ist, muss man beim Einkauf selbst beachten.
 - Rezepttexte im Katalog gibt es auf Deutsch und Englisch; andere Sprachen übersetzt Claude auf Knopfdruck.
 
 ## Nächste Schritte

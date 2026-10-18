@@ -8,6 +8,7 @@ interface Extra {
   ch?: string;
   /** Haltbarkeit nach dem Öffnen in Tagen. */
   opened?: number;
+  pork?: boolean;
 }
 
 /**
@@ -25,7 +26,7 @@ function ing(
   packPrice: number,
   shelfLifeDays: number,
   diet: IngredientDiet,
-  { allergens = [], at, ch, opened }: Extra = {},
+  { allergens = [], at, ch, opened, pork }: Extra = {},
 ): Ingredient {
   return {
     id,
@@ -39,6 +40,7 @@ function ing(
     ...(opened ? { openedShelfLifeDays: opened } : {}),
     diet,
     allergens,
+    ...(pork ? { pork } : {}),
   };
 }
 
@@ -105,9 +107,9 @@ export const INGREDIENTS: Ingredient[] = [
   ing("haehnchen", ["Hähnchenbrust", "Chicken breast", "Blanc de poulet", "Petto di pollo", "Pechuga de pollo"], "fleisch", "g", [110, 23, 0, 1.5], 400, 4.99, 3, "fleisch", { at: "Hühnerbrust", ch: "Pouletbrust" }),
   ing("putenbrust", ["Putenbrust", "Turkey breast", "Blanc de dinde", "Petto di tacchino", "Pechuga de pavo"], "fleisch", "g", [105, 24, 0, 1], 400, 5.49, 3, "fleisch", { ch: "Trutenbrust" }),
   ing("hackfleisch", ["Rinderhackfleisch", "Beef mince", "Bœuf haché", "Macinato di manzo", "Carne picada de ternera"], "fleisch", "g", [220, 20, 0, 15], 500, 4.99, 2, "fleisch", { at: "Rinderfaschiertes", ch: "Rindshackfleisch" }),
-  ing("schweinefilet", ["Schweinefilet", "Pork tenderloin", "Filet mignon de porc", "Filetto di maiale", "Solomillo de cerdo"], "fleisch", "g", [120, 21, 0, 4], 500, 6.99, 3, "fleisch", { at: "Schweinslungenbraten", ch: "Schweinsfilet" }),
-  ing("schinken", ["Kochschinken", "Cooked ham", "Jambon cuit", "Prosciutto cotto", "Jamón cocido"], "fleisch", "g", [110, 19, 1, 3.5], 200, 1.99, 7, "fleisch", { at: "Beinschinken" }),
-  ing("speck", ["Speckwürfel", "Bacon lardons", "Lardons", "Pancetta a cubetti", "Taquitos de beicon"], "fleisch", "g", [300, 15, 0.5, 27], 125, 1.49, 21, "fleisch"),
+  ing("schweinefilet", ["Schweinefilet", "Pork tenderloin", "Filet mignon de porc", "Filetto di maiale", "Solomillo de cerdo"], "fleisch", "g", [120, 21, 0, 4], 500, 6.99, 3, "fleisch", { at: "Schweinslungenbraten", ch: "Schweinsfilet", pork: true }),
+  ing("schinken", ["Kochschinken", "Cooked ham", "Jambon cuit", "Prosciutto cotto", "Jamón cocido"], "fleisch", "g", [110, 19, 1, 3.5], 200, 1.99, 7, "fleisch", { at: "Beinschinken", pork: true }),
+  ing("speck", ["Speckwürfel", "Bacon lardons", "Lardons", "Pancetta a cubetti", "Taquitos de beicon"], "fleisch", "g", [300, 15, 0.5, 27], 125, 1.49, 21, "fleisch", { pork: true }),
 
   // Fisch und Meeresfrüchte
   ing("lachs", ["Lachsfilet", "Salmon fillet", "Pavé de saumon", "Filetto di salmone", "Lomo de salmón"], "fisch", "g", [200, 20, 0, 13], 250, 4.49, 2, "fisch", fisch),
@@ -195,10 +197,10 @@ INGREDIENTS.push(
   ing("ricotta", ["Ricotta", "Ricotta", "Ricotta", "Ricotta", "Ricotta"], "milch_ei", "g", [140, 9, 3, 10], 250, 1.49, 7, "vegetarisch", laktose),
   ing("saure_sahne", ["Saure Sahne", "Sour cream", "Crème aigre", "Panna acida", "Nata agria"], "milch_ei", "g", [115, 3, 4, 10], 200, 0.79, 10, "vegetarisch", { ...laktose, at: "Sauerrahm", ch: "Saurer Halbrahm" }),
   ing("rindergulasch", ["Rindergulasch", "Beef stewing steak", "Bœuf à braiser", "Spezzatino di manzo", "Ternera para guisar"], "fleisch", "g", [135, 21, 0, 5.5], 500, 7.99, 2, "fleisch", { at: "Rindsgulasch", ch: "Rindsragout" }),
-  ing("hackfleisch_gemischt", ["Hackfleisch gemischt", "Mixed mince (beef & pork)", "Viande hachée mixte", "Macinato misto", "Carne picada mixta"], "fleisch", "g", [250, 18, 0, 20], 500, 3.99, 2, "fleisch", { at: "Faschiertes gemischt" }),
-  ing("schweineschnitzel", ["Schweineschnitzel", "Pork escalopes", "Escalopes de porc", "Scaloppine di maiale", "Escalopes de cerdo"], "fleisch", "g", [120, 22, 0, 3], 400, 4.99, 3, "fleisch", { at: "Schweinsschnitzel", ch: "Schweinsplätzli" }),
+  ing("hackfleisch_gemischt", ["Hackfleisch gemischt", "Mixed mince (beef & pork)", "Viande hachée mixte", "Macinato misto", "Carne picada mixta"], "fleisch", "g", [250, 18, 0, 20], 500, 3.99, 2, "fleisch", { at: "Faschiertes gemischt", pork: true }),
+  ing("schweineschnitzel", ["Schweineschnitzel", "Pork escalopes", "Escalopes de porc", "Scaloppine di maiale", "Escalopes de cerdo"], "fleisch", "g", [120, 22, 0, 3], 400, 4.99, 3, "fleisch", { at: "Schweinsschnitzel", ch: "Schweinsplätzli", pork: true }),
   ing("kalbfleisch", ["Kalbfleisch (geschnetzelt)", "Veal strips", "Émincé de veau", "Straccetti di vitello", "Ternera lechal en tiras"], "fleisch", "g", [110, 21, 0, 2.5], 400, 9.99, 2, "fleisch", { ch: "Kalbsgeschnetzeltes" }),
-  ing("bratwurst", ["Bratwürste", "Bratwurst sausages", "Saucisses à griller", "Salsicce bratwurst", "Salchichas bratwurst"], "fleisch", "stk", [290, 13, 1, 26], 4, 3.49, 7, "fleisch", { ch: "Bratwürste" }),
+  ing("bratwurst", ["Bratwürste", "Bratwurst sausages", "Saucisses à griller", "Salsicce bratwurst", "Salchichas bratwurst"], "fleisch", "stk", [290, 13, 1, 26], 4, 3.49, 7, "fleisch", { ch: "Bratwürste", pork: true }),
 );
 
 export const ingredientById = new Map(INGREDIENTS.map((i) => [i.id, i]));

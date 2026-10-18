@@ -12,7 +12,9 @@ function RootStack() {
       <Stack.Screen name="recipe/[id]" options={{ title: "" }} />
       <Stack.Screen name="recipe/edit" options={{ title: t("editor.newTitle"), presentation: "modal" }} />
       <Stack.Screen name="recipe/import" options={{ title: t("import.title"), presentation: "modal" }} />
-      <Stack.Screen name="settings" options={{ title: t("settings.title") }} />
+      <Stack.Screen name="settings" options={{ title: t("profile.settings") }} />
+      <Stack.Screen name="profile" options={{ title: t("profile.title") }} />
+      <Stack.Screen name="onboarding" options={{ title: t("onboarding.title"), presentation: "modal" }} />
     </Stack>
   );
 }

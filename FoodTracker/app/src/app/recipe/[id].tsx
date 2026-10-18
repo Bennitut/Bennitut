@@ -1,6 +1,6 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Alert, Linking, Text, View } from "react-native";
+import { Alert, Image, Linking, Text, View } from "react-native";
 import { Button, Card, ErrorText, Muted, NutrientRow, Screen, styles } from "../../components/ui";
 import { api } from "../../lib/api";
 import { communityCache } from "../../lib/communityCache";
@@ -11,6 +11,18 @@ import { useStore } from "../../lib/store";
 import type { Recipe } from "../../lib/types";
 
 const OWN_KINDS: Recipe["source"]["kind"][] = ["eigen", "import"];
+
+const PLATFORM_NAMES = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", web: "Web" } as const;
+
+/** Suchseiten der Plattformen; TikTok und Instagram bieten keine offene Video-API für Rezepte. */
+const searchLinks = (query: string) => {
+  const q = encodeURIComponent(query);
+  return [
+    { label: "YouTube", url: `https://www.youtube.com/results?search_query=${q}` },
+    { label: "TikTok", url: `https://www.tiktok.com/search?q=${q}` },
+    { label: "Instagram", url: `https://www.instagram.com/explore/search/keyword/?q=${q}` },
+  ];
+};
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,7 +48,10 @@ export default function RecipeDetailScreen() {
   const isFavorite = favoriteIds.includes(recipe.id);
   const communityId = shared[recipe.id];
   const author = recipe.source.kind === "community" ? recipe.source.author : null;
-  const sourceUrl = recipe.source.kind === "import" ? recipe.source.url : undefined;
+  const videos = recipe.media?.videos ?? [];
+  const importUrl = recipe.source.kind === "import" ? recipe.source.url : undefined;
+  const sourceUrl = importUrl && !videos.some((v) => v.url === importUrl) ? importUrl : undefined;
+  const image = recipe.media?.image;
 
   const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>) => {
     setBusy(kind);
@@ -106,6 +121,12 @@ export default function RecipeDetailScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: text.name }} />
+      {image ? (
+        <View style={{ gap: 4 }}>
+          <Image source={{ uri: image.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 14 }} resizeMode="cover" accessibilityIgnoresInvertColors />
+          {image.credit ? <Muted>{t("recipes.photoCredit", { credit: image.credit })}</Muted> : null}
+        </View>
+      ) : null}
       <Card>
         <Text style={styles.heading}>{text.name}</Text>
         <Muted>
@@ -128,6 +149,23 @@ export default function RecipeDetailScreen() {
           {sourceUrl ? <Button label={t("recipes.openOriginal")} variant="secondary" onPress={() => Linking.openURL(sourceUrl)} /> : null}
         </View>
         <ErrorText message={error} />
+      </Card>
+
+      <Card>
+        {videos.map((video) => (
+          <Button
+            key={video.url}
+            label={`${t("recipes.watchVideo")} · ${PLATFORM_NAMES[video.platform]}${video.author ? ` · ${video.author}` : ""}`}
+            onPress={() => Linking.openURL(video.url)}
+          />
+        ))}
+        {videos[0]?.title ? <Muted>{videos[0].title}</Muted> : null}
+        <Text style={styles.label}>{t("recipes.moreVideos")}</Text>
+        <View style={styles.chipRow}>
+          {searchLinks(`${text.name} ${t("recipes.searchSuffix")}`).map((link) => (
+            <Button key={link.label} label={link.label} variant="secondary" onPress={() => Linking.openURL(link.url)} />
+          ))}
+        </View>
       </Card>
 
       <Card title={t("recipes.ingredients")}>

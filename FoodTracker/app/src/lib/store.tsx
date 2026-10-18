@@ -8,7 +8,7 @@ import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount
 import type {
   DiaryEntry,
   Ingredient,
-  MealPlan,
+  MonthPlan,
   Order,
   PantryItem,
   PlannedMeal,
@@ -22,11 +22,11 @@ interface PersistedState {
   diary: DiaryEntry[];
   /** Lagerbestand in der Küche, je Einkauf ein Posten. */
   pantry: StockItem[];
-  plan: MealPlan | null;
+  plan: MonthPlan | null;
   /** Rezepte, die nur im aktuellen Plan vorkommen (z. B. KI-Vorschläge). */
   planRecipes: Recipe[];
-  /** Index der gegessenen Mahlzeiten im aktuellen Plan. */
-  eatenMeals: number[];
+  /** Gegessene Mahlzeiten im aktuellen Plan als "Tag:Mahlzeit". */
+  eatenMeals: string[];
   orders: Order[];
   /** Eigene und importierte Rezepte. */
   myRecipes: Recipe[];
@@ -61,6 +61,13 @@ function defaultSettings(): Settings {
     excludeIngredients: [],
     maxCookMinutes: 0,
     preferences: "",
+    onboarded: false,
+    rules: [],
+    goal: "halten",
+    body: null,
+    cuisines: [],
+    budget: "normal",
+    variety: "normal",
   };
 }
 
@@ -89,9 +96,13 @@ async function loadState(): Promise<PersistedState> {
   if (raw) {
     // Ältere Versionen speicherten auch den Katalog; der kommt jetzt immer aus der App.
     const { catalog: _oldCatalog, ...saved } = JSON.parse(raw) as Partial<PersistedState> & { catalog?: unknown };
+    // Pläne aus Versionen vor dem Monatsplan werden verworfen.
+    const plan = saved.plan && "weeks" in saved.plan ? saved.plan : null;
     return {
       ...base,
       ...saved,
+      plan,
+      eatenMeals: plan ? (saved.eatenMeals ?? []).filter((e): e is string => typeof e === "string") : [],
       pantry: migrateStock(saved.pantry ?? []),
       settings: { ...base.settings, ...saved.settings },
     };
@@ -125,9 +136,12 @@ interface Store extends PersistedState {
   addPantryItems: (items: PantryItem[]) => void;
   /** Setzt die Gesamtmenge einer Zutat im Vorrat (0 = entfernen). */
   setPantryAmount: (ingredientId: string, amount: number) => void;
-  setPlan: (plan: MealPlan, extraRecipes: Recipe[]) => void;
-  markMealEaten: (index: number, title: string) => void;
-  toggleLock: (index: number) => void;
+  setPlan: (plan: MonthPlan, extraRecipes: Recipe[]) => void;
+  markMealEaten: (meal: PlannedMeal, title: string) => void;
+  toggleLock: (meal: PlannedMeal) => void;
+  /** Nach dem Fragebogen soll der Plan-Tab gleich einen Plan erstellen. */
+  pendingPlan: boolean;
+  setPendingPlan: (pending: boolean) => void;
   saveOrder: (order: Order) => void;
   updateSettings: (settings: Partial<Settings>) => void;
   saveRecipe: (recipe: Recipe) => void;
@@ -142,6 +156,7 @@ const StoreContext = createContext<Store | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [ready, setReady] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState(false);
 
   useEffect(() => {
     loadState()
@@ -178,29 +193,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addPantryItems: (items) => setState((s) => ({ ...s, pantry: addToPantry(s.pantry, items) })),
       setPantryAmount: (ingredientId, amount) =>
         setState((s) => ({ ...s, pantry: setPantryAmount(s.pantry, ingredientId, Math.max(0, amount)) })),
+      pendingPlan,
+      setPendingPlan,
       setPlan: (plan, extraRecipes) =>
         setState((s) => {
           // KI-Rezepte aus dem alten Plan behalten, solange sie noch eingeplant sind.
-          const used = new Set(plan.meals.map((m) => m.recipeId));
+          const used = new Set(plan.weeks.flatMap((w) => w.meals.map((m) => m.recipeId)));
           const planRecipes = [...s.planRecipes, ...extraRecipes].filter((r) => used.has(r.id));
-          return { ...s, plan, planRecipes, eatenMeals: [] };
+          // Gegessenes bleibt markiert, wenn derselbe Monat neu geplant wurde.
+          const eatenMeals = s.plan?.startDate === plan.startDate ? s.eatenMeals : [];
+          return { ...s, plan, planRecipes, eatenMeals };
         }),
-      markMealEaten: (index, title) =>
+      markMealEaten: (meal, title) =>
         setState((s) => {
-          const meal: PlannedMeal | undefined = s.plan?.meals[index];
-          const recipe = meal && recipes.get(meal.recipeId);
-          if (!meal || !recipe || s.eatenMeals.includes(index)) return s;
+          const key = mealKey(meal);
+          const recipe = recipes.get(meal.recipeId);
+          if (!recipe || s.eatenMeals.includes(key)) return s;
           return {
             ...s,
-            eatenMeals: [...s.eatenMeals, index],
+            eatenMeals: [...s.eatenMeals, key],
             pantry: consumeMeal(s.pantry, meal, recipe),
             diary: [...s.diary, { id: newId(), date: today(), time: nowTime(), title, nutrients: meal.nutrientsPerPortion, source: "plan" }],
           };
         }),
-      toggleLock: (index) =>
+      toggleLock: (meal) =>
         setState((s) =>
           s.plan
-            ? { ...s, plan: { ...s.plan, meals: s.plan.meals.map((m, i) => (i === index ? { ...m, locked: !m.locked } : m)) } }
+            ? {
+                ...s,
+                plan: {
+                  ...s.plan,
+                  weeks: s.plan.weeks.map((w) => ({
+                    ...w,
+                    meals: w.meals.map((m) => (mealKey(m) === mealKey(meal) ? { ...m, locked: !m.locked } : m)),
+                  })),
+                },
+              }
             : s,
         ),
       saveOrder: (order) => setState((s) => ({ ...s, orders: [order, ...s.orders.filter((o) => o.id !== order.id)] })),
@@ -239,7 +267,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           translations: { ...s.translations, [recipeId]: { ...s.translations[recipeId], [language]: text } },
         })),
     };
-  }, [state, ready]);
+  }, [state, ready, pendingPlan]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }
@@ -249,3 +277,6 @@ export function useStore(): Store {
   if (!store) throw new Error("useStore muss innerhalb von StoreProvider verwendet werden");
   return store;
 }
+
+/** Eindeutiger Schlüssel einer geplanten Mahlzeit im Monat. */
+export const mealKey = (meal: Pick<PlannedMeal, "day" | "mealType">) => `${meal.day}:${meal.mealType}`;

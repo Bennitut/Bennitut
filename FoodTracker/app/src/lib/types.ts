@@ -1,24 +1,50 @@
 // Domain-Typen des Backends; reine Typ-Importe, im Bundle entfällt der Import.
 export type {
   Allergen,
+  Cuisine,
   Diet,
+  FoodRule,
   Ingredient,
   LockedMeal,
   MealPlan,
   MealType,
+  MonthPlan,
   Nutrients,
   PantryItem,
   PlannedMeal,
   Recipe,
   RecipeText,
+  RecipeVideo,
   ShoppingItem,
+  WeekPlan,
 } from "../../../server/src/types";
-import type { Allergen, Diet, MealType, Nutrients, Recipe } from "../../../server/src/types";
+import type { Allergen, Cuisine, Diet, FoodRule, MealType, Nutrients, Recipe } from "../../../server/src/types";
 import type { Region, UILanguage } from "../i18n";
 
 export const ALLERGENS: Allergen[] = ["gluten", "laktose", "ei", "nuesse", "erdnuss", "soja", "fisch", "krebstiere", "sellerie", "sesam"];
 export const DIETS: Diet[] = ["alles", "pescetarisch", "vegetarisch", "vegan"];
 export const MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner"];
+export const FOOD_RULES: FoodRule[] = ["halal", "koscher"];
+export const CUISINES: Cuisine[] = ["dach", "italienisch", "mediterran", "orientalisch", "indisch", "asiatisch", "mexikanisch", "international"];
+
+export type Goal = "abnehmen" | "halten" | "zunehmen" | "muskelaufbau";
+export const GOALS: Goal[] = ["abnehmen", "halten", "zunehmen", "muskelaufbau"];
+export type Activity = "wenig" | "mittel" | "viel";
+export const ACTIVITIES: Activity[] = ["wenig", "mittel", "viel"];
+export type Sex = "w" | "m" | "d";
+export const SEXES: Sex[] = ["w", "m", "d"];
+export type Budget = "guenstig" | "normal" | "egal";
+export const BUDGETS: Budget[] = ["guenstig", "normal", "egal"];
+export type Variety = "hoch" | "normal";
+export const VARIETIES: Variety[] = ["hoch", "normal"];
+
+export interface Body {
+  sex: Sex;
+  age: number;
+  heightCm: number;
+  weightKg: number;
+  activity: Activity;
+}
 
 export interface DiaryEntry {
   id: string;
@@ -90,4 +116,13 @@ export interface Settings {
   excludeIngredients: string[];
   maxCookMinutes: number;
   preferences: string;
+  /** Fragebogen zu Essgewohnheiten beantwortet. */
+  onboarded: boolean;
+  rules: FoodRule[];
+  goal: Goal;
+  /** Körperdaten für den Kalorienbedarf; null = Kalorien selbst festgelegt. */
+  body: Body | null;
+  cuisines: Cuisine[];
+  budget: Budget;
+  variety: Variety;
 }
