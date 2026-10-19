@@ -3,7 +3,7 @@
 --
 -- Erstinstallation:  wget run https://raw.githubusercontent.com/Bennitut/Bennitut/master/Minecraft/Computercraft/Dashboard/install.lua
 -- Spaeter:           install            (fragt, was installiert werden soll)
---                    install dashboard  (oder energie / farm / nbt)
+--                    install dashboard  (oder energie / farm / nbt / bienen)
 
 local BASE = "https://raw.githubusercontent.com/Bennitut/Bennitut/master/Minecraft/Computercraft/Dashboard/"
 
@@ -19,8 +19,10 @@ local PACKAGES = {
                 { ["farm/startup.lua"] = "startup.lua" } },
   nbt       = { "NBT Storage - Redstone-Signal beim NBT-Export",
                 { ["nbt-storage/startup.lua"] = "startup.lua" } },
+  bienen    = { "Bienen - taktet die Bienen-Factory (SFM) per Redstone",
+                { ["bienen/startup.lua"] = "startup.lua" } },
 }
-local ORDER = { "dashboard", "energie", "farm", "nbt" }
+local ORDER = { "dashboard", "energie", "farm", "nbt", "bienen" }
 
 -- Diese Dateien werden nur ersetzt, wenn die vorhandene zu alt ist
 local BACKUP = { ["config.lua"] = true }

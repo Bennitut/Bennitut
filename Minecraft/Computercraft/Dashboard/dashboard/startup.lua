@@ -1484,6 +1484,7 @@ function handleMsg(sender, msg, proto)
   f.on = newOn
   f.lastSeen = os.clock()
   f.pending = nil
+  noteBees(f, msg.bees)
   if isNew then ensureLayout() end
   if changed then saveFarmsLocal() end
   return true
@@ -1494,6 +1495,46 @@ function setFarm(f, on)
   f.pending = on
   f.pendingSince = os.clock()
   send(f.id, { type = "set", on = on })
+end
+
+-- Bienen-Factory: Werte vom Bienen-Computer merken, Elektroden-Warnung im Chat
+function noteBees(f, b)
+  if type(b) ~= "table" then f.bees = nil return end
+  local low = type(b.electrodes) == "number" and b.electrodes < (tonumber(b.warn) or 4)
+  if f.bees and low ~= (f.bees.low or false) then
+    if low then chat(string.format("%s: Elektroden knapp (%d im ME)", f.name, b.electrodes), "stock")
+    else chat(f.name .. ": Elektroden wieder ok", "stock") end
+  end
+  b.low = low
+  if f.bees and f.bees.pendingTicks and f.bees.pendingTicks ~= b.ticks
+     and os.clock() - (f.bees.pendingSince or 0) < 5 then
+    b.pendingTicks, b.pendingSince = f.bees.pendingTicks, f.bees.pendingSince
+  end
+  f.bees = b
+end
+
+-- Takt der Bienen-Factory eine Stufe schneller (dir = -1) oder langsamer (dir = 1)
+function setBeeTicks(f, dir)
+  local steps = { 2, 4, 5, 10, 20, 40, 60, 100, 200 }
+  local cur = f.bees.pendingTicks or tonumber(f.bees.ticks) or 20
+  local idx = 1
+  for i, s in ipairs(steps) do if s <= cur then idx = i end end
+  if steps[idx] ~= cur and dir < 0 then idx = idx + 1 end
+  local t = steps[clamp(idx + dir, 1, #steps)]
+  f.bees.pendingTicks, f.bees.pendingSince = t, os.clock()
+  send(f.id, { type = "set", ticks = t })
+end
+
+function beeInfo(b)
+  local s = ""
+  if b.me then
+    s = "Honig " .. (type(b.honey) == "number" and (fmtNum(b.honey / 1000) .. " B") or "?")
+    if type(b.honeyRate) == "number" then
+      s = s .. string.format(" (%s%s/min)", b.honeyRate >= 0 and "+" or "", fmtNum(b.honeyRate / 1000))
+    end
+    s = s .. "  Elektroden " .. (type(b.electrodes) == "number" and fmtNum(b.electrodes) or "?")
+  end
+  return s
 end
 
 -- Ordner-Hilfen ------------------------------------------------------
@@ -2845,7 +2886,25 @@ function drawFarms()
         local bw = clamp(math.floor(W / 4), 6, 14)
         local toggle = function() setFarm(f, not f.on) end
         addButton(1, y1, W, y2, toggle)
-        put(x0, my, fit(f.name, W - bw - #status - 3 - x0), colors.white, bg)
+        local nameW = W - bw - #status - 3 - x0
+        if f.bees then
+          -- Bienen-Factory: Takt [-] 20t [+] vor dem Status, Werte darunter bzw. dahinter
+          local cx = W - bw - #status - 3
+          local tk = f.bees.pendingTicks or f.bees.ticks
+          local tkCol = f.bees.pendingTicks and colors.yellow or colors.cyan
+          drawButton(cx - 3, y1, cx - 1, y2, "+", colors.white, colors.blue, function() setBeeTicks(f, -1) end)
+          put(cx - 8, my, string.format("%4st", tostring(tk or "?")), tkCol, bg)
+          drawButton(cx - 12, y1, cx - 10, y2, "-", colors.white, colors.blue, function() setBeeTicks(f, 1) end)
+          nameW = cx - 13 - x0
+          local inf = beeInfo(f.bees)
+          local infCol = f.bees.low and colors.orange or colors.lightGray
+          if rowH >= 3 then
+            put(x0, y2, fit(inf, cx - 13 - x0), infCol, bg)
+          elseif #f.name + 2 + #inf <= nameW then
+            put(x0 + #f.name + 2, my, inf, infCol, bg)
+          end
+        end
+        put(x0, my, fit(f.name, nameW), colors.white, bg)
         put(W - bw - #status - 2, my, status, on and colors.lime or colors.red, bg)
         local label, bcol
         if f.pending ~= nil then label, bcol = "...", colors.yellow

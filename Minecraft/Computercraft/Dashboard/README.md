@@ -18,6 +18,7 @@ Danach auswählen, was der Computer sein soll:
 | 2   | `energie`   | Energie-Sender, z. B. am Draconic Core                         |
 | 3   | `farm`      | Schaltet eine Farm per Redstone                               |
 | 4   | `nbt`       | NBT Storage: Redstone AN während des NBT-Exports, danach AUS  |
+| 5   | `bienen`    | Bienen-Factory: taktet das SFM-Programm per Redstone-Puls     |
 
 Updates später einfach mit `install` (oder `install farm` usw.). Das Dashboard hat dafür den UPDATE-Knopf.
 
@@ -25,7 +26,7 @@ Updates später einfach mit `install` (oder `install farm` usw.). Das Dashboard 
 
 - `install.lua` – Installer, lädt die Dateien aus diesem Repository
 - `dashboard/` – `startup.lua`, `config.lua`, `scan.lua`
-- `energie/`, `farm/`, `nbt-storage/` – je eine `startup.lua`
+- `energie/`, `farm/`, `nbt-storage/`, `bienen/` – je eine `startup.lua`
 
 ## NBT-Export
 
@@ -39,3 +40,16 @@ NBT Storage nicht, wird nicht exportiert. Einstellbar im Reiter EINSTELLUNGEN.
 - NBT Storage: optionaler Monitor mit Signal-Status und Log (Signal AN/AUS, exportierte Items)
 - Neben-Dashboards übernehmen Zeitzone, Farben, Titel, Chat- und NBT-Einstellungen vom
   Haupt-Dashboard; Änderungen dort werden ans Haupt-Dashboard weitergegeben
+
+## Bienen-Factory (Modular Bees + Super Factory Manager)
+
+Der Computer **Bienen** steht direkt am Factory Manager und gibt Redstone-Pulse. Das
+SFM-Programm nutzt `EVERY REDSTONE PULSE DO`, jeder Puls ist also ein Durchlauf.
+AUS = keine Pulse = Factory steht.
+
+- Takt (Ticks zwischen den Pulsen: 2, 4, 5, 10, 20, 40, 60, 100, 200) mit `-`/`+` am Monitor
+  des Bienen-Computers, am Computer selbst (Tasten `-`/`+`) oder im Dashboard
+- Optional ME Bridge am Bienen-Computer: Honig im ME (alle Fluids mit „honey“) samt Rate,
+  Elektroden im ME (alle Items mit „electrode“), Warnung wenn knapp
+- Dashboard, Reiter FARMEN: Zeile mit AN/AUS, Takt `-`/`+`, Honig und Elektroden.
+  Elektroden knapp → Chat-Meldung (Meldungsart „Lager“). Lag-Schutz schaltet die Factory mit ab.
