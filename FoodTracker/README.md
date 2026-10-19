@@ -1,0 +1,189 @@
+# FoodTracker
+
+App für iOS und Android zum Tracken von Essen, mit automatischen Ernährungsplänen,
+die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutschland,
+Österreich und die Schweiz, dank Übersetzungsfunktion weltweit nutzbar.
+
+## Funktionen
+
+| Bereich | Was passiert |
+|---|---|
+| **Foto einer Mahlzeit** | Claude erkennt die Lebensmittel, schätzt Mengen und Nährwerte → Eintrag im Tagebuch. |
+| **Foto eines Kassenbons** | Claude liest jede Position (REWE, BILLA, Migros …), ordnet sie Zutaten zu und rechnet Mengen um → Vorrat. |
+| **Fragebogen** | Beim ersten Planen fragt die App nach Ernährungsweise (alles, pescetarisch, vegetarisch, vegan), religiösen Speiseregeln (halal, koscher), Unverträglichkeiten, Abneigungen, Ziel und Körperdaten (daraus der Kalorienbedarf), Personen, Mahlzeiten, Kochzeit, Lieblingsküchen, Budget und Abwechslung. |
+| **Monatsplan** | Plant immer 30 Tage in vier Wochenblöcken mit je eigener Einkaufsliste; Reste und Vorräte einer Woche gehen in die nächste. Der Plan richtet sich nach den Antworten aus dem Fragebogen. Optional schlägt Claude neue Rezepte nach Wunsch vor. |
+| **Profil (👤)** | Ernährungshistorie (7/30 Tage mit Kalorien pro Tag, Durchschnitt, Makros, häufigste Gerichte), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
+| **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
+| **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
+| **Konten & Rollen** | Anmeldung mit Apple oder Google (optional – die App funktioniert auch anonym). Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
+| **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
+| **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
+| **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
+| **Instagram & TikTok** | Link zu einem Koch-Video einfügen → Claude liest Beschreibung, Vorschaubild und (optional) Einzelbilder aus dem gespeicherten Video und macht daraus ein Rezept mit Mengen. |
+| **Community** | Eigene Rezepte teilen, Rezepte anderer entdecken (beliebt/neu) und als Favorit speichern. Favoriten zählen als „Likes“. |
+| **Zero Waste** | Rezepte werden so kombiniert, dass gekaufte Packungen aufgebraucht werden; vorhandene Vorräte kommen zuerst dran; Verderbliches wird nur innerhalb der Haltbarkeit eingeplant; Reste geöffneter Dosen zählen als Verschwendung. Was trotzdem übrig wäre, wird als „♻️ Reste mitverwenden“ auf passende Gerichte verteilt. |
+| **Vorrat** | Eigener Tab mit dem aktuellen Lagerbestand der Küche, nach Kategorien sortiert, mit geschätzter Resthaltbarkeit („bald verbrauchen“), Mengen zum Nachzählen und Rezeptvorschlägen, die mit dem Vorhandenen kochbar sind. |
+| **Lieferdienst** | Die Einkaufsliste wird mit einem Tipp bestellt. Gelieferte Ware landet automatisch im Vorrat. |
+| **Automatisches Tracking** | Hakt man eine geplante Mahlzeit als „Gegessen“ ab, wird sie ins Tagebuch übernommen und die Zutaten werden vom Vorrat abgezogen. |
+
+Kreislauf: **Plan → Einkaufsliste → Bestellung → Vorrat → Kochen/Essen → Tagebuch.**
+
+## Sprachen und Regionen
+
+- **Oberfläche:** Deutsch, Englisch, Französisch, Italienisch, Spanisch – automatisch nach Gerätesprache, umstellbar unter 👤 Profil → Sprache & Region. Fehlende Übersetzungen fallen beim Kompilieren auf.
+- **Regionale Begriffe:** In Österreich heißen Zutaten z. B. Erdäpfel, Paradeiser, Topfen, Schlagobers, Karfiol; in der Schweiz Rüebli, Poulet, Peperoni, Vollrahm, Randen – und es wird „ss“ statt „ß“ geschrieben.
+- **Währung:** Euro für Deutschland/Österreich, Franken für die Schweiz (Richtpreise).
+- **Rezepte übersetzen:** Jedes Rezept (auch eigene, importierte und Community-Rezepte) lässt sich per 🌐 von Claude in die eigene Sprache übersetzen; die Übersetzung wird gespeichert.
+- **Neue Sprache hinzufügen:** `cd server && npm run translate-ui -- pt "Português"` lässt Claude die komplette Oberfläche übersetzen, prüft Schlüssel und Platzhalter und legt `app/src/i18n/pt.ts` an. Danach die Sprache in `app/src/i18n/index.ts` eintragen. Bitte von Muttersprachler:innen gegenlesen lassen.
+
+## Aufbau
+
+```
+FoodTracker/
+├── app/      Expo / React Native App (iOS + Android, TypeScript, Expo Router)
+│   ├── src/app/(tabs)/   Heute, Erfassen, Plan, Rezepte, Vorrat, Einkauf
+│   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
+│   ├── src/app/recipe/   Rezept-Detail, Editor, Import
+│   └── src/i18n/         Übersetzungen (de, en, fr, it, es)
+└── server/   Backend (Node, Hono, TypeScript)
+    ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
+    ├── src/ai/           Claude: Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge
+    ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
+    ├── src/community/    Geteilte Rezepte und Favoriten
+    ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
+    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und Video-Link
+    └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
+```
+
+Der API-Schlüssel für Claude liegt nur auf dem Server; die App spricht ausschließlich mit dem Backend.
+
+## Starten
+
+Voraussetzungen: Node.js 22+, für die App die **Expo Go**-App auf dem Handy oder ein iOS-/Android-Simulator.
+
+```bash
+# Backend
+cd server
+npm install
+export ANTHROPIC_API_KEY=sk-ant-...   # für Fotos, Kassenbons, Import, Übersetzung, KI-Rezepte
+export META_OEMBED_TOKEN=...          # optional: Instagram-oEmbed (APP_ID|CLIENT_TOKEN einer Meta-App)
+npm start                              # http://localhost:3000, Community-Rezepte in data/community.json, Fotos/Bewertungen in data/feedback.json
+
+# App (zweites Terminal)
+cd app
+npm install
+npx expo start
+```
+
+QR-Code mit der Kamera (iOS) bzw. Expo Go (Android) scannen. Handy und Rechner müssen im selben WLAN sein.
+Die App findet den Server automatisch (gleicher Rechner, Port 3000). Für einen anderen Server:
+`EXPO_PUBLIC_API_URL=http://<adresse>:3000 npx expo start`.
+
+**Ohne Server** funktionieren Rezepte, Ernährungsplan, Tauschen/Fixieren, Vorrat und Tagebuch trotzdem:
+Katalog und Zero-Waste-Planer sind in die App eingebaut. Den Server braucht man nur für Foto-/Bon-Erkennung,
+KI-Rezepte, Import, Übersetzen, Community und Bestellungen.
+
+**Windows: „Keine Verbindung zum Server“** – meist blockiert die Windows-Firewall Port 3000.
+Einmalig in einer PowerShell **als Administrator**:
+
+```powershell
+New-NetFirewallRule -DisplayName "FoodTracker Server" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+```
+
+Für App-Store-/Play-Store-Builds: `npx eas-cli@latest build --platform all`.
+
+## Tests
+
+```bash
+cd server && npm test && npm run typecheck
+cd app && npm run typecheck
+```
+
+## Wie der Zero-Waste-Planer arbeitet
+
+1. Für jede Mahlzeit kommen nur Rezepte in Frage, die zu Mahlzeit, Ernährungsform, Allergien,
+   Abneigungen und Kochzeit passen. Fixierte Gerichte bleiben, wo sie sind.
+2. Eine Kostenfunktion bewertet einen Plan: übrig bleibende Anteile verderblicher Packungen
+   (stark gewichtet), ungenutzte Vorräte, Einplanung nach Ablauf der Haltbarkeit,
+   Abweichung vom Kalorienziel, Wiederholungen und Preis. Lieblingsrezepte bringen einen Bonus.
+3. Simulated Annealing (Rezept austauschen / zwei Mahlzeiten tauschen) mit mehreren Neustarts
+   und festem Seed minimiert diese Kosten – reproduzierbar und unter 0,5 s.
+4. Portionsgrößen werden pro Tag so skaliert (0,7–1,5×), dass der Kalorienbedarf passt.
+5. Was danach noch übrig wäre, wird auf Gerichte verteilt, die die Zutat schon enthalten
+   (max. +50 % pro Gericht und höchstens bis 115 % des Kalorienziels pro Tag).
+6. Reste, die über das Planende hinaus noch mindestens eine Woche halten (Karotten, Kartoffeln,
+   Reis …), gehen in den Vorrat und werden im nächsten Plan zuerst verbraucht.
+
+Der Monatsplan besteht aus vier Blöcken (7, 7, 8 und 8 Tage). Jeder Block wird so geplant und
+bekommt die haltbaren Reste und den Vorrat des vorherigen Blocks; Gerichte der Vorwoche werden
+etwas seltener gewählt, damit der Monat abwechslungsreich bleibt. Beim Tauschen wird nur ab der
+betroffenen Woche neu geplant. Auf dem Handy rechnet die App Woche für Woche mit Fortschrittsanzeige.
+
+Über 60 Testpläne (1–4 Personen, verschiedene Ernährungsformen) bleiben im Schnitt 0,3 %
+der verderblichen Einkäufe übrig, im schlechtesten Fall 4 %.
+
+## Anmeldung und Admins einrichten
+
+Der Server liest diese Umgebungsvariablen:
+
+| Variable | Bedeutung |
+|---|---|
+| `ADMIN_EMAILS` | Kommagetrennte E-Mail-Adressen, die bei der Anmeldung automatisch Admin werden (z. B. deine eigene). Weitere Admins vergibst du danach im Admin-Bereich. |
+| `APPLE_BUNDLE_IDS` | Bundle-IDs für „Mit Apple anmelden“. Standard `host.exp.Exponent` (Expo Go); für die eigene App `com.bennitut.foodtracker` ergänzen. |
+| `GOOGLE_CLIENT_IDS` | OAuth-Client-IDs aus der Google Cloud Console (iOS, Android, Web), kommagetrennt. |
+| `ALLOW_DEV_LOGIN` | `1` erlaubt eine Test-Anmeldung nur mit Name/E-Mail – **nur zum Ausprobieren, nie auf einem öffentlichen Server**. |
+
+In der App kommen die Google-Client-IDs aus `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
+und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
+
+- **Apple** funktioniert auf dem iPhone auch in Expo Go. Für die eigene App braucht es die Funktion „Sign in with Apple“
+  im Apple-Developer-Konto (in `app.json` schon aktiviert).
+- **Google** braucht einen eigenen Build der App (`npx expo run:ios` bzw. EAS Build) und die Client-IDs; in Expo Go
+  ist die Google-Anmeldung nicht möglich.
+- Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → Anmelden
+  die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
+
+Konten, Sitzungen und Admin-Änderungen an Rezepten liegen in `data/users.json` und `data/recipe-overrides.json`.
+
+## Instagram und TikTok
+
+Die Plattformen erlauben kein offizielles Herunterladen von Videos. Der Import nutzt deshalb:
+
+- **TikTok:** die öffentliche oEmbed-Schnittstelle (Beschreibung + Vorschaubild, ohne Schlüssel).
+- **Instagram:** oEmbed mit Meta-App-Token, sonst die Vorschau-Metadaten der Seite. Je nach Beitrag
+  liefert Instagram ohne Anmeldung wenig – dann die Caption in das Textfeld kopieren.
+- **Gespeichertes Video (beide):** Die App schneidet 6 Einzelbilder aus dem Video, Claude liest
+  daraus Texteinblendungen und Zutaten.
+
+Der Server ruft nur Instagram-, TikTok- und deren Bild-Server über HTTPS ab, auch bei
+Weiterleitungen (Schutz vor Server-Side Request Forgery).
+
+## Lieferdienste anbinden
+
+Lebensmittel-Lieferdienste (REWE, Knuspr, Picnic, Flink in Deutschland; BILLA, gurkerl.at in
+Österreich; Migros, Coop in der Schweiz) bieten keine offenen Bestell-Schnittstellen; eine
+echte Anbindung braucht einen Partnervertrag mit dem Anbieter. Dafür gibt es das Interface
+`DeliveryProvider` in `server/src/delivery/providers.ts`: pro Anbieter eine Klasse mit
+`createCart` (Warenkorb anlegen, Checkout-Link zurückgeben) und `getOrder` (Lieferstatus).
+Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
+
+## Grenzen dieser Version
+
+- Konten, Community-Rezepte, Fotos und Bewertungen liegen in JSON-Dateien; für den echten Betrieb gehört das in
+  eine Datenbank (und Fotos in einen Bildspeicher). Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
+- Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
+- Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
+  Fotos stammen aus freien Lizenzen (CC0, Public Domain, CC BY, CC BY-SA, über Openverse von Wikimedia Commons
+  und Flickr); Urheber und Lizenz stehen unter dem Foto und verlinken die Quelle. Noch nicht jedes Rezept hat ein Foto.
+  YouTube-Videos werden nur verlinkt. TikTok und Instagram bieten keine offene Suche; dafür gibt es Suchlinks.
+- Halal/koscher prüft die Zutaten (kein Schweinefleisch, kein Fleisch mit Milch bzw. Meeresfrüchte bei koscher);
+  ob Fleisch zertifiziert ist, muss man beim Einkauf selbst beachten.
+- Rezepttexte im Katalog gibt es auf Deutsch und Englisch; andere Sprachen übersetzt Claude auf Knopfdruck.
+
+## Nächste Schritte
+
+- Echten Lieferdienst-Partner anbinden
+- Nutzerkonten und Synchronisierung zwischen Geräten
+- Zutatenkatalog an eine Produktdatenbank (z. B. Open Food Facts) anbinden, Barcode-Scan
+- „Teilen“-Menü von Instagram/TikTok direkt in die App (Share Extension)
+- Mehrere Lieferungen pro Plan für sehr verderbliche Zutaten (Fisch, Fleisch)
