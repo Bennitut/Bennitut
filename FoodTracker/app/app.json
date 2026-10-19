@@ -8,7 +8,8 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bennitut.foodtracker"
+      "bundleIdentifier": "com.bennitut.foodtracker",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -45,7 +46,9 @@
           ]
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "scheme": "foodtracker"
   }

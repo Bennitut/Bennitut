@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 
-const app = createApp({ communityFile: null });
+const app = createApp({
+  communityFile: null,
+  auth: { appleAudiences: ["host.exp.Exponent"], googleAudiences: [], adminEmails: ["chefin@example.com"], allowDevLogin: true },
+});
 const DEVICE_A = "device-aaaaaaaa";
 const DEVICE_B = "device-bbbbbbbb";
 
@@ -12,6 +15,14 @@ const request = (method: string, path: string, body?: unknown, device = DEVICE_A
     headers: { "Content-Type": "application/json", "X-Device-Id": device },
   });
 const post = (path: string, body: unknown, device?: string) => request("POST", path, body, device);
+/** Anfrage mit Sitzungstoken eines angemeldeten Kontos. */
+const authed = (token: string, method: string, path: string, body?: unknown) =>
+  app.request(path, {
+    method,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: { "Content-Type": "application/json", "X-Device-Id": DEVICE_A, Authorization: `Bearer ${token}` },
+  });
+const devLogin = async (name: string, email?: string) => (await (await post("/api/auth/dev", { name, email })).json()) as { token: string; user: { id: string; role: string } };
 
 const ownRecipe = {
   id: "eigen_1",
@@ -151,8 +162,82 @@ describe("Bewertungen, Fotos und Meldungen", () => {
     expect((await post("/api/recipes/linsen_dal/flags", { reason: "image", note: "Foto zeigt ein Restaurant" })).status).toBe(204);
     await post("/api/recipes/linsen_dal/flags", { reason: "text" }, DEVICE_B);
     expect((await post("/api/recipes/linsen_dal/flags", { reason: "egal" })).status).toBe(400);
-    const flags = await (await request("GET", "/api/recipes/flags")).json();
+    // Meldungen sehen nur Admins.
+    expect((await request("GET", "/api/recipes/flags")).status).toBe(401);
+    const { token } = await devLogin("Chefin", "chefin@example.com");
+    const flags = await (await authed(token, "GET", "/api/recipes/flags")).json();
     expect(flags[0]).toMatchObject({ recipeId: "linsen_dal", count: 2, reasons: { image: 1, text: 1 }, notes: ["Foto zeigt ein Restaurant"] });
+  });
+});
+
+describe("Konten, Rollen und Admin-Bereich", () => {
+  it("meldet an, liefert das eigene Konto und meldet ab", async () => {
+    const { token, user } = await devLogin("Mia", "mia@example.com");
+    expect(user.role).toBe("user");
+    const me = await (await authed(token, "GET", "/api/auth/me")).json();
+    expect(me).toMatchObject({ name: "Mia", email: "mia@example.com", role: "user", provider: "dev" });
+    expect((await authed(token, "PATCH", "/api/auth/me", { name: "Mia K." })).status).toBe(200);
+    expect((await authed(token, "POST", "/api/auth/logout")).status).toBe(204);
+    expect((await authed(token, "GET", "/api/auth/me")).status).toBe(401);
+  });
+
+  it("lehnt ungültige Apple-Tokens ab und meldet fehlende Google-Konfiguration", async () => {
+    expect((await post("/api/auth/apple", { identityToken: "kein.gueltiges.token" })).status).toBe(401);
+    expect((await post("/api/auth/google", { idToken: "kein.gueltiges.token" })).status).toBe(501);
+  });
+
+  it("zeigt im Nutzerverzeichnis keine E-Mail-Adressen", async () => {
+    const { token } = await devLogin("Paul", "paul@example.com");
+    expect((await request("GET", "/api/users")).status).toBe(401);
+    const list = await (await authed(token, "GET", "/api/users")).json();
+    expect(list.some((u: { name: string }) => u.name === "Paul")).toBe(true);
+    expect(JSON.stringify(list)).not.toContain("@example.com");
+  });
+
+  it("lässt nur Admins Rollen vergeben, sperren und den letzten Admin nicht entmachten", async () => {
+    const admin = await devLogin("Chefin", "chefin@example.com");
+    expect(admin.user.role).toBe("admin");
+    const normal = await devLogin("Nora", "nora@example.com");
+    expect((await authed(normal.token, "GET", "/api/admin/users")).status).toBe(403);
+
+    const all = await (await authed(admin.token, "GET", "/api/admin/users")).json();
+    expect(all.find((u: { id: string }) => u.id === normal.user.id).email).toBe("nora@example.com");
+
+    expect((await authed(admin.token, "PATCH", `/api/admin/users/${admin.user.id}`, { role: "user" })).status).toBe(400);
+    const promoted = await (await authed(admin.token, "PATCH", `/api/admin/users/${normal.user.id}`, { role: "admin" })).json();
+    expect(promoted.role).toBe("admin");
+    await authed(admin.token, "PATCH", `/api/admin/users/${normal.user.id}`, { role: "user", blocked: true });
+    // Gesperrte Konten verlieren ihre Sitzung und können sich nicht mehr anmelden.
+    expect((await authed(normal.token, "GET", "/api/auth/me")).status).toBe(401);
+    expect((await post("/api/auth/dev", { name: "Nora", email: "nora@example.com" })).status).toBe(403);
+  });
+
+  it("lässt Admins Katalogrezepte ändern und ausblenden", async () => {
+    const admin = await devLogin("Chefin", "chefin@example.com");
+    const normal = await devLogin("Ben", "ben@example.com");
+    expect((await authed(normal.token, "PUT", "/api/admin/recipes/shakshuka", { name: "X" })).status).toBe(403);
+    expect((await authed(admin.token, "PUT", "/api/admin/recipes/shakshuka", { name: "Shakshuka (neu)", cookMinutes: 20 })).status).toBe(200);
+    expect((await authed(admin.token, "PUT", "/api/admin/recipes/linsen_dal", { hidden: true })).status).toBe(200);
+    expect((await authed(admin.token, "PUT", "/api/admin/recipes/gibt_es_nicht", { name: "X" })).status).toBe(404);
+
+    const overrides = await (await request("GET", "/api/recipes/overrides")).json();
+    expect(overrides.shakshuka.patch).toEqual({ name: "Shakshuka (neu)", cookMinutes: 20 });
+    const catalog = await (await request("GET", "/api/catalog")).json();
+    expect(catalog.recipes.find((r: { id: string }) => r.id === "shakshuka").name).toBe("Shakshuka (neu)");
+    expect(catalog.recipes.some((r: { id: string }) => r.id === "linsen_dal")).toBe(false);
+
+    expect((await authed(admin.token, "DELETE", "/api/admin/recipes/linsen_dal")).status).toBe(204);
+    const restored = await (await request("GET", "/api/catalog")).json();
+    expect(restored.recipes.some((r: { id: string }) => r.id === "linsen_dal")).toBe(true);
+  });
+
+  it("lässt Admins fremde Fotos und Community-Rezepte entfernen", async () => {
+    const admin = await devLogin("Chefin", "chefin@example.com");
+    const photo = await (await post("/api/recipes/minestrone/photos", { uri: "data:image/jpeg;base64,/9j/4AAQ" }, DEVICE_B)).json();
+    const shared = await (await post("/api/community/recipes", { authorName: "Tom", recipe: ownRecipe }, DEVICE_B)).json();
+    expect((await post("/api/admin/photos", {})).status).toBe(404);
+    expect((await authed(admin.token, "DELETE", `/api/admin/photos/${photo.id}`)).status).toBe(204);
+    expect((await authed(admin.token, "DELETE", `/api/admin/community/${shared.id}`)).status).toBe(204);
   });
 });
 

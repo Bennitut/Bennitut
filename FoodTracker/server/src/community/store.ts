@@ -85,6 +85,19 @@ export class CommunityStore {
     return true;
   }
 
+  /** Für Admins: beliebiges geteiltes Rezept entfernen. */
+  removeAsAdmin(id: string): boolean {
+    const before = this.recipes.length;
+    this.recipes = this.recipes.filter((r) => r.id !== id);
+    if (this.recipes.length === before) return false;
+    this.save();
+    return true;
+  }
+
+  count(authorId: string): number {
+    return this.recipes.filter((r) => r.authorId === authorId).length;
+  }
+
   private view(r: CommunityRecipe, deviceId: string): CommunityRecipeView {
     return {
       id: r.id,

@@ -138,6 +138,24 @@ export class FeedbackStore {
     return true;
   }
 
+  /** Für Admins: neueste Fotos aller Rezepte zur Kontrolle. */
+  recentPhotos(deviceId: string, limit = 60): PhotoView[] {
+    return [...this.data.photos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit).map((p) => this.photoView(p, deviceId));
+  }
+
+  /** Für Admins: beliebiges Foto entfernen. */
+  removePhotoAsAdmin(photoId: string): boolean {
+    const before = this.data.photos.length;
+    this.data.photos = this.data.photos.filter((p) => p.id !== photoId);
+    if (this.data.photos.length === before) return false;
+    this.save();
+    return true;
+  }
+
+  photoCount(authorId: string): number {
+    return this.data.photos.filter((p) => p.authorId === authorId).length;
+  }
+
   rateRecipe(deviceId: string, recipeId: string, stars: number): RatingView {
     const ratings = (this.data.recipeRatings[recipeId] ??= {});
     ratings[deviceId] = stars;
@@ -152,6 +170,14 @@ export class FeedbackStore {
   flag(deviceId: string, recipeId: string, reason: FlagReason, note: string) {
     this.data.flags.push({ id: randomUUID(), recipeId, authorId: deviceId, reason, note, createdAt: new Date().toISOString() });
     this.save();
+  }
+
+  /** Meldungen zu einem Rezept als erledigt entfernen. */
+  resolveFlags(recipeId: string): number {
+    const before = this.data.flags.length;
+    this.data.flags = this.data.flags.filter((f) => f.recipeId !== recipeId);
+    this.save();
+    return before - this.data.flags.length;
   }
 
   /** Gemeldete Rezepte zum späteren Verbessern, die häufigsten zuerst. */
