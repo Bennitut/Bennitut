@@ -137,7 +137,7 @@ export const en: Dictionary = {
     replanHint: "Locked 🔒 dishes stay; everything else is arranged so nothing goes to waste.",
     summary: "Summary",
     statWaste: "Waste",
-    statPrice: "Monthly shopping",
+    statPrice: "estimated monthly shopping",
     approx: "approx. {price}",
     statMeals: "Meals",
     statKcal: "kcal per day",

@@ -137,7 +137,7 @@ export const it: Dictionary = {
     replanHint: "I piatti bloccati 🔒 restano; il resto viene distribuito in modo da non sprecare nulla.",
     summary: "Riepilogo",
     statWaste: "Sprechi",
-    statPrice: "Spesa del mese",
+    statPrice: "spesa mensile stimata",
     approx: "ca. {price}",
     statMeals: "Pasti",
     statKcal: "kcal al giorno",

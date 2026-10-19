@@ -63,7 +63,7 @@ interface GalleryItem {
 }
 
 export function PhotoGallery({ recipe }: { recipe: Recipe }) {
-  const { myPhotos, addMyPhoto, updateMyPhoto, removeMyPhoto, settings } = useStore();
+  const { myPhotos, addMyPhoto, updateMyPhoto, removeMyPhoto, settings, ready } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
   const [remote, setRemote] = useState<RecipePhoto[]>([]);
@@ -72,9 +72,10 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Erst nach dem Laden des Zustands abfragen, sonst fehlt die Geräte-ID.
   useEffect(() => {
-    api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
-  }, [recipe.id]);
+    if (ready) api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
+  }, [recipe.id, ready]);
 
   const mine = myPhotos.filter((p) => p.recipeId === recipe.id);
   const ownRemoteIds = new Set(mine.map((p) => p.remoteId).filter(Boolean));

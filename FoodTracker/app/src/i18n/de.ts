@@ -137,7 +137,7 @@ export const de = {
     replanHint: "Fixierte 🔒 Gerichte bleiben, der Rest wird so verteilt, dass keine Reste entstehen.",
     summary: "Zusammenfassung",
     statWaste: "Reste",
-    statPrice: "Einkauf im Monat",
+    statPrice: "geschätzter Einkauf im Monat",
     approx: "ca. {price}",
     statMeals: "Mahlzeiten",
     statKcal: "kcal pro Tag",

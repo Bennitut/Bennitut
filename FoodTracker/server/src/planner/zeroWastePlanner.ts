@@ -51,8 +51,9 @@ const WEIGHTS = {
   spoilage: 50,
   repeat: 40,
   sameAsYesterday: 1.5,
+  sameDay: 8, // dasselbe Gericht zweimal am selben Tag (z. B. mittags und abends)
   price: 0.05, // pro Euro
-  preferredCuisine: 1.5, // Bonus pro Mahlzeit aus einer bevorzugten Küche
+  preferredCuisine: 3, // Bonus pro Mahlzeit aus einer bevorzugten Küche
   recent: 3, // Malus pro Mahlzeit, die schon im Vorplan dran war
   protein: 4, // Bonus pro Mahlzeit, gewichtet nach Eiweißanteil (nur bei Eiweiß-Fokus)
   favoriteFirst: 12, // Bonus, wenn ein Lieblingsrezept mindestens einmal vorkommt
@@ -290,6 +291,12 @@ function evaluateAssignment(
   const perDay = request.mealTypes.length;
   for (let i = perDay; i < assignment.length; i++) {
     if (assignment[i] === assignment[i - perDay]) cost += WEIGHTS.sameAsYesterday;
+  }
+  // Slots sind nach Tagen sortiert: Doppelte innerhalb eines Tages vermeiden.
+  for (let start = 0; start < assignment.length; start += perDay) {
+    for (let a = start; a < start + perDay; a++) {
+      for (let b = a + 1; b < start + perDay; b++) if (assignment[a] === assignment[b]) cost += WEIGHTS.sameDay;
+    }
   }
 
   for (const [id, amount] of needed) {

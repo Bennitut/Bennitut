@@ -137,7 +137,7 @@ export const es: Dictionary = {
     replanHint: "Los platos fijados 🔒 se mantienen; el resto se reparte para que no sobre nada.",
     summary: "Resumen",
     statWaste: "Desperdicio",
-    statPrice: "Compra del mes",
+    statPrice: "compra mensual estimada",
     approx: "aprox. {price}",
     statMeals: "Comidas",
     statKcal: "kcal al día",

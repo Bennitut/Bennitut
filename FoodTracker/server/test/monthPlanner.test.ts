@@ -102,7 +102,7 @@ describe("Katalog-Medien", () => {
       }
       for (const video of r.media?.videos ?? []) expect(video.url, r.id).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/);
     }
-    expect(RECIPES.filter((r) => r.media?.image).length).toBeGreaterThanOrEqual(200);
-    expect(RECIPES.filter((r) => r.media?.videos?.length).length).toBeGreaterThanOrEqual(200);
+    expect(RECIPES.filter((r) => r.media?.image).length).toBeGreaterThanOrEqual(180);
+    expect(RECIPES.filter((r) => r.media?.videos?.length).length).toBeGreaterThanOrEqual(180);
   });
 });

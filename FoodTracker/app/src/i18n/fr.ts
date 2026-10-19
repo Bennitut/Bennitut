@@ -137,7 +137,7 @@ export const fr: Dictionary = {
     replanHint: "Les plats verrouillés 🔒 restent ; le reste est réparti pour éviter tout gaspillage.",
     summary: "Résumé",
     statWaste: "Gaspillage",
-    statPrice: "Courses du mois",
+    statPrice: "courses du mois (estimation)",
     approx: "env. {price}",
     statMeals: "Repas",
     statKcal: "kcal par jour",

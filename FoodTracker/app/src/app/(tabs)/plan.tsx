@@ -210,7 +210,7 @@ export default function PlanScreen() {
         <Card>
           <View style={{ flexDirection: "row", gap: 8 }}>
             {[
-              { emoji: "💶", value: t("plan.approx", { price: i18n.price(monthPrice) }), label: t("plan.statPrice"), tint: colors.accentTint, color: colors.warning },
+              { emoji: "💶", value: i18n.price(monthPrice), label: t("plan.statPrice"), tint: colors.accentTint, color: colors.warning },
               { emoji: "🍽️", value: String(plan.weeks.reduce((n, w) => n + w.meals.length, 0)), label: t("plan.statMeals"), tint: colors.selected, color: colors.primaryDark },
               { emoji: "🔥", value: String(avgKcal), label: t("plan.statKcal"), tint: "#ECEBF8", color: "#5B57A8" },
             ].map((stat) => (
