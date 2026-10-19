@@ -14,6 +14,8 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Monatsplan** | Plant immer 30 Tage in vier Wochenblöcken mit je eigener Einkaufsliste; Reste und Vorräte einer Woche gehen in die nächste. Der Plan richtet sich nach den Antworten aus dem Fragebogen. Optional schlägt Claude neue Rezepte nach Wunsch vor. |
 | **Profil (👤)** | Ernährungshistorie (7/30 Tage mit Kalorien pro Tag, Durchschnitt, Makros, häufigste Gerichte), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
 | **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
+| **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
+| **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
 | **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
 | **Instagram & TikTok** | Link zu einem Koch-Video einfügen → Claude liest Beschreibung, Vorschaubild und (optional) Einzelbilder aus dem gespeicherten Video und macht daraus ein Rezept mit Mengen. |
@@ -64,7 +66,7 @@ cd server
 npm install
 export ANTHROPIC_API_KEY=sk-ant-...   # für Fotos, Kassenbons, Import, Übersetzung, KI-Rezepte
 export META_OEMBED_TOKEN=...          # optional: Instagram-oEmbed (APP_ID|CLIENT_TOKEN einer Meta-App)
-npm start                              # http://localhost:3000, Community-Rezepte in data/community.json
+npm start                              # http://localhost:3000, Community-Rezepte in data/community.json, Fotos/Bewertungen in data/feedback.json
 
 # App (zweites Terminal)
 cd app

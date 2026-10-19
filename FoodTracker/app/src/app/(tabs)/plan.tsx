@@ -58,6 +58,7 @@ export default function PlanScreen() {
       mealTypes: settings.mealTypes,
       pantry: aggregatePantry(pantry),
       favoriteRecipeIds: favoriteIds,
+      recipeRatings: store.ratingAverages(),
       locked,
       effort: DEVICE_EFFORT,
     };
@@ -146,7 +147,7 @@ export default function PlanScreen() {
     const recipe = recipes.get(meal.recipeId);
     const name = recipe ? i18n.recipe(recipe).name : meal.recipeName;
     const eaten = eatenMeals.includes(mealKey(meal));
-    const image = recipe?.media?.image?.uri;
+    const image = recipe ? store.imageFor(recipe)?.uri : undefined;
     return (
       <View key={mealKey(meal)} style={{ gap: 4, paddingVertical: 6, borderTopWidth: 1, borderColor: colors.border }}>
         <Pressable onPress={() => router.push(`/recipe/${encodeURIComponent(meal.recipeId)}`)} style={[styles.row, { justifyContent: "flex-start" }]}>
@@ -290,7 +291,7 @@ export default function PlanScreen() {
                 if (!recipe) return null;
                 return (
                   <Pressable key={id} onPress={() => chooseAlternative(id)} style={[styles.card, styles.row, { justifyContent: "flex-start" }]} accessibilityRole="button">
-                    {recipe.media?.image ? <Image source={{ uri: recipe.media.image.uri }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+                    {store.imageFor(recipe) ? <Image source={{ uri: store.imageFor(recipe)!.uri }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.text}>
                         {favoriteIds.includes(id) ? "♥ " : ""}

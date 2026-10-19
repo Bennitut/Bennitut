@@ -12,7 +12,7 @@ import type { CommunityRecipe, Recipe } from "../../lib/types";
 type Segment = "mine" | "favorites" | "discover";
 
 export default function RecipesScreen() {
-  const { myRecipes, favoriteIds, recipes, catalog } = useStore();
+  const { myRecipes, favoriteIds, recipes, catalog, ratings } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
   const [segment, setSegment] = useState<Segment>("mine");
@@ -47,6 +47,13 @@ export default function RecipesScreen() {
   const matches = (recipe: Recipe) => !query.trim() || i18n.recipe(recipe).name.toLowerCase().includes(query.trim().toLowerCase());
   const isFavorite = (id: string) => favoriteIds.includes(id);
   const favorites = favoriteIds.map((id) => recipes.get(id)).filter((r): r is Recipe => !!r);
+  // Bewertung mit Vorannahme von 3 Sternen, damit eine einzelne 5-Sterne-Bewertung nicht alles überholt.
+  const score = (id: string) => {
+    const r = ratings[id];
+    return r?.count ? (r.avg * r.count + 3 * 2) / (r.count + 2) : 3;
+  };
+  const catalogSorted = [...catalog.recipes].sort((a, b) => score(b.id) - score(a.id));
+  const topRated = catalogSorted.filter((r) => (ratings[r.id]?.count ?? 0) > 0 && ratings[r.id]!.avg >= 4).slice(0, 10);
 
   return (
     <Screen>
@@ -104,8 +111,15 @@ export default function RecipesScreen() {
               />
             ))}
           </Card>
+          {topRated.length > 0 && !query.trim() ? (
+            <Card title={t("feedback.topRated")} icon="🏆" tint="#FFF4D6">
+              {topRated.map((r) => (
+                <RecipeRow key={r.id} recipe={recipes.get(r.id) ?? r} favorite={isFavorite(r.id)} />
+              ))}
+            </Card>
+          ) : null}
           <Card title={t("recipes.catalog")} icon="📖">
-            {catalog.recipes.filter(matches).map((r) => (
+            {catalogSorted.filter(matches).map((r) => (
               <RecipeRow key={r.id} recipe={recipes.get(r.id) ?? r} favorite={isFavorite(r.id)} />
             ))}
           </Card>

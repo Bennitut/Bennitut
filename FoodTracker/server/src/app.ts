@@ -82,6 +82,8 @@ const PlanBody = Preferences.extend({
   mealTypes: z.array(MealType).min(1),
   pantry: z.array(z.object({ ingredientId: z.string(), amount: z.number().positive() })).default([]),
   favoriteRecipeIds: z.array(z.string()).default([]),
+  /** Durchschnittliche Sterne je Rezept; gut bewertete werden öfter eingeplant. */
+  recipeRatings: z.record(z.string().max(200), z.number().min(1).max(5)).default({}),
   locked: z.array(z.object({ day: z.number().int().min(0).max(MONTH_DAYS - 1), mealType: MealType, recipeId: z.string() })).default([]),
   maxRepeats: z.number().int().min(1).default(3),
   /** Eigene, importierte und favorisierte Community-Rezepte des Nutzers. */

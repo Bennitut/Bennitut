@@ -97,6 +97,18 @@ describe("planMeals", () => {
     }
   });
 
+  it("plant gut bewertete Rezepte öfter und schlecht bewertete seltener ein", () => {
+    const ids = RECIPES.filter((r) => r.mealTypes.includes("dinner")).map((r) => r.id);
+    const loved = ids.slice(0, 15);
+    const disliked = ids.slice(15, 30);
+    const ratings = Object.fromEntries([...loved.map((id) => [id, 5]), ...disliked.map((id) => [id, 1])]);
+    const count = (meals: { recipeId: string }[], set: string[]) => meals.filter((m) => set.includes(m.recipeId)).length;
+    const neutral = plan().meals;
+    const rated = plan({ recipeRatings: ratings }).meals;
+    expect(count(rated, loved)).toBeGreaterThan(count(neutral, loved));
+    expect(count(rated, disliked)).toBeLessThanOrEqual(count(neutral, disliked));
+  });
+
   it("behält fixierte Gerichte und plant den Rest drumherum", () => {
     const locked = [
       { day: 0, mealType: "dinner" as const, recipeId: "spaghetti_bolognese" },

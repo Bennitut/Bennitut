@@ -1,5 +1,3 @@
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
-import * as ImagePicker from "expo-image-picker";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Image, Pressable, Text, TextInput, View } from "react-native";
@@ -7,6 +5,7 @@ import { IngredientPicker } from "../../components/IngredientPicker";
 import { Button, Card, Chip, ChipRow, ErrorText, Field, Screen, styles } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
 import { newId } from "../../lib/pantry";
+import { CameraDeniedError, pickRecipePhoto } from "../../lib/photos";
 import { useStore } from "../../lib/store";
 import { MEAL_TYPES, type MealType, type Recipe, type RecipeVideo } from "../../lib/types";
 
@@ -31,12 +30,6 @@ function videoFromUrl(text: string): RecipeVideo | null {
   return { platform, url };
 }
 
-/** Verkleinert ein Foto, damit es als data-URI im Rezept (und beim Teilen) klein bleibt. */
-async function compressPhoto(uri: string): Promise<string | null> {
-  const image = await ImageManipulator.manipulate(uri).resize({ width: 800 }).renderAsync();
-  const saved = await image.saveAsync({ compress: 0.6, format: SaveFormat.JPEG, base64: true });
-  return saved.base64 ? `data:image/jpeg;base64,${saved.base64}` : null;
-}
 
 const parseNumber = (text: string) => parseFloat(text.replace(",", "."));
 const lines = (text: string) =>
@@ -71,17 +64,10 @@ export default function RecipeEditorScreen() {
   const pickPhoto = async (source: "camera" | "library") => {
     setError(null);
     try {
-      if (source === "camera" && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
-        return setError(t("scan.cameraDenied"));
-      }
-      const options: ImagePicker.ImagePickerOptions = { mediaTypes: "images", allowsEditing: true, aspect: [16, 9], quality: 1 };
-      const result = source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
-      const asset = result.canceled ? undefined : result.assets[0];
-      if (!asset) return;
-      const uri = await compressPhoto(asset.uri);
+      const uri = await pickRecipePhoto(source);
       if (uri) setPhoto({ uri });
     } catch (e) {
-      setError(i18n.error(e));
+      setError(e instanceof CameraDeniedError ? t("scan.cameraDenied") : i18n.error(e));
     }
   };
 

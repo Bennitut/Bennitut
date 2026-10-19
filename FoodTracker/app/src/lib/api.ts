@@ -4,14 +4,18 @@ import type {
   CommunityRecipe,
   DeliveryProviderInfo,
   Diet,
+  FlagReason,
+  ImprovedRecipe,
   LockedMeal,
   MealAnalysis,
   MonthPlan,
   MealType,
   Order,
   PantryItem,
+  RatingSummary,
   ReceiptAnalysis,
   Recipe,
+  RecipePhoto,
   RecipeText,
   ShoppingItem,
 } from "./types";
@@ -56,7 +60,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     // KI-Anfragen dürfen dauern; ohne Server soll die App aber nicht ewig warten.
-    const slow = path.startsWith("/api/analyze") || path.startsWith("/api/recipes") || path === "/api/plan";
+    const slow = path.startsWith("/api/analyze") || /^\/api\/recipes\/(import|translate|improve)$/.test(path) || path === "/api/plan";
     const controller = new AbortController();
     setTimeout(() => controller.abort(), slow ? 120_000 : 10_000);
     res = await fetch(`${BASE_URL}${path}`, {
@@ -115,6 +119,28 @@ export const api = {
   toggleLike: (communityId: string) => post<CommunityRecipe>(`/api/community/recipes/${communityId}/like`, {}),
 
   unshareRecipe: (communityId: string) => request<void>(`/api/community/recipes/${communityId}`, { method: "DELETE" }),
+
+  ratings: () => request<Record<string, RatingSummary>>("/api/recipes/ratings"),
+
+  topPhotos: () => request<Record<string, RecipePhoto>>("/api/recipes/top-photos"),
+
+  rateRecipe: (recipeId: string, stars: number) => post<RatingSummary>(`/api/recipes/${encodeURIComponent(recipeId)}/rating`, { stars }),
+
+  photos: (recipeId: string) => request<RecipePhoto[]>(`/api/recipes/${encodeURIComponent(recipeId)}/photos`),
+
+  addPhoto: (recipeId: string, authorName: string, uri: string) =>
+    post<RecipePhoto>(`/api/recipes/${encodeURIComponent(recipeId)}/photos`, { authorName, uri }),
+
+  ratePhoto: (photoId: string, stars: number) => post<RecipePhoto>(`/api/photos/${photoId}/rating`, { stars }),
+
+  deletePhoto: (photoId: string) => request<void>(`/api/photos/${photoId}`, { method: "DELETE" }),
+
+  flagRecipe: (recipeId: string, reason: FlagReason, note: string) =>
+    post<void>(`/api/recipes/${encodeURIComponent(recipeId)}/flags`, { reason, note }),
+
+  /** Lässt Claude Name, Schritte und Sonstiges an Zutaten und Mengen anpassen. */
+  improveRecipe: (body: { text: RecipeText; ingredients: { name: string; amount: string }[]; cookMinutes: number; problem: string; language: string }) =>
+    post<ImprovedRecipe>("/api/recipes/improve", body),
 
   providers: () => request<DeliveryProviderInfo[]>("/api/delivery/providers"),
 

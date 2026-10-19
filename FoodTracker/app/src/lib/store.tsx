@@ -2,17 +2,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { isUILanguage, regionFromCode } from "../i18n";
-import { setDeviceId } from "./api";
+import { api, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES } from "./catalog";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import type {
   DiaryEntry,
   Ingredient,
   MonthPlan,
+  MyPhoto,
   Order,
   PantryItem,
   PlannedMeal,
+  RatingSummary,
   Recipe,
+  RecipeMedia,
+  RecipePhoto,
   RecipeText,
   Settings,
 } from "./types";
@@ -39,6 +43,14 @@ interface PersistedState {
   shared: Record<string, string>;
   /** Von Claude übersetzte Rezepttexte: Rezept-ID → Sprache → Text. */
   translations: Record<string, Record<string, RecipeText>>;
+  /** Mit Claude verbesserte Rezepttexte: Rezept-ID → Sprache → Text; ersetzen den Originaltext. */
+  textOverrides: Record<string, Record<string, RecipeText>>;
+  /** Rezepte, die von diesem Gerät gemeldet wurden. */
+  flaggedIds: string[];
+  /** Eigene Rezeptfotos (privat oder zusätzlich öffentlich in der Galerie). */
+  myPhotos: MyPhoto[];
+  /** Zuletzt geladene Bewertungen aller Rezepte (für Planung und Anzeige, auch offline). */
+  ratings: Record<string, RatingSummary>;
   settings: Settings;
 }
 
@@ -88,6 +100,10 @@ function initialState(): PersistedState {
     savedRecipes: [],
     shared: {},
     translations: {},
+    textOverrides: {},
+    flaggedIds: [],
+    myPhotos: [],
+    ratings: {},
     settings: defaultSettings(),
   };
 }
@@ -153,6 +169,20 @@ interface Store extends PersistedState {
   deleteRecipe: (id: string) => void;
   setFavorite: (recipe: Recipe, favorite: boolean) => void;
   cacheTranslation: (recipeId: string, language: string, text: RecipeText) => void;
+  setTextOverride: (recipeId: string, language: string, text: RecipeText | null) => void;
+  markFlagged: (recipeId: string) => void;
+  addMyPhoto: (photo: MyPhoto) => void;
+  updateMyPhoto: (id: string, patch: Partial<MyPhoto>) => void;
+  removeMyPhoto: (id: string) => void;
+  setRating: (recipeId: string, rating: RatingSummary) => void;
+  /** Bestbewertete öffentliche Fotos je Rezept (nicht gespeichert, wird beim Start geladen). */
+  topPhotos: Record<string, RecipePhoto>;
+  /** Lädt Bewertungen und Top-Fotos vom Server; ohne Verbindung bleibt der letzte Stand. */
+  refreshFeedback: () => Promise<void>;
+  /** Anzeigefoto: eigenes Foto, sonst bestbewertetes Galeriefoto, sonst Katalogfoto. */
+  imageFor: (recipe: Recipe) => RecipeMedia["image"];
+  /** Durchschnittliche Sterne je Rezept mit mindestens einer Bewertung (für den Planer). */
+  ratingAverages: () => Record<string, number>;
   setShared: (recipeId: string, communityId: string | null) => void;
 }
 
@@ -162,6 +192,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [ready, setReady] = useState(false);
   const [pendingPlan, setPendingPlan] = useState(false);
+  const [topPhotos, setTopPhotos] = useState<Record<string, RecipePhoto>>({});
 
   useEffect(() => {
     loadState()
@@ -177,13 +208,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (ready) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
   }, [state, ready]);
 
+  // Bewertungen und Galerie-Fotos einmal beim Start laden; ohne Server gilt der gespeicherte Stand.
+  useEffect(() => {
+    if (!ready) return;
+    Promise.all([api.ratings(), api.topPhotos()])
+      .then(([ratings, top]) => {
+        setState((s) => ({ ...s, ratings }));
+        setTopPhotos(top);
+      })
+      .catch(() => {});
+  }, [ready]);
+
   const store = useMemo<Store>(() => {
     const ingredients = new Map(catalog.ingredients.map((i) => [i.id, i]));
     const userRecipes = [...state.myRecipes, ...state.savedRecipes, ...state.planRecipes];
     const recipes = new Map<string, Recipe>();
     for (const recipe of [...catalog.recipes, ...userRecipes]) {
       const cached = state.translations[recipe.id];
-      recipes.set(recipe.id, cached ? { ...recipe, translations: { ...recipe.translations, ...cached } } : recipe);
+      let r = cached ? { ...recipe, translations: { ...recipe.translations, ...cached } } : recipe;
+      // Verbesserte Texte ersetzen das Original bzw. die Übersetzung der jeweiligen Sprache.
+      for (const [language, text] of Object.entries(state.textOverrides[recipe.id] ?? {})) {
+        r =
+          language === r.language
+            ? { ...r, name: text.name, steps: text.steps ?? r.steps, otherIngredients: text.otherIngredients ?? r.otherIngredients }
+            : { ...r, translations: { ...r.translations, [language]: text } };
+      }
+      recipes.set(recipe.id, r);
     }
     return {
       ...state,
@@ -276,8 +326,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...s,
           translations: { ...s.translations, [recipeId]: { ...s.translations[recipeId], [language]: text } },
         })),
+      setTextOverride: (recipeId, language, text) =>
+        setState((s) => {
+          const forRecipe = { ...s.textOverrides[recipeId] };
+          if (text) forRecipe[language] = text;
+          else delete forRecipe[language];
+          return { ...s, textOverrides: { ...s.textOverrides, [recipeId]: forRecipe } };
+        }),
+      markFlagged: (recipeId) =>
+        setState((s) => (s.flaggedIds.includes(recipeId) ? s : { ...s, flaggedIds: [...s.flaggedIds, recipeId] })),
+      addMyPhoto: (photo) => setState((s) => ({ ...s, myPhotos: [photo, ...s.myPhotos] })),
+      updateMyPhoto: (id, patch) => setState((s) => ({ ...s, myPhotos: s.myPhotos.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
+      removeMyPhoto: (id) => setState((s) => ({ ...s, myPhotos: s.myPhotos.filter((p) => p.id !== id) })),
+      setRating: (recipeId, rating) => setState((s) => ({ ...s, ratings: { ...s.ratings, [recipeId]: rating } })),
+      topPhotos,
+      refreshFeedback: async () => {
+        const [ratings, top] = await Promise.all([api.ratings(), api.topPhotos()]);
+        setState((s) => ({ ...s, ratings }));
+        setTopPhotos(top);
+      },
+      imageFor: (recipe) => {
+        const own = state.myPhotos.find((p) => p.recipeId === recipe.id);
+        if (own) return { uri: own.uri };
+        const top = topPhotos[recipe.id];
+        if (top) return { uri: top.uri, credit: top.authorName || undefined };
+        return recipe.media?.image;
+      },
+      ratingAverages: () =>
+        Object.fromEntries(Object.entries(state.ratings).filter(([, r]) => r.count > 0).map(([id, r]) => [id, r.avg])),
     };
-  }, [state, ready, pendingPlan]);
+  }, [state, ready, pendingPlan, topPhotos]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

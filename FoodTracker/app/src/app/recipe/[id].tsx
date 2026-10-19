@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Alert, Image, Linking, Text, View } from "react-native";
 import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } from "../../components/ui";
 import { api } from "../../lib/api";
+import { ImproveCard, PhotoGallery, RatingCard } from "../../components/RecipeFeedback";
 import { communityCache } from "../../lib/communityCache";
 import { ingredientEmoji } from "../../lib/emoji";
 import { needsTranslation, useI18n } from "../../lib/i18n";
@@ -52,7 +53,7 @@ export default function RecipeDetailScreen() {
   const videos = recipe.media?.videos ?? [];
   const importUrl = recipe.source.kind === "import" ? recipe.source.url : undefined;
   const sourceUrl = importUrl && !videos.some((v) => v.url === importUrl) ? importUrl : undefined;
-  const image = recipe.media?.image;
+  const image = store.imageFor(recipe);
 
   const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>) => {
     setBusy(kind);
@@ -176,6 +177,8 @@ export default function RecipeDetailScreen() {
         </View>
       </Card>
 
+      <RatingCard recipe={recipe} />
+
       <Card title={t("recipes.ingredients")} icon="🧺">
         {recipe.ingredients.map((ri) => {
           const ingredient = ingredients.get(ri.ingredientId);
@@ -208,6 +211,9 @@ export default function RecipeDetailScreen() {
           ))}
         </Card>
       ) : null}
+
+      <PhotoGallery recipe={recipe} />
+      <ImproveCard recipe={recipe} />
 
       <Card>
         {isOwn ? (

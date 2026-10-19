@@ -13,6 +13,7 @@ export type {
   PantryItem,
   PlannedMeal,
   Recipe,
+  RecipeMedia,
   RecipeText,
   RecipeVideo,
   ShoppingItem,
@@ -101,6 +102,47 @@ export interface CommunityRecipe {
   likes: number;
   likedByMe: boolean;
   mine: boolean;
+}
+
+/** Bewertung eines Rezepts durch alle Nutzer:innen. */
+export interface RatingSummary {
+  avg: number;
+  count: number;
+  mine: number | null;
+}
+
+/** Öffentliches Foto aus der Rezept-Galerie. */
+export interface RecipePhoto {
+  id: string;
+  recipeId: string;
+  uri: string;
+  authorName: string;
+  createdAt: string;
+  avg: number;
+  count: number;
+  myRating: number | null;
+  mine: boolean;
+}
+
+/** Eigenes Foto; private bleiben nur auf dem Gerät, öffentliche landen zusätzlich in der Galerie. */
+export interface MyPhoto {
+  id: string;
+  recipeId: string;
+  uri: string;
+  public: boolean;
+  remoteId: string | null;
+  createdAt: string;
+}
+
+export const FLAG_REASONS = ["text", "amounts", "image", "other"] as const;
+export type FlagReason = (typeof FLAG_REASONS)[number];
+
+export interface ImprovedRecipe {
+  name: string;
+  steps: string[];
+  otherIngredients: string[];
+  changes: string[];
+  remainingIssues: string[];
 }
 
 export interface Settings {
