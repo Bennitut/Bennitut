@@ -228,6 +228,49 @@ export async function importRecipe(input: {
   return recipe;
 }
 
+const ImprovedRecipeSchema = z.object({
+  name: z.string(),
+  steps: z.array(z.string()),
+  otherIngredients: z.array(z.string()),
+  changes: z.array(z.string()).describe("Kurze Liste, was geändert wurde, in der Zielsprache"),
+  remainingIssues: z.array(z.string()).describe("Probleme, die sich nur über die Zutatenmengen beheben lassen; leer, wenn keine"),
+});
+export type ImprovedRecipe = z.infer<typeof ImprovedRecipeSchema>;
+
+/**
+ * Überarbeitet Name, Schritte und Sonstiges so, dass sie zu Zutaten und Mengen passen.
+ * Die Zutatenliste selbst bleibt unverändert, damit Planung und Einkauf stimmen.
+ */
+export function improveRecipe(input: {
+  text: RecipeText;
+  ingredients: { name: string; amount: string }[];
+  cookMinutes: number;
+  problem: string;
+  language: string;
+}): Promise<ImprovedRecipe> {
+  return parse(
+    ImprovedRecipeSchema,
+    "Du bist Rezeptredakteur:in. Überarbeite das Rezept so, dass Name, Schritte und sonstige Zutaten " +
+      "genau zu den angegebenen Zutaten und Mengen (pro Portion) passen: jede Zutat wird verwendet, keine " +
+      "fehlende Hauptzutat wird erwähnt, Reihenfolge und Garzeiten sind realistisch, Schritte kurz und klar. " +
+      "Ändere die Zutatenliste nicht; wenn Mengen unpassend sind, nenne das unter remainingIssues. " +
+      `Schreibe auf ${languageName(input.language)}.`,
+    [
+      {
+        type: "text",
+        text: JSON.stringify({
+          name: input.text.name,
+          steps: input.text.steps ?? [],
+          otherIngredients: input.text.otherIngredients ?? [],
+          ingredientsPerServing: input.ingredients,
+          cookMinutes: input.cookMinutes,
+          reportedProblem: input.problem || "keins angegeben – allgemein prüfen",
+        }),
+      },
+    ],
+  );
+}
+
 export function translateRecipe(text: RecipeText, targetLanguage: string): Promise<RecipeText> {
   return parse(
     RecipeTextSchema,

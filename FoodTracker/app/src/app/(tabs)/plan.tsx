@@ -139,7 +139,6 @@ export default function PlanScreen() {
   const week: WeekPlan | undefined = plan?.weeks[selectedWeek];
   const days = week ? Array.from({ length: week.days }, (_, i) => week.startDay + i) : [];
   const allDailyKcal = plan ? plan.weeks.flatMap((w) => w.dailyKcalPerPerson) : [];
-  const monthWaste = plan ? plan.weeks.reduce((s, w) => s + w.wasteRatio, 0) / plan.weeks.length : 0;
   const monthPrice = plan ? plan.weeks.reduce((s, w) => s + w.totalPrice, 0) : 0;
   const avgKcal = allDailyKcal.length ? Math.round(allDailyKcal.reduce((a, b) => a + b, 0) / allDailyKcal.length) : 0;
 
@@ -210,8 +209,8 @@ export default function PlanScreen() {
         <Card>
           <View style={{ flexDirection: "row", gap: 8 }}>
             {[
-              { emoji: "♻️", value: `${i18n.number(monthWaste * 100)} %`, label: t("plan.statWaste"), tint: colors.selected, color: colors.primaryDark },
-              { emoji: "💶", value: i18n.price(monthPrice), label: t("plan.statPrice"), tint: colors.accentTint, color: colors.warning },
+              { emoji: "💶", value: t("plan.approx", { price: i18n.price(monthPrice) }), label: t("plan.statPrice"), tint: colors.accentTint, color: colors.warning },
+              { emoji: "🍽️", value: String(plan.weeks.reduce((n, w) => n + w.meals.length, 0)), label: t("plan.statMeals"), tint: colors.selected, color: colors.primaryDark },
               { emoji: "🔥", value: String(avgKcal), label: t("plan.statKcal"), tint: "#ECEBF8", color: "#5B57A8" },
             ].map((stat) => (
               <View key={stat.label} style={{ flex: 1, backgroundColor: stat.tint, borderRadius: 16, padding: 10, alignItems: "center", gap: 2 }}>
@@ -244,13 +243,34 @@ export default function PlanScreen() {
         </ChipRow>
       ) : null}
 
-      {week ? <Muted>{t("plan.weekPrice", { price: i18n.price(week.totalPrice) })}</Muted> : null}
+      {week ? <Muted>{t("plan.weekPrice", { price: t("plan.approx", { price: i18n.price(week.totalPrice) }) })}</Muted> : null}
 
-      {days.map((day) => (
-        <Card key={day} title={`${formatDay(addDays(plan!.startDate, day), i18n.language)}${day === todayIndex ? " · " + t("tabs.today") : ""}`}>
-          {week!.meals.filter((m) => m.day === day).map(renderMeal)}
-        </Card>
-      ))}
+      {days.map((day) => {
+        const isToday = day === todayIndex;
+        return (
+          <Card key={day} style={{ paddingTop: 0, overflow: "hidden" }}>
+            {/* Farbige Kopfzeile je Tag; heute in Grün hervorgehoben. */}
+            <View
+              style={{
+                marginHorizontal: -18,
+                paddingHorizontal: 18,
+                paddingVertical: 12,
+                backgroundColor: isToday ? colors.primary : colors.selected,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>{isToday ? "⭐" : "📅"}</Text>
+              <Text style={[styles.cardTitle, { flex: 1, color: isToday ? colors.primaryText : colors.primaryDark }]}>
+                {formatDay(addDays(plan!.startDate, day), i18n.language)}
+                {isToday ? ` · ${t("tabs.today")}` : ""}
+              </Text>
+            </View>
+            {week!.meals.filter((m) => m.day === day).map(renderMeal)}
+          </Card>
+        );
+      })}
 
       <Modal visible={swap !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSwap(null)}>
         <View style={[styles.screen, { padding: 16, gap: 12 }]}>

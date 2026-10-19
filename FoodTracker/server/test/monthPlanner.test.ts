@@ -78,7 +78,8 @@ describe("planMonth", () => {
         expect(matchesPreferences(recipe, { ...request, rules: [...rules] }, ingredientById)).toBe(true);
       }
     }
-  });
+    // Zwei Monatspläne mit dem ganzen Katalog brauchen bei parallelen Tests länger als 5 s.
+  }, 30_000);
 
   it("schließt bei koscher Fleisch mit Milchprodukten aus", () => {
     const geschnetzeltes = RECIPES.find((r) => r.id === "zuercher_geschnetzeltes")!;

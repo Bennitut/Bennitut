@@ -1,7 +1,8 @@
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { AnalysisError, analyzeMealPhoto, analyzeReceipt, generateRecipes, importRecipe, translateRecipe } from "./ai/claude.js";
+import { AnalysisError, analyzeMealPhoto, analyzeReceipt, generateRecipes, improveRecipe, importRecipe, translateRecipe } from "./ai/claude.js";
+import { FLAG_REASONS, FeedbackStore } from "./community/feedback.js";
 import { CommunityStore } from "./community/store.js";
 import { INGREDIENTS, RECIPES, ingredientById } from "./data/catalog.js";
 import { findProvider, linesFromShoppingList, pantryFromOrder, providers } from "./delivery/providers.js";
@@ -115,13 +116,21 @@ const ImportBody = z
   .refine((b) => b.url || b.caption || b.frames.length > 0, "URL, Text oder Videobilder angeben");
 
 const DeviceId = z.string().min(8).max(100);
+const Stars = z.object({ stars: z.number().int().min(1).max(5) });
+const RecipeIdParam = z.string().min(1).max(200);
+/** Eigene Fotos kommen verkleinert als data-URI aus der App. */
+const PhotoBody = z.object({
+  authorName: z.string().trim().max(40).default(""),
+  uri: z.string().max(700_000).regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/),
+});
 
 function deviceId(c: Context): string {
   return DeviceId.parse(c.req.header("X-Device-Id"));
 }
 
-export function createApp({ communityFile }: { communityFile: string | null }) {
+export function createApp({ communityFile, feedbackFile = null }: { communityFile: string | null; feedbackFile?: string | null }) {
   const community = new CommunityStore(communityFile);
+  const feedback = new FeedbackStore(feedbackFile);
   const app = new Hono();
 
   // Bis zu 10 Videobilder plus Vorschaubild.
@@ -195,6 +204,55 @@ export function createApp({ communityFile }: { communityFile: string | null }) {
   app.post("/api/recipes/translate", async (c) => {
     const body = z.object({ text: RecipeTextBody, targetLanguage: z.string().min(2).max(10) }).parse(await c.req.json());
     return c.json(await translateRecipe(body.text, body.targetLanguage));
+  });
+
+  // Bewertungen, Fotos und Meldungen zu Rezepten (Katalog, eigene und Community).
+  app.get("/api/recipes/ratings", (c) => c.json(feedback.recipeRatings(deviceId(c))));
+
+  app.get("/api/recipes/top-photos", (c) => c.json(feedback.topPhotos(deviceId(c))));
+
+  app.get("/api/recipes/flags", (c) => c.json(feedback.flagSummary()));
+
+  app.post("/api/recipes/improve", async (c) => {
+    const body = z
+      .object({
+        text: RecipeTextBody,
+        ingredients: z.array(z.object({ name: z.string().max(100), amount: z.string().max(40) })).min(1).max(40),
+        cookMinutes: z.number().min(0).max(1440),
+        problem: z.string().max(500).default(""),
+        language: Language,
+      })
+      .parse(await c.req.json());
+    return c.json(await improveRecipe(body));
+  });
+
+  app.post("/api/recipes/:id/rating", async (c) => {
+    const { stars } = Stars.parse(await c.req.json());
+    return c.json(feedback.rateRecipe(deviceId(c), RecipeIdParam.parse(c.req.param("id")), stars));
+  });
+
+  app.get("/api/recipes/:id/photos", (c) => c.json(feedback.photos(RecipeIdParam.parse(c.req.param("id")), deviceId(c))));
+
+  app.post("/api/recipes/:id/photos", async (c) => {
+    const body = PhotoBody.parse(await c.req.json());
+    const photo = feedback.addPhoto(deviceId(c), RecipeIdParam.parse(c.req.param("id")), body.authorName, body.uri);
+    return photo === "limit" ? c.json({ error: "photo_limit" }, 429) : c.json(photo, 201);
+  });
+
+  app.post("/api/photos/:id/rating", async (c) => {
+    const { stars } = Stars.parse(await c.req.json());
+    const photo = feedback.ratePhoto(deviceId(c), c.req.param("id"), stars);
+    return photo ? c.json(photo) : c.json({ error: "not_found" }, 404);
+  });
+
+  app.delete("/api/photos/:id", (c) =>
+    feedback.removePhoto(deviceId(c), c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
+  );
+
+  app.post("/api/recipes/:id/flags", async (c) => {
+    const body = z.object({ reason: z.enum(FLAG_REASONS), note: z.string().trim().max(500).default("") }).parse(await c.req.json());
+    feedback.flag(deviceId(c), RecipeIdParam.parse(c.req.param("id")), body.reason, body.note);
+    return c.body(null, 204);
   });
 
   app.get("/api/community/recipes", (c) => {

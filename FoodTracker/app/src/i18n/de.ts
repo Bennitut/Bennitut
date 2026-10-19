@@ -138,6 +138,8 @@ export const de = {
     summary: "Zusammenfassung",
     statWaste: "Reste",
     statPrice: "Einkauf im Monat",
+    approx: "ca. {price}",
+    statMeals: "Mahlzeiten",
     statKcal: "kcal pro Tag",
     waste: "♻️ Reste: {pct} % der verderblichen Einkäufe",
     price: "💶 {price}",

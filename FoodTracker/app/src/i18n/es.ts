@@ -138,6 +138,8 @@ export const es: Dictionary = {
     summary: "Resumen",
     statWaste: "Desperdicio",
     statPrice: "Compra del mes",
+    approx: "aprox. {price}",
+    statMeals: "Comidas",
     statKcal: "kcal al día",
     waste: "♻️ Sobras: {pct} % de la compra perecedera",
     price: "💶 {price}",

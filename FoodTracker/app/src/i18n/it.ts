@@ -138,6 +138,8 @@ export const it: Dictionary = {
     summary: "Riepilogo",
     statWaste: "Sprechi",
     statPrice: "Spesa del mese",
+    approx: "ca. {price}",
+    statMeals: "Pasti",
     statKcal: "kcal al giorno",
     waste: "♻️ Avanzi: {pct} % della spesa deperibile",
     price: "💶 {price}",

@@ -160,6 +160,8 @@ export interface PlanRequest {
   proteinFocus?: boolean;
   /** Rezepte, die kürzlich dran waren und seltener vorkommen sollen. */
   recentRecipeIds?: string[];
+  /** Durchschnittliche Bewertung (1–5 Sterne) je Rezept; gut bewertete werden öfter eingeplant. */
+  recipeRatings?: Record<string, number>;
   /** Rechenaufwand der Suche (1 = Standard); kleiner ist schneller, z. B. auf dem Handy. */
   effort?: number;
   seed?: number;

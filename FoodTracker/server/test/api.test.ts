@@ -114,6 +114,48 @@ describe("Community", () => {
   });
 });
 
+describe("Bewertungen, Fotos und Meldungen", () => {
+  const photo = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==";
+
+  it("bewertet Rezepte und liefert den Schnitt", async () => {
+    await post("/api/recipes/kaiserschmarrn/rating", { stars: 5 });
+    const res = await post("/api/recipes/kaiserschmarrn/rating", { stars: 3 }, DEVICE_B);
+    expect(await res.json()).toEqual({ avg: 4, count: 2, mine: 3 });
+    const all = await (await request("GET", "/api/recipes/ratings")).json();
+    expect(all.kaiserschmarrn).toEqual({ avg: 4, count: 2, mine: 5 });
+    expect((await post("/api/recipes/kaiserschmarrn/rating", { stars: 6 })).status).toBe(400);
+  });
+
+  it("sammelt öffentliche Fotos, sortiert nach Bewertung und lässt nur die Urheberin löschen", async () => {
+    const a = await (await post("/api/recipes/shakshuka/photos", { authorName: "Lena", uri: photo })).json();
+    const b = await (await post("/api/recipes/shakshuka/photos", { authorName: "Tom", uri: photo }, DEVICE_B)).json();
+    expect(a.mine).toBe(true);
+    // Eigene Fotos zählen nicht als Bewertung.
+    expect((await (await post(`/api/photos/${a.id}/rating`, { stars: 5 })).json()).count).toBe(0);
+    await post(`/api/photos/${b.id}/rating`, { stars: 5 });
+    const list = await (await request("GET", "/api/recipes/shakshuka/photos", undefined, DEVICE_B)).json();
+    expect(list.map((p: { id: string }) => p.id)).toEqual([b.id, a.id]);
+    expect(JSON.stringify(list)).not.toContain(DEVICE_A);
+    const top = await (await request("GET", "/api/recipes/top-photos")).json();
+    expect(top.shakshuka.id).toBe(b.id);
+
+    expect((await request("DELETE", `/api/photos/${a.id}`, undefined, DEVICE_B)).status).toBe(404);
+    expect((await request("DELETE", `/api/photos/${a.id}`)).status).toBe(204);
+  });
+
+  it("nimmt nur Bilder als data-URI an", async () => {
+    expect((await post("/api/recipes/shakshuka/photos", { uri: "https://example.com/x.jpg" })).status).toBe(400);
+  });
+
+  it("sammelt Meldungen zu Rezepten", async () => {
+    expect((await post("/api/recipes/linsen_dal/flags", { reason: "image", note: "Foto zeigt ein Restaurant" })).status).toBe(204);
+    await post("/api/recipes/linsen_dal/flags", { reason: "text" }, DEVICE_B);
+    expect((await post("/api/recipes/linsen_dal/flags", { reason: "egal" })).status).toBe(400);
+    const flags = await (await request("GET", "/api/recipes/flags")).json();
+    expect(flags[0]).toMatchObject({ recipeId: "linsen_dal", count: 2, reasons: { image: 1, text: 1 }, notes: ["Foto zeigt ein Restaurant"] });
+  });
+});
+
 describe("Lieferdienst", () => {
   it("bestellt beim Demo-Lieferdienst und bucht die Lieferung in den Vorrat", async () => {
     const { plan } = await (await post("/api/plan", { ...basePlan, people: 1, mealTypes: ["dinner"] })).json();

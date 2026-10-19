@@ -57,6 +57,7 @@ const WEIGHTS = {
   protein: 4, // Bonus pro Mahlzeit, gewichtet nach Eiweißanteil (nur bei Eiweiß-Fokus)
   favoriteFirst: 12, // Bonus, wenn ein Lieblingsrezept mindestens einmal vorkommt
   favoriteRepeat: 2, // kleiner Bonus für jede weitere Wiederholung
+  rating: 1.2, // Bonus pro Mahlzeit je Stern über bzw. Malus unter 3 Sternen (Community-Bewertung)
 };
 
 const ALLOWED_DIETS: Record<Diet, IngredientDiet[]> = {
@@ -158,12 +159,14 @@ export function planMeals({ request, recipes, ingredients }: PlannerInput): Meal
   const recipeKcal = usable.map((r) => recipeNutrients(r, ingredients).kcal);
   const favorites = new Set(request.favoriteRecipeIds);
   const isFavorite = usable.map((r) => favorites.has(r.id));
-  // Pro Rezept vorab: Bonus/Malus für Küche, Wiederholung aus dem Vorplan und Eiweißanteil.
+  // Pro Rezept vorab: Bonus/Malus für Küche, Wiederholung aus dem Vorplan, Bewertung und Eiweißanteil.
   const preferred = new Set(request.preferredTags ?? []);
   const recent = new Set(request.recentRecipeIds ?? []);
   const slotBonus = usable.map((r, i) => {
     let bonus = r.tags.some((t) => preferred.has(t)) ? WEIGHTS.preferredCuisine : 0;
     if (recent.has(r.id)) bonus -= WEIGHTS.recent;
+    const stars = request.recipeRatings?.[r.id];
+    if (stars !== undefined) bonus += WEIGHTS.rating * (stars - 3);
     if (request.proteinFocus) {
       const n = recipeNutrients(r, ingredients);
       bonus += WEIGHTS.protein * Math.min(1, (n.protein * 4) / Math.max(recipeKcal[i]!, 1) / 0.35);

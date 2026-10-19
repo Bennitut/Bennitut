@@ -111,7 +111,7 @@ export default function ShoppingScreen() {
         <>
           <HeroCard>
             <Text style={styles.heroMuted}>🛒 {t("shopping.weekTitle", { n: weekIndex + 1 })}</Text>
-            <Text style={styles.heroHeading}>{i18n.price(week!.totalPrice)}</Text>
+            <Text style={styles.heroHeading}>{t("plan.approx", { price: i18n.price(week!.totalPrice) })}</Text>
             <ProgressBar value={checkedCount} max={toBuy.length} light />
             <Text style={styles.heroText}>{t("shopping.inCart", { done: checkedCount, total: toBuy.length })}</Text>
             <Text style={styles.heroMuted}>

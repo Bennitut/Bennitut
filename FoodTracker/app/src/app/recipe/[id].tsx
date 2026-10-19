@@ -4,6 +4,7 @@ import { Alert, Image, Linking, Text, View } from "react-native";
 import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } from "../../components/ui";
 import { api } from "../../lib/api";
 import { communityCache } from "../../lib/communityCache";
+import { ingredientEmoji } from "../../lib/emoji";
 import { needsTranslation, useI18n } from "../../lib/i18n";
 import { recipeNutrients } from "../../lib/nutrition";
 import { newId } from "../../lib/pantry";
@@ -180,7 +181,8 @@ export default function RecipeDetailScreen() {
           const ingredient = ingredients.get(ri.ingredientId);
           return (
             <View key={ri.ingredientId} style={styles.row}>
-              <Text style={styles.text}>{i18n.ingredientName(ri.ingredientId)}</Text>
+              <Text style={{ fontSize: 16, width: 24 }}>{ingredientEmoji(ingredient)}</Text>
+              <Text style={[styles.text, { flex: 1 }]}>{i18n.ingredientName(ri.ingredientId)}</Text>
               <Muted>{ingredient ? i18n.amount(ri.amount, ingredient.unit) : i18n.number(ri.amount)}</Muted>
             </View>
           );
