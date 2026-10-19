@@ -96,10 +96,12 @@ describe("Katalog-Medien", () => {
         expect(image.uri, r.id).toMatch(/^https:\/\/(upload\.wikimedia\.org|live\.staticflickr\.com)\//);
         // Frei lizenziert: Urheber und Lizenz müssen angezeigt werden.
         expect(image.credit, r.id).toMatch(/CC0|Public Domain|CC BY/);
+        // CC BY verlangt die Nennung des Urhebers.
+        if (/CC BY/.test(image.credit ?? "")) expect(image.credit, r.id).not.toMatch(/^unbekannt/);
       }
       for (const video of r.media?.videos ?? []) expect(video.url, r.id).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/);
     }
-    expect(RECIPES.filter((r) => r.media?.image).length).toBeGreaterThanOrEqual(100);
+    expect(RECIPES.filter((r) => r.media?.image).length).toBeGreaterThanOrEqual(200);
     expect(RECIPES.filter((r) => r.media?.videos?.length).length).toBeGreaterThanOrEqual(200);
   });
 });
