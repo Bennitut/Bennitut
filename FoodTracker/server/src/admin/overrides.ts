@@ -1,18 +1,9 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Recipe } from "../types.js";
+import { applyOverrides, type RecipeOverride, type RecipePatch } from "./recipePatch.js";
 
-/** Von Admins geänderte Felder eines Katalogrezepts. */
-export type RecipePatch = Partial<Pick<Recipe, "name" | "steps" | "otherIngredients" | "translations" | "mealTypes" | "cookMinutes" | "ingredients" | "media">> & {
-  /** Ausgeblendete Rezepte erscheinen nicht mehr im Katalog und werden nicht eingeplant. */
-  hidden?: boolean;
-};
-
-export interface RecipeOverride {
-  patch: RecipePatch;
-  updatedBy: string;
-  updatedAt: string;
-}
+export { applyOverrides, type RecipeOverride, type RecipePatch };
 
 /** Änderungen von Admins an Katalogrezepten, in einer JSON-Datei gespeichert. */
 export class OverrideStore {
@@ -57,15 +48,4 @@ export class OverrideStore {
     writeFileSync(tmp, JSON.stringify(this.overrides));
     renameSync(tmp, this.file);
   }
-}
-
-/** Auch in der App genutzt, damit offline geplante Pläne dieselben Rezepte verwenden. */
-export function applyOverrides(recipes: Recipe[], overrides: Record<string, RecipeOverride>): Recipe[] {
-  return recipes.flatMap((recipe) => {
-    const entry = overrides[recipe.id];
-    if (!entry) return [recipe];
-    const { hidden, ...patch } = entry.patch;
-    if (hidden) return [];
-    return [{ ...recipe, ...patch, translations: { ...recipe.translations, ...patch.translations } }];
-  });
 }

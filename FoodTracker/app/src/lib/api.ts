@@ -1,10 +1,14 @@
 import Constants from "expo-constants";
 import type {
+  Account,
+  AdminUser,
   Allergen,
   CommunityRecipe,
   DeliveryProviderInfo,
   Diet,
+  DirectoryUser,
   FlagReason,
+  FlagSummary,
   ImprovedRecipe,
   LockedMeal,
   MealAnalysis,
@@ -15,8 +19,11 @@ import type {
   RatingSummary,
   ReceiptAnalysis,
   Recipe,
+  RecipeOverride,
+  RecipePatch,
   RecipePhoto,
   RecipeText,
+  Role,
   ShoppingItem,
 } from "./types";
 
@@ -51,6 +58,11 @@ export class ApiError extends Error {
 }
 
 let deviceId = "";
+let authToken: string | null = null;
+/** Sitzungstoken des angemeldeten Kontos (null = anonym). */
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
 /** Anonyme Geräte-ID für Community-Funktionen (Favoriten zählen, eigene Rezepte verwalten). */
 export function setDeviceId(id: string) {
   deviceId = id;
@@ -66,7 +78,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(`${BASE_URL}${path}`, {
       signal: controller.signal,
       ...init,
-      headers: { "Content-Type": "application/json", "X-Device-Id": deviceId, ...init?.headers },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Device-Id": deviceId,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...init?.headers,
+      },
     });
   } catch {
     throw new ApiError("network");
@@ -78,6 +95,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
+const send = <T>(method: "PATCH" | "PUT" | "DELETE", path: string, body?: unknown) =>
+  request<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+
+type Login = { token: string; user: Account };
 
 export interface PlanPreferences {
   diet: Diet;
@@ -141,6 +162,28 @@ export const api = {
   /** Lässt Claude Name, Schritte und Sonstiges an Zutaten und Mengen anpassen. */
   improveRecipe: (body: { text: RecipeText; ingredients: { name: string; amount: string }[]; cookMinutes: number; problem: string; language: string }) =>
     post<ImprovedRecipe>("/api/recipes/improve", body),
+
+  // Konten
+  authConfig: () => request<{ apple: boolean; google: boolean; dev: boolean }>("/api/auth/config"),
+  loginApple: (identityToken: string, fullName: string | undefined) => post<Login>("/api/auth/apple", { identityToken, fullName }),
+  loginGoogle: (idToken: string) => post<Login>("/api/auth/google", { idToken }),
+  loginDev: (name: string, email: string | undefined) => post<Login>("/api/auth/dev", { name, email }),
+  me: () => request<Account>("/api/auth/me"),
+  renameMe: (name: string) => send<Account>("PATCH", "/api/auth/me", { name }),
+  logout: () => post<void>("/api/auth/logout", {}),
+  users: (query: string) => request<DirectoryUser[]>(`/api/users?q=${encodeURIComponent(query)}`),
+
+  // Admin
+  adminUsers: (query: string) => request<AdminUser[]>(`/api/admin/users?q=${encodeURIComponent(query)}`),
+  adminUpdateUser: (id: string, patch: { role?: Role; blocked?: boolean }) => send<Account>("PATCH", `/api/admin/users/${id}`, patch),
+  flags: () => request<FlagSummary[]>("/api/recipes/flags"),
+  resolveFlags: (recipeId: string) => send<{ resolved: number }>("DELETE", `/api/admin/flags/${encodeURIComponent(recipeId)}`),
+  adminPhotos: () => request<RecipePhoto[]>("/api/admin/photos"),
+  adminDeletePhoto: (id: string) => send<void>("DELETE", `/api/admin/photos/${id}`),
+  adminDeleteCommunity: (id: string) => send<void>("DELETE", `/api/admin/community/${id}`),
+  overrides: () => request<Record<string, RecipeOverride>>("/api/recipes/overrides"),
+  adminSaveRecipe: (id: string, patch: RecipePatch) => send<RecipeOverride>("PUT", `/api/admin/recipes/${encodeURIComponent(id)}`, patch),
+  adminResetRecipe: (id: string) => send<void>("DELETE", `/api/admin/recipes/${encodeURIComponent(id)}`),
 
   providers: () => request<DeliveryProviderInfo[]>("/api/delivery/providers"),
 

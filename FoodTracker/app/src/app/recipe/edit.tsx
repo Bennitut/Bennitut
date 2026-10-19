@@ -2,8 +2,9 @@ import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { IngredientPicker } from "../../components/IngredientPicker";
-import { Button, Card, Chip, ChipRow, ErrorText, Field, Screen, styles } from "../../components/ui";
+import { Badge, Button, Card, Chip, ChipRow, ErrorText, Field, Screen, colors, styles } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
+import { api } from "../../lib/api";
 import { newId } from "../../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../../lib/photos";
 import { useStore } from "../../lib/store";
@@ -39,11 +40,14 @@ const lines = (text: string) =>
     .filter(Boolean);
 
 export default function RecipeEditorScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
-  const { myRecipes, ingredients, saveRecipe } = useStore();
+  const { id, admin } = useLocalSearchParams<{ id?: string; admin?: string }>();
+  const { myRecipes, ingredients, saveRecipe, recipes, isAdmin, refreshOverrides } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
-  const existing = id ? myRecipes.find((r) => r.id === id) : undefined;
+  // Admins bearbeiten Katalogrezepte für alle Nutzer:innen; sonst nur eigene Rezepte.
+  const adminMode = admin === "1" && isAdmin;
+  const existing = id ? (adminMode ? recipes.get(id) : myRecipes.find((r) => r.id === id)) : undefined;
+  const [saving, setSaving] = useState(false);
   const existingText = existing ? i18n.recipe(existing) : undefined;
 
   // Bestehende Rezepte werden pro Portion bearbeitet; neue für die Portionen, für die man kocht.
@@ -87,6 +91,27 @@ export default function RecipeEditorScreen() {
     const otherVideos = (existing?.media?.videos ?? []).slice(1).filter((v) => v.url !== video?.url);
     const videos = [...(video ? [video] : []), ...otherVideos];
 
+    const media = photo || videos.length > 0 ? { ...(photo ? { image: photo } : {}), ...(videos.length > 0 ? { videos } : {}) } : undefined;
+    if (adminMode && existing) {
+      const text = { name: name.trim(), steps: lines(steps), otherIngredients: lines(other) };
+      // Text in der Originalsprache ersetzt das Original, sonst wird es die Übersetzung dieser Sprache.
+      const textPatch = i18n.language === existing.language ? text : { translations: { ...existing.translations, [i18n.language]: text } };
+      setSaving(true);
+      api
+        .adminSaveRecipe(existing.id, {
+          ...textPatch,
+          mealTypes,
+          ingredients: parsed,
+          cookMinutes: Math.max(0, Math.round(parseNumber(cookMinutes) || 0)),
+          ...(media ? { media } : {}),
+        })
+        .then(refreshOverrides)
+        .then(() => router.dismissTo(`/recipe/${encodeURIComponent(existing.id)}`))
+        .catch((e) => setError(i18n.error(e)))
+        .finally(() => setSaving(false));
+      return;
+    }
+
     const recipe: Recipe = {
       id: existing?.id ?? `eigen_${newId()}`,
       // Nach dem Bearbeiten gilt der Text in der aktuellen Sprache als Original; alte Übersetzungen wären veraltet.
@@ -99,7 +124,7 @@ export default function RecipeEditorScreen() {
       cookMinutes: Math.max(0, Math.round(parseNumber(cookMinutes) || 0)),
       tags: existing?.tags ?? [],
       source: existing?.source ?? { kind: "eigen" },
-      ...(photo || videos.length > 0 ? { media: { ...(photo ? { image: photo } : {}), ...(videos.length > 0 ? { videos } : {}) } } : {}),
+      ...(media ? { media } : {}),
     };
     saveRecipe(recipe);
     router.dismissTo(`/recipe/${encodeURIComponent(recipe.id)}`);
@@ -107,7 +132,8 @@ export default function RecipeEditorScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: existing ? t("editor.editTitle") : t("editor.newTitle") }} />
+      <Stack.Screen options={{ title: adminMode ? t("admin.editAsAdmin") : existing ? t("editor.editTitle") : t("editor.newTitle") }} />
+      {adminMode ? <Badge label={t("admin.adminEditHint")} color={colors.warning} tint={colors.accentTint} /> : null}
       <Card>
         <Field label={t("editor.name")}>
           <TextInput style={styles.input} value={name} onChangeText={setName} accessibilityLabel={t("editor.name")} />
@@ -186,7 +212,7 @@ export default function RecipeEditorScreen() {
       </Card>
 
       <ErrorText message={error} />
-      <Button label={t("common.save")} onPress={save} />
+      <Button label={t("common.save")} onPress={save} loading={saving} />
 
       <IngredientPicker
         visible={pickerOpen}

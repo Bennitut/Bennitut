@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
-import { Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, colors, styles } from "../components/ui";
+import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, colors, styles } from "../components/ui";
+import { api } from "../lib/api";
 import { addDays, formatDay } from "../lib/dates";
 import { useI18n } from "../lib/i18n";
 import { sumNutrients, today } from "../lib/pantry";
@@ -10,7 +11,7 @@ import { useStore } from "../lib/store";
 const RANGES = [7, 30] as const;
 
 export default function ProfileScreen() {
-  const { settings, updateSettings, diary } = useStore();
+  const { settings, updateSettings, diary, auth, setAuth, isAdmin } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
   const [range, setRange] = useState<(typeof RANGES)[number]>(7);
@@ -42,6 +43,39 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
+      <Card title={t("account.title")} icon="🔐">
+        {auth ? (
+          <>
+            <View style={styles.row}>
+              <Text style={[styles.text, { flex: 1, fontWeight: "600" }]}>{t("account.signedInAs", { name: auth.user.name })}</Text>
+              <Badge
+                label={auth.user.role === "admin" ? t("account.roleAdmin") : t("account.roleUser")}
+                color={auth.user.role === "admin" ? colors.warning : colors.primary}
+                tint={auth.user.role === "admin" ? colors.accentTint : colors.selected}
+              />
+            </View>
+            <Muted>
+              {auth.user.email ?? ""} {t("account.via", { provider: auth.user.provider === "apple" ? "Apple" : auth.user.provider === "google" ? "Google" : "Test" })}
+            </Muted>
+            <Button label={t("account.directory")} variant="secondary" onPress={() => router.push("/users")} />
+            {isAdmin ? <Button label={t("account.adminArea")} onPress={() => router.push("/admin")} /> : null}
+            <Button
+              label={t("account.signOut")}
+              variant="secondary"
+              onPress={() => {
+                api.logout().catch(() => {});
+                setAuth(null);
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <Muted>{t("account.notSignedIn")}</Muted>
+            <Button label={t("account.signIn")} onPress={() => router.push("/login")} />
+          </>
+        )}
+      </Card>
+
       <Card title={t("profile.you")} icon="🙋">
         <Field label={t("settings.displayName")} hint={t("settings.displayNameHint")}>
           <TextInput

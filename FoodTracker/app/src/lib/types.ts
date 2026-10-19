@@ -145,6 +145,46 @@ export interface ImprovedRecipe {
   remainingIssues: string[];
 }
 
+export type Role = "user" | "admin";
+
+/** Angemeldetes Konto. */
+export interface Account {
+  id: string;
+  name: string;
+  email: string | null;
+  role: Role;
+  provider: "apple" | "google" | "dev";
+  createdAt: string;
+}
+
+/** Eintrag im Nutzerverzeichnis (ohne E-Mail). */
+export interface DirectoryUser {
+  id: string;
+  name: string;
+  role: Role;
+  createdAt: string;
+  photos: number;
+  recipes: number;
+}
+
+/** Ansicht für Admins. */
+export interface AdminUser extends Account {
+  blocked: boolean;
+  lastLoginAt: string;
+  photos: number;
+  recipes: number;
+}
+
+export interface FlagSummary {
+  recipeId: string;
+  count: number;
+  reasons: Partial<Record<FlagReason, number>>;
+  notes: string[];
+  lastAt: string;
+}
+
+export type { RecipeOverride, RecipePatch } from "../../../server/src/admin/recipePatch";
+
 export interface Settings {
   language: UILanguage;
   region: Region;

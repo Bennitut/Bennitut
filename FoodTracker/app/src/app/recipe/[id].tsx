@@ -29,7 +29,7 @@ const searchLinks = (query: string) => {
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
-  const { recipes, ingredients, favoriteIds, myRecipes, shared, settings } = store;
+  const { recipes, ingredients, favoriteIds, myRecipes, shared, settings, isAdmin, catalogOverrides } = store;
   const i18n = useI18n();
   const { t } = i18n;
   const [busy, setBusy] = useState<"translate" | "share" | "favorite" | null>(null);
@@ -227,6 +227,59 @@ export default function RecipeDetailScreen() {
           <Button label={t("recipes.copyToMine")} variant="secondary" onPress={copyToMine} />
         )}
       </Card>
+      {isAdmin && (recipe.source.kind === "katalog" || recipe.source.kind === "community") ? (
+        <Card title={t("admin.title")} icon="🛠️" tint={colors.accentTint}>
+          <Muted>{t("admin.adminEditHint")}</Muted>
+          {recipe.source.kind === "katalog" ? (
+            <>
+              <Button label={t("admin.editAsAdmin")} onPress={() => router.push(`/recipe/edit?id=${encodeURIComponent(recipe.id)}&admin=1`)} />
+              <Button
+                label={t("admin.hide")}
+                variant="secondary"
+                onPress={() =>
+                  Alert.alert(t("admin.hide"), text.name, [
+                    { text: t("common.cancel"), style: "cancel" },
+                    {
+                      text: "OK",
+                      style: "destructive",
+                      onPress: () =>
+                        run("share", async () => {
+                          await api.adminSaveRecipe(recipe.id, { hidden: true });
+                          await store.refreshOverrides();
+                          router.back();
+                        }),
+                    },
+                  ])
+                }
+              />
+              {catalogOverrides[recipe.id] ? (
+                <Button
+                  label={t("admin.reset")}
+                  variant="secondary"
+                  onPress={() =>
+                    run("share", async () => {
+                      await api.adminResetRecipe(recipe.id);
+                      await store.refreshOverrides();
+                    })
+                  }
+                />
+              ) : null}
+            </>
+          ) : recipe.source.kind === "community" ? (
+            <Button
+              label={t("admin.deleteCommunity")}
+              variant="secondary"
+              onPress={() => {
+                const communityId = recipe.source.kind === "community" ? recipe.source.communityId : "";
+                run("share", async () => {
+                  await api.adminDeleteCommunity(communityId);
+                  router.back();
+                });
+              }}
+            />
+          ) : null}
+        </Card>
+      ) : null}
     </Screen>
   );
 }

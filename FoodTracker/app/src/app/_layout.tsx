@@ -23,6 +23,9 @@ function RootStack() {
       <Stack.Screen name="recipe/import" options={{ title: t("import.title"), presentation: "modal" }} />
       <Stack.Screen name="settings" options={{ title: t("profile.settings") }} />
       <Stack.Screen name="profile" options={{ title: t("profile.title") }} />
+      <Stack.Screen name="login" options={{ title: t("account.signIn"), presentation: "modal" }} />
+      <Stack.Screen name="users" options={{ title: t("account.directory") }} />
+      <Stack.Screen name="admin" options={{ title: t("admin.title") }} />
       <Stack.Screen name="onboarding" options={{ title: t("onboarding.title"), presentation: "modal" }} />
     </Stack>
   );

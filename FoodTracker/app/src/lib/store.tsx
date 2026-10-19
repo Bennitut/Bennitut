@@ -2,10 +2,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { isUILanguage, regionFromCode } from "../i18n";
-import { api, setDeviceId } from "./api";
-import { INGREDIENTS, RECIPES } from "./catalog";
+import { ApiError, api, setAuthToken, setDeviceId } from "./api";
+import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import type {
+  Account,
   DiaryEntry,
   Ingredient,
   MonthPlan,
@@ -16,6 +17,7 @@ import type {
   RatingSummary,
   Recipe,
   RecipeMedia,
+  RecipeOverride,
   RecipePhoto,
   RecipeText,
   Settings,
@@ -51,11 +53,15 @@ interface PersistedState {
   myPhotos: MyPhoto[];
   /** Zuletzt geladene Bewertungen aller Rezepte (für Planung und Anzeige, auch offline). */
   ratings: Record<string, RatingSummary>;
+  /** Angemeldetes Konto mit Sitzungstoken; null = anonym. */
+  auth: { token: string; user: Account } | null;
+  /** Änderungen der Admins an Katalogrezepten (zuletzt geladener Stand, gilt auch offline). */
+  catalogOverrides: Record<string, RecipeOverride>;
   settings: Settings;
 }
 
 /** Fest eingebauter Katalog – funktioniert auch ohne Verbindung zum Server. */
-const catalog = { ingredients: INGREDIENTS, recipes: RECIPES };
+const baseCatalog = { ingredients: INGREDIENTS, recipes: RECIPES };
 
 const STORAGE_KEY = "foodtracker/state/v2";
 const LEGACY_STORAGE_KEY = "foodtracker/state/v1";
@@ -104,6 +110,8 @@ function initialState(): PersistedState {
     flaggedIds: [],
     myPhotos: [],
     ratings: {},
+    auth: null,
+    catalogOverrides: {},
     settings: defaultSettings(),
   };
 }
@@ -145,7 +153,12 @@ async function loadState(): Promise<PersistedState> {
 
 interface Store extends PersistedState {
   ready: boolean;
-  catalog: typeof catalog;
+  catalog: typeof baseCatalog;
+  /** Anmelden (Konto und Token speichern) bzw. mit null abmelden. */
+  setAuth: (auth: { token: string; user: Account } | null) => void;
+  isAdmin: boolean;
+  /** Lädt die Änderungen der Admins an Katalogrezepten neu. */
+  refreshOverrides: () => Promise<void>;
   ingredients: Map<string, Ingredient>;
   /** Alle bekannten Rezepte: Katalog, eigene, gespeicherte Community-Rezepte und Plan-Rezepte. */
   recipes: Map<string, Recipe>;
@@ -199,6 +212,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .catch(() => initialState())
       .then((loaded) => {
         setDeviceId(loaded.deviceId);
+        setAuthToken(loaded.auth?.token ?? null);
         setState(loaded);
       })
       .finally(() => setReady(true));
@@ -208,9 +222,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (ready) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
   }, [state, ready]);
 
-  // Bewertungen und Galerie-Fotos einmal beim Start laden; ohne Server gilt der gespeicherte Stand.
+  // Bewertungen, Galerie-Fotos, Admin-Änderungen und Konto einmal beim Start laden;
+  // ohne Server gilt der gespeicherte Stand.
   useEffect(() => {
     if (!ready) return;
+    api
+      .overrides()
+      .then((catalogOverrides) => setState((s) => ({ ...s, catalogOverrides })))
+      .catch(() => {});
+    if (state.auth) {
+      api
+        .me()
+        .then((user) => setState((s) => (s.auth ? { ...s, auth: { ...s.auth, user } } : s)))
+        .catch((e) => {
+          // Abgelaufene oder gesperrte Sitzung: abmelden. Netzwerkfehler ändern nichts.
+          if (e instanceof ApiError && e.code.startsWith("auth_")) {
+            setAuthToken(null);
+            setState((s) => ({ ...s, auth: null }));
+          }
+        });
+    }
     Promise.all([api.ratings(), api.topPhotos()])
       .then(([ratings, top]) => {
         setState((s) => ({ ...s, ratings }));
@@ -220,6 +251,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [ready]);
 
   const store = useMemo<Store>(() => {
+    // Katalog mit den Änderungen der Admins; ausgeblendete Rezepte fallen weg.
+    const catalog = { ingredients: baseCatalog.ingredients, recipes: applyOverrides(baseCatalog.recipes, state.catalogOverrides) };
     const ingredients = new Map(catalog.ingredients.map((i) => [i.id, i]));
     const userRecipes = [...state.myRecipes, ...state.savedRecipes, ...state.planRecipes];
     const recipes = new Map<string, Recipe>();
@@ -338,6 +371,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addMyPhoto: (photo) => setState((s) => ({ ...s, myPhotos: [photo, ...s.myPhotos] })),
       updateMyPhoto: (id, patch) => setState((s) => ({ ...s, myPhotos: s.myPhotos.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       removeMyPhoto: (id) => setState((s) => ({ ...s, myPhotos: s.myPhotos.filter((p) => p.id !== id) })),
+      setAuth: (auth) => {
+        setAuthToken(auth?.token ?? null);
+        setState((s) => ({
+          ...s,
+          auth,
+          // Der Kontoname wird auch als Anzeigename für geteilte Rezepte genutzt.
+          settings: auth && !s.settings.displayName ? { ...s.settings, displayName: auth.user.name } : s.settings,
+        }));
+      },
+      isAdmin: state.auth?.user.role === "admin",
+      refreshOverrides: async () => {
+        const catalogOverrides = await api.overrides();
+        setState((s) => ({ ...s, catalogOverrides }));
+      },
       setRating: (recipeId, rating) => setState((s) => ({ ...s, ratings: { ...s.ratings, [recipeId]: rating } })),
       topPhotos,
       refreshFeedback: async () => {

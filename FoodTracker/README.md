@@ -15,6 +15,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Profil (👤)** | Ernährungshistorie (7/30 Tage mit Kalorien pro Tag, Durchschnitt, Makros, häufigste Gerichte), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
 | **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
+| **Konten & Rollen** | Anmeldung mit Apple oder Google (optional – die App funktioniert auch anonym). Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
 | **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
 | **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
@@ -121,6 +122,29 @@ betroffenen Woche neu geplant. Auf dem Handy rechnet die App Woche für Woche mi
 Über 60 Testpläne (1–4 Personen, verschiedene Ernährungsformen) bleiben im Schnitt 0,3 %
 der verderblichen Einkäufe übrig, im schlechtesten Fall 4 %.
 
+## Anmeldung und Admins einrichten
+
+Der Server liest diese Umgebungsvariablen:
+
+| Variable | Bedeutung |
+|---|---|
+| `ADMIN_EMAILS` | Kommagetrennte E-Mail-Adressen, die bei der Anmeldung automatisch Admin werden (z. B. deine eigene). Weitere Admins vergibst du danach im Admin-Bereich. |
+| `APPLE_BUNDLE_IDS` | Bundle-IDs für „Mit Apple anmelden“. Standard `host.exp.Exponent` (Expo Go); für die eigene App `com.bennitut.foodtracker` ergänzen. |
+| `GOOGLE_CLIENT_IDS` | OAuth-Client-IDs aus der Google Cloud Console (iOS, Android, Web), kommagetrennt. |
+| `ALLOW_DEV_LOGIN` | `1` erlaubt eine Test-Anmeldung nur mit Name/E-Mail – **nur zum Ausprobieren, nie auf einem öffentlichen Server**. |
+
+In der App kommen die Google-Client-IDs aus `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
+und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
+
+- **Apple** funktioniert auf dem iPhone auch in Expo Go. Für die eigene App braucht es die Funktion „Sign in with Apple“
+  im Apple-Developer-Konto (in `app.json` schon aktiviert).
+- **Google** braucht einen eigenen Build der App (`npx expo run:ios` bzw. EAS Build) und die Client-IDs; in Expo Go
+  ist die Google-Anmeldung nicht möglich.
+- Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → Anmelden
+  die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
+
+Konten, Sitzungen und Admin-Änderungen an Rezepten liegen in `data/users.json` und `data/recipe-overrides.json`.
+
 ## Instagram und TikTok
 
 Die Plattformen erlauben kein offizielles Herunterladen von Videos. Der Import nutzt deshalb:
@@ -145,8 +169,8 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 
 ## Grenzen dieser Version
 
-- Community-Rezepte liegen in einer JSON-Datei, Nutzer:innen sind nur über eine anonyme
-  Geräte-ID unterschieden. Für den echten Betrieb braucht es Konten, eine Datenbank und Moderation.
+- Konten, Community-Rezepte, Fotos und Bewertungen liegen in JSON-Dateien; für den echten Betrieb gehört das in
+  eine Datenbank (und Fotos in einen Bildspeicher). Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
 - Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
   Fotos stammen aus freien Lizenzen (CC0, Public Domain, CC BY, CC BY-SA, über Openverse von Wikimedia Commons
