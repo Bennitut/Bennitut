@@ -181,12 +181,12 @@ export default function PlanScreen() {
   return (
     <Screen>
       {!settings.onboarded ? (
-        <Card title={t("plan.onboardingTitle")}>
+        <Card title={t("plan.onboardingTitle")} icon="👋">
           <Muted>{t("plan.onboardingText")}</Muted>
           <Button label={t("plan.onboardingStart")} onPress={() => router.push("/onboarding")} />
         </Card>
       ) : (
-        <Card title={plan ? t("plan.monthSummary") : t("plan.createMonth")}>
+        <Card title={plan ? t("plan.monthSummary") : t("plan.createMonth")} icon="📅">
           <Text style={styles.text}>{prefSummary.join(" · ")}</Text>
           <Link href="/onboarding" style={[styles.text, { color: colors.primary }]}>
             {t("plan.editPreferences")} ›
@@ -208,10 +208,21 @@ export default function PlanScreen() {
 
       {plan ? (
         <Card>
-          <Text style={styles.text}>
-            {t("plan.waste", { pct: i18n.number(monthWaste * 100) })} · {t("plan.totalPrice", { price: i18n.price(monthPrice) })}
-          </Text>
-          <Muted>{t("plan.avgKcal", { kcal: avgKcal })}</Muted>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {[
+              { emoji: "♻️", value: `${i18n.number(monthWaste * 100)} %`, label: t("plan.statWaste"), tint: colors.selected, color: colors.primaryDark },
+              { emoji: "💶", value: i18n.price(monthPrice), label: t("plan.statPrice"), tint: colors.accentTint, color: colors.warning },
+              { emoji: "🔥", value: String(avgKcal), label: t("plan.statKcal"), tint: "#ECEBF8", color: "#5B57A8" },
+            ].map((stat) => (
+              <View key={stat.label} style={{ flex: 1, backgroundColor: stat.tint, borderRadius: 16, padding: 10, alignItems: "center", gap: 2 }}>
+                <Text style={{ fontSize: 20 }}>{stat.emoji}</Text>
+                <Text style={{ fontSize: 16, fontWeight: "800", color: stat.color }} numberOfLines={1} adjustsFontSizeToFit>
+                  {stat.value}
+                </Text>
+                <Text style={[styles.muted, { textAlign: "center" }]}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
           {plan.weeks.flatMap((w) => w.spoilageWarnings).map((w) => (
             <Text key={`${w.ingredientId}-${w.day}`} style={styles.warning}>
               {t("plan.spoilage", { name: i18n.ingredientName(w.ingredientId), days: w.shelfLifeDays, day: w.day + 1 })}

@@ -89,7 +89,7 @@ export default function RecipesScreen() {
 
       {segment === "discover" ? (
         <>
-          <Card title={t("recipes.community")}>
+          <Card title={t("recipes.community")} icon="💬" tint="#ECEBF8">
             <ChipRow>
               <Chip label={t("recipes.sortPopular")} selected={sort === "popular"} onPress={() => setSort("popular")} />
               <Chip label={t("recipes.sortNew")} selected={sort === "new"} onPress={() => setSort("new")} />
@@ -104,7 +104,7 @@ export default function RecipesScreen() {
               />
             ))}
           </Card>
-          <Card title={t("recipes.catalog")}>
+          <Card title={t("recipes.catalog")} icon="📖">
             {catalog.recipes.filter(matches).map((r) => (
               <RecipeRow key={r.id} recipe={recipes.get(r.id) ?? r} favorite={isFavorite(r.id)} />
             ))}

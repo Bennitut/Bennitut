@@ -147,7 +147,7 @@ export default function RecipeEditorScreen() {
         </Field>
       </Card>
 
-      <Card title={t("editor.photo")}>
+      <Card title={t("editor.photo")} icon="📷">
         {photo ? <Image source={{ uri: photo.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 10 }} resizeMode="cover" /> : null}
         <View style={styles.chipRow}>
           <Button label={t("scan.takePhoto")} variant="secondary" onPress={() => pickPhoto("camera")} />
@@ -167,7 +167,7 @@ export default function RecipeEditorScreen() {
         </Field>
       </Card>
 
-      <Card title={t("editor.ingredients")}>
+      <Card title={t("editor.ingredients")} icon="🧺">
         {items.map((item, index) => {
           const unit = ingredients.get(item.ingredientId)?.unit ?? "g";
           return (

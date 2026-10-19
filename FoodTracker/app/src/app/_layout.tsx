@@ -7,7 +7,16 @@ import { StoreProvider } from "../lib/store";
 function RootStack() {
   const { t } = useI18n();
   return (
-    <Stack screenOptions={{ headerShadowVisible: false, headerTintColor: colors.primary, headerBackButtonDisplayMode: "minimal" }}>
+    <Stack
+      screenOptions={{
+        headerShadowVisible: false,
+        headerTintColor: colors.primary,
+        headerBackButtonDisplayMode: "minimal",
+        headerStyle: { backgroundColor: colors.background },
+        headerTitleStyle: { fontWeight: "700", color: colors.text },
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="recipe/[id]" options={{ title: "" }} />
       <Stack.Screen name="recipe/edit" options={{ title: t("editor.newTitle"), presentation: "modal" }} />

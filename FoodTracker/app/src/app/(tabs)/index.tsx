@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { Image, Pressable, Text, View } from "react-native";
-import { Card, Chip, Muted, NutrientRow, ProgressBar, Screen, styles } from "../../components/ui";
+import { Card, Chip, HeroCard, Muted, ProgressBar, Screen, styles } from "../../components/ui";
 import { daysBetween } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
 import { sumNutrients, today } from "../../lib/pantry";
@@ -18,16 +18,29 @@ export default function TodayScreen() {
 
   return (
     <Screen>
-      <Card title={t("today.caloriesToday")}>
-        <Text style={styles.heading}>
-          {Math.round(total.kcal)} <Text style={styles.muted}>{t("today.ofTarget", { target })}</Text>
+      <HeroCard>
+        <Text style={styles.heroMuted}>🔥 {t("today.caloriesToday")}</Text>
+        <Text style={styles.heroHeading}>
+          {Math.round(total.kcal)} <Text style={[styles.heroMuted, { fontSize: 16 }]}>{t("today.ofTarget", { target })}</Text>
         </Text>
-        <ProgressBar value={total.kcal} max={target} />
-        <NutrientRow nutrients={total} />
-      </Card>
+        <ProgressBar value={total.kcal} max={target} light />
+        <View style={[styles.row, { marginTop: 4 }]}>
+          {[
+            ["💪", Math.round(total.protein), t("today.protein")],
+            ["🍞", Math.round(total.carbs), t("today.carbs")],
+            ["🥑", Math.round(total.fat), t("today.fat")],
+          ].map(([emoji, grams, label]) => (
+            <View key={String(label)} style={{ flex: 1, alignItems: "center", backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 14, paddingVertical: 8 }}>
+              <Text style={{ fontSize: 18 }}>{emoji}</Text>
+              <Text style={[styles.heroText, { fontWeight: "800" }]}>{grams} g</Text>
+              <Text style={styles.heroMuted}>{label}</Text>
+            </View>
+          ))}
+        </View>
+      </HeroCard>
 
       {planned.length > 0 ? (
-        <Card title={t("today.planned")}>
+        <Card title={t("today.planned")} icon="🍽️">
           {planned.map((meal) => {
             const recipe = recipes.get(meal.recipeId);
             const name = recipe ? i18n.recipe(recipe).name : meal.recipeName;
@@ -47,7 +60,7 @@ export default function TodayScreen() {
         </Card>
       ) : null}
 
-      <Card title={t("today.meals")}>
+      <Card title={t("today.meals")} icon="📝" tint="#ECEBF8">
         {entries.length === 0 ? (
           <Muted>{t("today.empty")}</Muted>
         ) : (

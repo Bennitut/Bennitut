@@ -42,7 +42,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <Card title={t("profile.you")}>
+      <Card title={t("profile.you")} icon="🙋">
         <Field label={t("settings.displayName")} hint={t("settings.displayNameHint")}>
           <TextInput
             style={styles.input}
@@ -64,7 +64,7 @@ export default function ProfileScreen() {
         ) : null}
       </Card>
 
-      <Card title={t("profile.habits")}>
+      <Card title={t("profile.habits")} icon="🥗">
         <Text style={styles.text}>
           {[t(`diets.${settings.diet}`), ...settings.rules.map((r) => t(`rules.${r}`))].join(" · ")}
         </Text>
@@ -81,7 +81,7 @@ export default function ProfileScreen() {
         <Button label={t("profile.editHabits")} onPress={() => router.push("/onboarding")} />
       </Card>
 
-      <Card title={t("profile.history")}>
+      <Card title={t("profile.history")} icon="📈" tint={colors.accentTint}>
         <ChipRow>
           {RANGES.map((r) => (
             <Chip key={r} label={t(r === 7 ? "profile.days7" : "profile.days30")} selected={range === r} onPress={() => setRange(r)} />

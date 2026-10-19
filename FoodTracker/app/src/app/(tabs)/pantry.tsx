@@ -3,24 +3,13 @@ import { useMemo, useState } from "react";
 import { Modal, Pressable, Text, TextInput, View } from "react-native";
 import { IngredientPicker } from "../../components/IngredientPicker";
 import { RecipeRow } from "../../components/RecipeRow";
-import { Button, Card, Field, Muted, Screen, colors, styles } from "../../components/ui";
+import { Button, Card, Field, IconBubble, Muted, Screen, colors, styles } from "../../components/ui";
+import { CATEGORY_ORDER, CATEGORY_STYLE, ingredientEmoji } from "../../lib/emoji";
 import { useI18n } from "../../lib/i18n";
 import { daysLeft, totalOf } from "../../lib/pantry";
 import { useStore } from "../../lib/store";
 import type { Ingredient } from "../../lib/types";
 
-const CATEGORY_ORDER: Ingredient["category"][] = [
-  "gemuese",
-  "obst",
-  "milch_ei",
-  "fleisch",
-  "fisch",
-  "pflanzlich",
-  "getreide",
-  "huelsenfruechte",
-  "nuesse_samen",
-  "vorrat",
-];
 
 /** Ab wie vielen Tagen Resthaltbarkeit ein Lebensmittel als „bald verbrauchen“ gilt. */
 const SOON_DAYS = 2;
@@ -86,11 +75,12 @@ export default function PantryScreen() {
 
   const renderRow = (r: Row) => (
     <Pressable key={r.ingredient.id} onPress={() => openEditor(r.ingredient, r.amount)} style={[styles.row, { paddingVertical: 6 }]} accessibilityRole="button">
+      <IconBubble emoji={ingredientEmoji(r.ingredient)} tint={CATEGORY_STYLE[r.ingredient.category].tint} />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.text}>{i18n.ingredientName(r.ingredient.id)}</Text>
+        <Text style={[styles.text, { fontWeight: "600" }]}>{i18n.ingredientName(r.ingredient.id)}</Text>
         {status(r) ? <Text style={[styles.muted, { color: statusColor(r) }]}>{status(r)}</Text> : null}
       </View>
-      <Text style={styles.text}>{i18n.amount(r.amount, r.ingredient.unit)}</Text>
+      <Text style={[styles.text, { fontWeight: "700", color: CATEGORY_STYLE[r.ingredient.category].color }]}>{i18n.amount(r.amount, r.ingredient.unit)}</Text>
     </Pressable>
   );
 
@@ -106,15 +96,15 @@ export default function PantryScreen() {
       </View>
 
       {rows.length === 0 ? (
-        <Card>
+        <Card title={t("tabs.pantry")} icon="🧺">
           <Muted>{t("pantry.empty")}</Muted>
         </Card>
       ) : (
         <>
-          {soon.length > 0 ? <Card title={`⏳ ${t("pantry.soon")}`}>{soon.map(renderRow)}</Card> : null}
+          {soon.length > 0 ? <Card title={t("pantry.soon")} icon="⏳" tint={colors.accentTint}>{soon.map(renderRow)}</Card> : null}
 
           {suggestions.length > 0 ? (
-            <Card title={`🍳 ${t("pantry.cookWith")}`}>
+            <Card title={t("pantry.cookWith")} icon="🍳">
               {suggestions.map((s) => (
                 <RecipeRow
                   key={s.recipe.id}
@@ -130,7 +120,7 @@ export default function PantryScreen() {
           {CATEGORY_ORDER.map((category) => {
             const inCategory = rows.filter((r) => r.ingredient.category === category);
             return inCategory.length === 0 ? null : (
-              <Card key={category} title={t(`pantry.categories.${category}`)}>
+              <Card key={category} title={t(`pantry.categories.${category}`)} icon={CATEGORY_STYLE[category].emoji} tint={CATEGORY_STYLE[category].tint}>
                 {inCategory.map(renderRow)}
               </Card>
             );

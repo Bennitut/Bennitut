@@ -1,7 +1,7 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Image, Linking, Text, View } from "react-native";
-import { Button, Card, ErrorText, Muted, NutrientRow, Screen, styles } from "../../components/ui";
+import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } from "../../components/ui";
 import { api } from "../../lib/api";
 import { communityCache } from "../../lib/communityCache";
 import { needsTranslation, useI18n } from "../../lib/i18n";
@@ -175,7 +175,7 @@ export default function RecipeDetailScreen() {
         </View>
       </Card>
 
-      <Card title={t("recipes.ingredients")}>
+      <Card title={t("recipes.ingredients")} icon="🧺">
         {recipe.ingredients.map((ri) => {
           const ingredient = ingredients.get(ri.ingredientId);
           return (
@@ -198,7 +198,7 @@ export default function RecipeDetailScreen() {
       </Card>
 
       {text.steps.length > 0 ? (
-        <Card title={t("recipes.steps")}>
+        <Card title={t("recipes.steps")} icon="👩‍🍳" tint={colors.accentTint}>
           {text.steps.map((step, i) => (
             <Text key={i} style={styles.text}>
               {i + 1}. {step}

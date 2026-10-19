@@ -27,6 +27,8 @@ interface PersistedState {
   planRecipes: Recipe[];
   /** Gegessene Mahlzeiten im aktuellen Plan als "Tag:Mahlzeit". */
   eatenMeals: string[];
+  /** Abgehakte Einträge der Einkaufsliste ("Woche:Zutat"), gelten für den aktuellen Plan. */
+  shoppingChecked: string[];
   orders: Order[];
   /** Eigene und importierte Rezepte. */
   myRecipes: Recipe[];
@@ -79,6 +81,7 @@ function initialState(): PersistedState {
     plan: null,
     planRecipes: [],
     eatenMeals: [],
+    shoppingChecked: [],
     orders: [],
     myRecipes: [],
     favoriteIds: [],
@@ -103,6 +106,7 @@ async function loadState(): Promise<PersistedState> {
       ...saved,
       plan,
       eatenMeals: plan ? (saved.eatenMeals ?? []).filter((e): e is string => typeof e === "string") : [],
+      shoppingChecked: plan ? (saved.shoppingChecked ?? []).filter((e): e is string => typeof e === "string") : [],
       pantry: migrateStock(saved.pantry ?? []),
       settings: { ...base.settings, ...saved.settings },
     };
@@ -138,6 +142,7 @@ interface Store extends PersistedState {
   setPantryAmount: (ingredientId: string, amount: number) => void;
   setPlan: (plan: MonthPlan, extraRecipes: Recipe[]) => void;
   markMealEaten: (meal: PlannedMeal, title: string) => void;
+  toggleShoppingItem: (key: string) => void;
   toggleLock: (meal: PlannedMeal) => void;
   /** Nach dem Fragebogen soll der Plan-Tab gleich einen Plan erstellen. */
   pendingPlan: boolean;
@@ -201,8 +206,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const used = new Set(plan.weeks.flatMap((w) => w.meals.map((m) => m.recipeId)));
           const planRecipes = [...s.planRecipes, ...extraRecipes].filter((r) => used.has(r.id));
           // Gegessenes bleibt markiert, wenn derselbe Monat neu geplant wurde.
-          const eatenMeals = s.plan?.startDate === plan.startDate ? s.eatenMeals : [];
-          return { ...s, plan, planRecipes, eatenMeals };
+          const samePlan = s.plan?.startDate === plan.startDate;
+          return { ...s, plan, planRecipes, eatenMeals: samePlan ? s.eatenMeals : [], shoppingChecked: samePlan ? s.shoppingChecked : [] };
         }),
       markMealEaten: (meal, title) =>
         setState((s) => {
@@ -216,6 +221,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             diary: [...s.diary, { id: newId(), date: today(), time: nowTime(), title, nutrients: meal.nutrientsPerPortion, source: "plan" }],
           };
         }),
+      toggleShoppingItem: (key) =>
+        setState((s) => ({
+          ...s,
+          shoppingChecked: s.shoppingChecked.includes(key) ? s.shoppingChecked.filter((k) => k !== key) : [...s.shoppingChecked, key],
+        })),
       toggleLock: (meal) =>
         setState((s) =>
           s.plan

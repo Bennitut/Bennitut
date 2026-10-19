@@ -95,7 +95,7 @@ export default function ScanScreen() {
         ))}
       </ChipRow>
 
-      <Card title={t(mode === "meal" ? "scan.mealTitle" : "scan.receiptTitle")}>
+      <Card title={t(mode === "meal" ? "scan.mealTitle" : "scan.receiptTitle")} icon={mode === "meal" ? "🍽️" : "🧾"}>
         <Muted>{t(mode === "meal" ? "scan.mealHint" : "scan.receiptHint")}</Muted>
         <Button label={t("scan.takePhoto")} onPress={() => pick("camera")} loading={loading} />
         <Button label={t("scan.fromLibrary")} variant="secondary" onPress={() => pick("library")} disabled={loading} />

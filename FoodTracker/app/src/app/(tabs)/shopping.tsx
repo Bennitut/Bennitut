@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
-import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, colors, styles } from "../../components/ui";
+import { Badge, Button, Card, Chip, ChipRow, ErrorText, HeroCard, IconBubble, Muted, ProgressBar, Screen, colors, styles } from "../../components/ui";
+import { CATEGORY_ORDER, CATEGORY_STYLE, ingredientEmoji } from "../../lib/emoji";
 import { api } from "../../lib/api";
 import { weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
@@ -11,7 +12,7 @@ import { useStore } from "../../lib/store";
 import type { DeliveryProviderInfo } from "../../lib/types";
 
 export default function ShoppingScreen() {
-  const { plan, orders, saveOrder, addPantryItems, ingredients } = useStore();
+  const { plan, orders, saveOrder, addPantryItems, ingredients, shoppingChecked, toggleShoppingItem } = useStore();
   const [leftoversOpen, setLeftoversOpen] = useState(false);
   const i18n = useI18n();
   const { t } = i18n;
@@ -36,6 +37,14 @@ export default function ShoppingScreen() {
   const toBuy = (week?.shoppingList.filter((i) => i.packs > 0) ?? []).sort((a, b) =>
     i18n.ingredientName(a.ingredientId).localeCompare(i18n.ingredientName(b.ingredientId), i18n.language),
   );
+  const weekIndex = plan && week ? plan.weeks.indexOf(week) : 0;
+  const checkKey = (ingredientId: string) => `${weekIndex}:${ingredientId}`;
+  const checkedCount = toBuy.filter((i) => shoppingChecked.includes(checkKey(i.ingredientId))).length;
+  const groups = CATEGORY_ORDER.map((category) => ({
+    category,
+    items: toBuy.filter((i) => ingredients.get(i.ingredientId)?.category === category),
+  })).filter((g) => g.items.length > 0);
+
   // Reste nach der Woche: angebrochen, deshalb zählt die kürzere Haltbarkeit nach dem Öffnen.
   const carryOver = (week?.shoppingList.filter((i) => i.durable && i.leftover > 0 && i.packs > 0) ?? [])
     .map((item) => {
@@ -90,28 +99,69 @@ export default function ShoppingScreen() {
           ))}
         </ChipRow>
       ) : null}
-      <Card title={t("shopping.list")}>
-        {!plan ? (
+      {!plan ? (
+        <Card title={t("shopping.list")} icon="🛒">
           <Muted>{t("shopping.needPlan")}</Muted>
-        ) : toBuy.length === 0 ? (
+        </Card>
+      ) : toBuy.length === 0 ? (
+        <Card title={t("shopping.list")} icon="🎉">
           <Muted>{t("shopping.allThere")}</Muted>
-        ) : (
-          toBuy.map((item) => (
-            <View key={item.ingredientId} style={styles.row}>
-              <Text style={[styles.text, { flex: 1 }]}>
-                {item.packs}× {i18n.ingredientName(item.ingredientId)}{" "}
-                <Text style={styles.muted}>{t("shopping.pack", { size: i18n.number(item.packSize), unit: i18n.unit(item.unit) })}</Text>
-              </Text>
-              <Text style={styles.muted}>{i18n.price(item.price)}</Text>
-            </View>
-          ))
-        )}
-        {week && toBuy.length > 0 ? (
-          <Muted>
-            {t("shopping.sumHint", { price: i18n.price(week!.totalPrice) })} {t("common.estimatedPrices")}
-          </Muted>
-        ) : null}
-      </Card>
+        </Card>
+      ) : (
+        <>
+          <HeroCard>
+            <Text style={styles.heroMuted}>🛒 {t("shopping.weekTitle", { n: weekIndex + 1 })}</Text>
+            <Text style={styles.heroHeading}>{i18n.price(week!.totalPrice)}</Text>
+            <ProgressBar value={checkedCount} max={toBuy.length} light />
+            <Text style={styles.heroText}>{t("shopping.inCart", { done: checkedCount, total: toBuy.length })}</Text>
+            <Text style={styles.heroMuted}>
+              {t("shopping.tapHint")} {t("common.estimatedPrices")}
+            </Text>
+          </HeroCard>
+          {groups.map(({ category, items }) => {
+            const style = CATEGORY_STYLE[category];
+            return (
+              <Card key={category} title={t(`pantry.categories.${category}`)} icon={style.emoji} tint={style.tint}>
+                {items.map((item) => {
+                  const checked = shoppingChecked.includes(checkKey(item.ingredientId));
+                  return (
+                    <Pressable
+                      key={item.ingredientId}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked }}
+                      onPress={() => toggleShoppingItem(checkKey(item.ingredientId))}
+                      style={[styles.row, { paddingVertical: 4, opacity: checked ? 0.5 : 1 }]}
+                    >
+                      <IconBubble emoji={ingredientEmoji(ingredients.get(item.ingredientId))} tint={style.tint} size={40} />
+                      <View style={{ flex: 1, gap: 1 }}>
+                        <Text style={[styles.text, { fontWeight: "600" }, checked && { textDecorationLine: "line-through" }]}>
+                          {i18n.ingredientName(item.ingredientId)}
+                        </Text>
+                        <Muted>{t("shopping.packs", { packs: item.packs, size: i18n.number(item.packSize), unit: i18n.unit(item.unit) })}</Muted>
+                      </View>
+                      <Text style={[styles.text, { color: style.color, fontWeight: "700" }]}>{i18n.price(item.price)}</Text>
+                      <View
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 13,
+                          borderWidth: 2,
+                          borderColor: checked ? colors.primary : colors.border,
+                          backgroundColor: checked ? colors.primary : "transparent",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {checked ? <Text style={{ color: colors.primaryText, fontWeight: "800" }}>✓</Text> : null}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </Card>
+            );
+          })}
+        </>
+      )}
 
       {carryOver.length > 0 ? (
         <Card>
@@ -121,21 +171,25 @@ export default function ShoppingScreen() {
             onPress={() => setLeftoversOpen((open) => !open)}
             style={styles.row}
           >
-            <Text style={[styles.text, { flex: 1, fontWeight: "600" }]}>{t("shopping.leftoversTitle", { n: carryOver.length })}</Text>
-            <Text style={styles.muted}>{leftoversOpen ? "▾" : "▸"}</Text>
+            <IconBubble emoji="⏳" tint={colors.accentTint} />
+            <Text style={[styles.cardTitle, { flex: 1 }]}>{t("shopping.leftoversTitle", { n: carryOver.length })}</Text>
+            <Text style={[styles.cardTitle, { color: colors.accent }]}>{leftoversOpen ? "▾" : "▸"}</Text>
           </Pressable>
           {leftoversOpen ? (
             <>
               <Muted>{t("shopping.leftoversHint")}</Muted>
               {carryOver.map(({ item, daysLeft }) => (
-                <View key={item.ingredientId} style={[styles.row, { paddingVertical: 2 }]}>
+                <View key={item.ingredientId} style={[styles.row, { paddingVertical: 3 }]}>
+                  <Text style={{ fontSize: 20 }}>{ingredientEmoji(ingredients.get(item.ingredientId))}</Text>
                   <Text style={[styles.text, { flex: 1 }]}>
                     {i18n.ingredientName(item.ingredientId)}{" "}
                     <Text style={styles.muted}>{i18n.amount(item.leftover, item.unit)}</Text>
                   </Text>
-                  <Text style={[styles.muted, daysLeft <= 7 ? { color: colors.warning, fontWeight: "600" } : null]}>
-                    {daysLeft <= 7 ? t("shopping.useSoon", { days: daysLeft }) : t("shopping.keepsDays", { days: daysLeft })}
-                  </Text>
+                  {daysLeft <= 7 ? (
+                    <Badge label={t("shopping.useSoon", { days: daysLeft })} color={colors.warning} tint={colors.accentTint} />
+                  ) : (
+                    <Muted>{t("shopping.keepsDays", { days: daysLeft })}</Muted>
+                  )}
                 </View>
               ))}
             </>
@@ -144,7 +198,7 @@ export default function ShoppingScreen() {
       ) : null}
 
       {toBuy.length > 0 ? (
-        <Card title={t("shopping.deliver")}>
+        <Card title={t("shopping.deliver")} icon="🚚" tint={colors.accentTint}>
           <ChipRow>
             {providers.map((p) => (
               <Chip key={p.id} label={providerName(p)} selected={providerId === p.id} onPress={() => setProviderId(p.id)} />
@@ -161,7 +215,7 @@ export default function ShoppingScreen() {
       ) : null}
 
       {orders.length > 0 ? (
-        <Card title={t("shopping.orders")}>
+        <Card title={t("shopping.orders")} icon="📦">
           {orders.map((order) => (
             <View key={order.id} style={styles.row}>
               <View style={{ flex: 1 }}>
@@ -178,7 +232,7 @@ export default function ShoppingScreen() {
         </Card>
       ) : null}
 
-      <Button label={`🥫 ${t("shopping.pantry")} ›`} variant="secondary" onPress={() => router.push("/pantry")} />
+      <Button label={`🧺 ${t("shopping.pantry")} ›`} variant="secondary" onPress={() => router.push("/pantry")} />
     </Screen>
   );
 }

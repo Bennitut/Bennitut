@@ -10,7 +10,7 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <Card title={t("settings.languageRegion")}>
+      <Card title={t("settings.languageRegion")} icon="🌍">
         <Field label={t("settings.language")}>
           <ChipRow>
             {UI_LANGUAGES.map((language) => (
