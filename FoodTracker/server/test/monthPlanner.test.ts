@@ -88,11 +88,18 @@ describe("planMonth", () => {
 });
 
 describe("Katalog-Medien", () => {
-  it("hat zu jedem Rezept ein Foto, ein Video und eine Küche", () => {
+  it("hat zu jedem Rezept eine Küche und gültige Links zu Foto und Video", () => {
     for (const r of RECIPES) {
-      expect(r.media?.image?.uri, r.id).toMatch(/^https:\/\/i\.ytimg\.com\/vi\/[\w-]{11}\/hqdefault\.jpg$/);
-      expect(r.media?.videos?.[0]?.url, r.id).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/);
       expect(r.tags.length, r.id).toBeGreaterThan(0);
+      const image = r.media?.image;
+      if (image) {
+        expect(image.uri, r.id).toMatch(/^https:\/\/(upload\.wikimedia\.org|live\.staticflickr\.com)\//);
+        // Frei lizenziert: Urheber und Lizenz müssen angezeigt werden.
+        expect(image.credit, r.id).toMatch(/CC0|Public Domain|CC BY/);
+      }
+      for (const video of r.media?.videos ?? []) expect(video.url, r.id).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/);
     }
+    expect(RECIPES.filter((r) => r.media?.image).length).toBeGreaterThanOrEqual(100);
+    expect(RECIPES.filter((r) => r.media?.videos?.length).length).toBeGreaterThanOrEqual(200);
   });
 });

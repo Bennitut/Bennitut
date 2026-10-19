@@ -1,7 +1,12 @@
 import type { MealType, Recipe } from "../types.js";
 import { recipe } from "./recipeHelper.js";
 import { RECIPE_CUISINES } from "./recipeCuisines.js";
+import { RECIPE_IMAGES } from "./recipeImages.js";
 import { CLASSIC_RECIPES } from "./recipesClassics.js";
+import { MEAT_EUROPE_CUISINES, RECIPES_MEAT_EUROPE } from "./recipesMeatEurope.js";
+import { RECIPES_VEGAN, VEGAN_CUISINES } from "./recipesVegan.js";
+import { RECIPES_VEGGIE, VEGGIE_CUISINES } from "./recipesVeggie.js";
+import { RECIPES_WORLD, WORLD_CUISINES } from "./recipesWorld.js";
 import { RECIPE_VIDEOS } from "./recipeVideos.js";
 
 const B: MealType[] = ["breakfast"];
@@ -244,19 +249,33 @@ const BASE_RECIPES: Recipe[] = [
 ];
 
 /** Küche als Tag sowie Kochvideo und Foto (Video-Vorschaubild) ergänzen. */
+const CUISINES = { ...RECIPE_CUISINES, ...VEGAN_CUISINES, ...VEGGIE_CUISINES, ...MEAT_EUROPE_CUISINES, ...WORLD_CUISINES };
+
+/** Ergänzt Küche, frei lizenziertes Foto und Kochvideo (als Link). */
 function withExtras(recipe: Recipe): Recipe {
   const video = RECIPE_VIDEOS[recipe.id];
-  const cuisine = RECIPE_CUISINES[recipe.id];
+  const image = RECIPE_IMAGES[recipe.id];
+  const cuisine = CUISINES[recipe.id];
   return {
     ...recipe,
     tags: cuisine ? [...recipe.tags, cuisine] : recipe.tags,
-    media: video
-      ? {
-          image: { uri: `https://i.ytimg.com/vi/${video.youtubeId}/hqdefault.jpg`, credit: `YouTube · ${video.channel}` },
-          videos: [{ platform: "youtube", url: `https://www.youtube.com/watch?v=${video.youtubeId}`, title: video.title, author: video.channel }],
-        }
-      : undefined,
+    media:
+      image || video
+        ? {
+            ...(image ? { image } : {}),
+            ...(video
+              ? { videos: [{ platform: "youtube", url: `https://www.youtube.com/watch?v=${video.youtubeId}`, title: video.title, author: video.channel }] }
+              : {}),
+          }
+        : undefined,
   };
 }
 
-export const RECIPES: Recipe[] = [...BASE_RECIPES, ...CLASSIC_RECIPES].map(withExtras);
+export const RECIPES: Recipe[] = [
+  ...BASE_RECIPES,
+  ...CLASSIC_RECIPES,
+  ...RECIPES_VEGAN,
+  ...RECIPES_VEGGIE,
+  ...RECIPES_MEAT_EUROPE,
+  ...RECIPES_WORLD,
+].map(withExtras);

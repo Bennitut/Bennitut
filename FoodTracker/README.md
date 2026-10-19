@@ -13,7 +13,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Fragebogen** | Beim ersten Planen fragt die App nach Ernährungsweise (alles, pescetarisch, vegetarisch, vegan), religiösen Speiseregeln (halal, koscher), Unverträglichkeiten, Abneigungen, Ziel und Körperdaten (daraus der Kalorienbedarf), Personen, Mahlzeiten, Kochzeit, Lieblingsküchen, Budget und Abwechslung. |
 | **Monatsplan** | Plant immer 30 Tage in vier Wochenblöcken mit je eigener Einkaufsliste; Reste und Vorräte einer Woche gehen in die nächste. Der Plan richtet sich nach den Antworten aus dem Fragebogen. Optional schlägt Claude neue Rezepte nach Wunsch vor. |
 | **Profil (👤)** | Ernährungshistorie (7/30 Tage mit Kalorien pro Tag, Durchschnitt, Makros, häufigste Gerichte), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
-| **Bilder & Videos** | Jedes Katalogrezept hat ein Bild und ein passendes YouTube-Kochvideo; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
+| **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
 | **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
 | **Instagram & TikTok** | Link zu einem Koch-Video einfügen → Claude liest Beschreibung, Vorschaubild und (optional) Einzelbilder aus dem gespeicherten Video und macht daraus ein Rezept mit Mengen. |
@@ -48,7 +48,7 @@ FoodTracker/
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
-    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 101 Rezepte mit Küche, Bild und YouTube-Video
+    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und Video-Link
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
 ```
 
@@ -146,9 +146,10 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 - Community-Rezepte liegen in einer JSON-Datei, Nutzer:innen sind nur über eine anonyme
   Geräte-ID unterschieden. Für den echten Betrieb braucht es Konten, eine Datenbank und Moderation.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
-- Bilder der Katalogrezepte sind die Vorschaubilder der verlinkten YouTube-Videos (Quelle wird angezeigt).
-  TikTok und Instagram bieten keine offene Suche; dafür gibt es Suchlinks, bei importierten Rezepten den Originalbeitrag.
-- Für vegane Ernährung gibt es noch vergleichsweise wenige Katalogrezepte; Wiederholungen im Monat sind dann häufiger.
+- Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
+  Fotos stammen aus freien Lizenzen (CC0, Public Domain, CC BY, CC BY-SA, über Openverse von Wikimedia Commons
+  und Flickr); Urheber und Lizenz stehen unter dem Foto und verlinken die Quelle. Noch nicht jedes Rezept hat ein Foto.
+  YouTube-Videos werden nur verlinkt. TikTok und Instagram bieten keine offene Suche; dafür gibt es Suchlinks.
 - Halal/koscher prüft die Zutaten (kein Schweinefleisch, kein Fleisch mit Milch bzw. Meeresfrüchte bei koscher);
   ob Fleisch zertifiziert ist, muss man beim Einkauf selbst beachten.
 - Rezepttexte im Katalog gibt es auf Deutsch und Englisch; andere Sprachen übersetzt Claude auf Knopfdruck.
