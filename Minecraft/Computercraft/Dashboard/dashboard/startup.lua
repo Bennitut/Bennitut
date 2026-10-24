@@ -29,6 +29,7 @@ local DEFAULTS = {
   feCells        = true,    -- FE in AppliedFlux-Zellen mitzaehlen
   feCellFactor   = 1048576, -- FE pro belegtem Byte einer FE-Zelle
   meBridge       = nil,
+  bulkBridge     = "",      -- zweite ME Bridge an einem Unternetz nur mit Bulk-/Infinity-Zellen ("" = keine)
   sampleInterval = 1,
   rateWindow     = 10,
   pingInterval   = 5,
@@ -359,8 +360,20 @@ function detectME()
   if cfg.meBridge then
     me = peripheral.wrap(cfg.meBridge)
   else
-    me = peripheral.find("meBridge") or peripheral.find("me_bridge")
+    -- die ME Bridge fuer die Bulk-Zellen (Reiter MENGE) nicht als Haupt-Bridge nehmen
+    local notBulk = function(name) return name ~= cfg.bulkBridge end
+    me = peripheral.find("meBridge", notBulk) or peripheral.find("me_bridge", notBulk)
   end
+end
+
+-- Alle ME Bridges ausser der Haupt-Bridge (Auswahl fuer die Bulk-Bridge)
+function otherMEBridges()
+  local list = {}
+  for _, name in ipairs(peripheral.getNames()) do
+    if isME(peripheral.getType(name)) and not (me and peripheral.getName(me) == name) then list[#list + 1] = name end
+  end
+  table.sort(list)
+  return list
 end
 
 -- Energie --------------------------------------------------------
@@ -1100,6 +1113,20 @@ do
     if me.getCells then
       local ok, list = pcall(me.getCells)
       if ok and type(list) == "table" then scan(list) end
+    end
+    -- Bulk-Zellen meldet die ME Bridge nicht (nur normale Zellen). Liegen sie in einem
+    -- eigenen Unternetz mit zweiter ME Bridge, ist alles dort Bulk-/Infinity-Inhalt.
+    local bb = cfg.bulkBridge ~= "" and cfg.bulkBridge and peripheral.wrap(cfg.bulkBridge)
+    if bb and bb.getItems then
+      local ok, list = pcall(bb.getItems)
+      if ok and type(list) == "table" then
+        meTop.bridge = true
+        for _, it in ipairs(list) do
+          if type(it) == "table" and it.name then found[it.name] = true; known = known + 1 end
+        end
+      end
+    else
+      meTop.bridge = false
     end
     if cells == 0 and me.getDrives then
       local ok, drives = pcall(me.getDrives)
@@ -3171,12 +3198,12 @@ function drawMengeScreen()
   end
   y = y + 1
   if not showHidden and meTop.rows then
-    local info = string.format("Bulk/Infinity-Zellen: %d (Inhalt lesbar: %d) | uebersprungen: %d | unendlich: %d | ausgeblendet: %d",
-      meTop.cells or 0, meTop.known or 0, meTop.skipped or 0, meTop.infinite or 0, #hiddenNames)
+    local info = string.format("%s | uebersprungen: %d | unendlich: %d | ausgeblendet: %d",
+      meTop.bridge and "Bulk-Bridge aktiv" or "keine Bulk-Bridge", meTop.skipped or 0, meTop.infinite or 0, #hiddenNames)
     put(2, y, fit(info, W - 2), colors.lightGray)
     y = y + 1
-    if (meTop.cells or 0) > (meTop.known or 0) then
-      put(2, y, fit("Inhalt mancher Bulk-Zellen nicht lesbar - solche Items mit X ausblenden", W - 2), colors.orange)
+    if not meTop.bridge and (meTop.skipped or 0) == 0 then
+      put(2, y, fit("Bulk-Zellen meldet die ME Bridge nicht: X blendet Items aus, oder Bulk-Bridge einrichten (SETUP)", W - 2), colors.orange)
       y = y + 1
     end
   end
@@ -3653,6 +3680,17 @@ do
         plus = function() saveSetting("farmTimeout", math.min(300, cfg.farmTimeout + 5)) end },
       { "Titel", tostring(cfg.title),
         button = "AENDERN", fn = function() textSetting("title", "Titel des Dashboards") end },
+      { "Bulk-ME-Bridge (Reiter MENGE)", cfg.bulkBridge ~= "" and cfg.bulkBridge or "keine",
+        button = "WECHSELN", fn = function()
+          -- der Reihe nach: keine -> jede weitere ME Bridge -> keine
+          local options = { "" }
+          for _, n in ipairs(otherMEBridges()) do options[#options + 1] = n end
+          local idx = 0
+          for i, n in ipairs(options) do if n == (cfg.bulkBridge or "") then idx = i end end
+          local nextName = options[idx % #options + 1]
+          saveSetting("bulkBridge", nextName)
+          refreshMeTop()
+        end },
       { "Update-Quelle", tostring(cfg.updateUrl),
         button = "AENDERN", fn = function() textSetting("updateUrl", "Adresse fuer UPDATE (Ordner mit install.lua)") end },
       { "NBT-Export", cfg.nbtExport and "AN" or "AUS",
