@@ -52,6 +52,16 @@ for _, name in ipairs(peripheral.getNames()) do
         end
       end
       for _, k in ipairs(order) do add((" %dx %s"):format(groups[k], k), colors.lightGray) end
+      -- Bulk-/Infinity-Zellen: Rohdaten zeigen, damit man sieht, ob der Inhalt lesbar ist
+      local shown = 0
+      for _, c in ipairs(cells) do
+        local n = (itemName(c.item) .. " " .. tostring(c.type)):lower()
+        if shown < 3 and (n:find("bulk", 1, true) or n:find("infinit", 1, true) or n:find("creative", 1, true)) then
+          shown = shown + 1
+          add(" BULK/INFINITY " .. itemName(c.item), colors.orange)
+          add("   " .. textutils.serialize(c, { compact = true }):sub(1, 400), colors.orange)
+        end
+      end
       if #special == 0 then
         add(" Keine FE-/Sonderzellen gemeldet!", colors.red)
       end

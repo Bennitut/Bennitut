@@ -1056,10 +1056,113 @@ end
 -- Top-Zugaenge: alle 5 Minuten eine Bestandsaufnahme des ganzen ME-Systems,
 -- daraus die Items, von denen zuletzt am meisten dazugekommen ist.
 local topItems = { [15] = nil, [60] = nil, at = nil }
+-- Reiter MENGE: groesste Bestaende, die noch nicht in einer Bulk-/Infinity-Zelle liegen
+local meTop = { rows = nil, at = nil, cells = 0, known = 0, skipped = 0, infinite = 0, hidden = {} }
 local readTopItems
 do
   local SNAP_MS, SNAP_N, TOP_N = 300000, 13, 40
   local snaps, lastSnap = {}, -1e15
+  local MENGE_N, MENGE_FILE = 60, fs.combine(DIR, "menge.db")
+  local INFINITE = 2147483647   -- so viel melden Infinity-Zellen (oder mehr)
+  local last = nil              -- letzte Bestandsaufnahme { counts, labels }
+
+  -- Bulk-Zellen (MEGA Cells), Infinity- und Creative-Zellen erkennen und ihren Inhalt finden.
+  -- Wie die ME Bridge den Inhalt meldet, haengt von der Version ab: deshalb werden alle
+  -- Item-IDs ("mod:item") in den Zelldaten gesammelt, ausser der ID der Zelle selbst.
+  local function isBulkCell(c)
+    local n = (tostring(type(c.item) == "table" and (c.item.name or "") or c.item or c.name or "") .. " " .. tostring(c.type or "")):lower()
+    return n:find("bulk", 1, true) or n:find("infinit", 1, true) or n:find("creative", 1, true)
+  end
+  local function collectIds(t, own, out, depth)
+    if depth > 5 then return end
+    for _, v in pairs(t) do
+      if type(v) == "string" then
+        if v ~= own and v:match("^[%w_%.%-]+:[%w_/%.%-]+$") and #v:match(":(.*)$") > 2 then out[v] = true end
+      elseif type(v) == "table" then
+        collectIds(v, own, out, depth + 1)
+      end
+    end
+  end
+  local function bulkContents()
+    local found, cells, known = {}, 0, 0
+    local function scan(list)
+      for _, c in pairs(list) do
+        if type(c) == "table" and isBulkCell(c) then
+          cells = cells + 1
+          local own = type(c.item) == "table" and c.item.name or c.item or c.name
+          local ids = {}
+          collectIds(c, own, ids, 1)
+          if next(ids) then known = known + 1 end
+          for id in pairs(ids) do found[id] = true end
+        end
+      end
+    end
+    if me.getCells then
+      local ok, list = pcall(me.getCells)
+      if ok and type(list) == "table" then scan(list) end
+    end
+    if cells == 0 and me.getDrives then
+      local ok, drives = pcall(me.getDrives)
+      if ok and type(drives) == "table" then
+        for _, d in pairs(drives) do
+          local list = type(d) == "table" and (d.cells or d.items) or nil
+          if type(list) == "table" then scan(list) end
+        end
+      end
+    end
+    return found, cells, known
+  end
+
+  local function buildMeTop()
+    if not last then return end
+    local found, cells, known = bulkContents()
+    local rows, skipped, infinite = {}, 0, 0
+    for name, c in pairs(last.counts) do
+      if c >= INFINITE then infinite = infinite + 1
+      elseif found[name] then skipped = skipped + 1
+      elseif not meTop.hidden[name] then rows[#rows + 1] = { name = name, label = last.labels[name], count = c } end
+    end
+    table.sort(rows, function(a, b) return a.count > b.count end)
+    while #rows > MENGE_N do table.remove(rows) end
+    meTop.rows, meTop.at = rows, os.epoch("utc")
+    meTop.cells, meTop.known, meTop.skipped, meTop.infinite = cells, known, skipped, infinite
+  end
+
+  function saveMeTop()
+    local h = fs.open(MENGE_FILE, "w")
+    h.write(textutils.serialize(meTop.hidden))
+    h.close()
+  end
+
+  function loadMeTop()
+    if not fs.exists(MENGE_FILE) then return end
+    local h = fs.open(MENGE_FILE, "r")
+    local t = textutils.unserialize(h.readAll())
+    h.close()
+    if type(t) == "table" then meTop.hidden = t end
+  end
+
+  -- Item aus der MENGE-Liste aus- bzw. wieder einblenden (z.B. weil es schon in einer Bulk-Zelle liegt)
+  function setMeTopHidden(name, hide)
+    meTop.hidden[name] = hide or nil
+    if isMain() then
+      saveMeTop()
+      buildMeTop()
+    else
+      if meTop.rows and hide then
+        for i, r in ipairs(meTop.rows) do if r.name == name then table.remove(meTop.rows, i) break end end
+      end
+      state.meTopHoldUntil = os.epoch("utc") + 4000
+      sendCmd({ cmd = "meTopHide", name = name, hide = hide })
+    end
+  end
+
+  -- Sofort neu einlesen (Knopf AKTUALISIEREN)
+  function refreshMeTop()
+    if not isMain() then sendCmd({ cmd = "meTopRefresh" }) return end
+    lastSnap = -1e15
+    readTopItems()
+  end
 
   local function compute(minutes)
     local cur = snaps[#snaps]
@@ -1096,6 +1199,8 @@ do
     end
     push(snaps, { t = now, counts = counts, labels = labels }, SNAP_N)
     topItems[15], topItems[60], topItems.at = compute(15), compute(60), now
+    last = { counts = counts, labels = labels }
+    buildMeTop()
   end
 end
 
@@ -1705,7 +1810,7 @@ function buildSync()
     layout = layout, auto = auto, autoCond = autoCondSince,
     energy = state.energy, rate = state.rate, sources = srcs, aeFE = aeFEFound,
     crafts = state.crafts, craftErr = state.craftErr,
-    stock = stock.items, stockState = st, storage = storage, topItems = topItems,
+    stock = stock.items, stockState = st, storage = storage, topItems = topItems, meTop = meTop,
     players = players, env = env, chat = chatSettings,
     shared = shared, nbt = nbtSyncData(),
   }
@@ -1723,6 +1828,7 @@ applySync = function(sender, msg)
   stockState = type(msg.stockState) == "table" and msg.stockState or {}
   storage = msg.storage
   if type(msg.topItems) == "table" then topItems = msg.topItems end
+  if type(msg.meTop) == "table" and os.epoch("utc") >= (state.meTopHoldUntil or 0) then meTop = msg.meTop end
   if type(msg.players) == "table" then players = msg.players end
   env = msg.env
   if type(msg.chat) == "table" and os.epoch("utc") >= (state.chatHoldUntil or 0) then chatSettings = msg.chat end
@@ -1755,6 +1861,10 @@ applyCmd = function(msg)
     saveStock()
   elseif msg.cmd == "setting" and SHARED_SETTINGS[msg.setting] then
     saveSetting(msg.setting, msg.value)
+  elseif msg.cmd == "meTopHide" and type(msg.name) == "string" then
+    setMeTopHidden(msg.name, msg.hide and true or false)
+  elseif msg.cmd == "meTopRefresh" then
+    refreshMeTop()
   elseif msg.cmd == "nbtNow" then
     nbtState.now = true
   end
@@ -2039,6 +2149,7 @@ local TABS = {
   { "dash",   "DASHBOARD", "DASH",  "DB" },
   { "energy", "ENERGIE",   "STROM", "EN" },
   { "stock",  "LAGER",     "LAGER", "LA" },
+  { "menge",  "MENGE",     "MENGE", "MG" },
   { "info",   "INFO",      "INFO",  "IN" },
   { "stats",  "STATISTIK", "STATS", "ST" },
   { "farms",  "FARMEN",    "FARM",  "FA" },
@@ -3036,6 +3147,78 @@ function drawTopList(y)
   }, pages, footRows, "topPage")
 end
 
+-- Reiter MENGE: Items mit dem groessten Bestand, die noch nicht in einer
+-- Bulk- oder Infinity-Zelle liegen (Kandidaten fuer eine neue Bulk-Zelle)
+function drawMengeScreen()
+  header()
+  local y = HH + 1
+  local footRows = (H >= 20) and 3 or 1
+  local listBot = H - footRows - 1
+  local hiddenNames = {}
+  for name in pairs(meTop.hidden or {}) do hiddenNames[#hiddenNames + 1] = name end
+  table.sort(hiddenNames)
+  local showHidden = state.mengeView == "hidden"
+
+  if showHidden then
+    put(2, y, fit("Ausgeblendete Items (z.B. schon in einer Bulk-Zelle)", W - 2), colors.white)
+  elseif meTop.rows then
+    local head = "Groesste Bestaende ohne Bulk-/Infinity-Zelle"
+    put(2, y, fit(head, W - 2), colors.white)
+    local stand = "Stand vor " .. math.floor((os.epoch("utc") - (meTop.at or 0)) / 60000) .. " min"
+    if #head + #stand + 4 <= W then put(W - #stand, y, stand, colors.gray) end
+  else
+    put(2, y, fit((me or not isMain()) and "Lese das ME-System ..." or "Keine ME Bridge gefunden", W - 2), colors.gray)
+  end
+  y = y + 1
+  if not showHidden and meTop.rows then
+    local info = string.format("Bulk/Infinity-Zellen: %d (Inhalt lesbar: %d) | uebersprungen: %d | unendlich: %d | ausgeblendet: %d",
+      meTop.cells or 0, meTop.known or 0, meTop.skipped or 0, meTop.infinite or 0, #hiddenNames)
+    put(2, y, fit(info, W - 2), colors.lightGray)
+    y = y + 1
+    if (meTop.cells or 0) > (meTop.known or 0) then
+      put(2, y, fit("Inhalt mancher Bulk-Zellen nicht lesbar - solche Items mit X ausblenden", W - 2), colors.orange)
+      y = y + 1
+    end
+  end
+
+  local list = showHidden and hiddenNames or (meTop.rows or {})
+  local per = math.max(1, listBot - y + 1)
+  local pages = math.max(1, math.ceil(#list / per))
+  state.mengePage = clamp(state.mengePage or 1, 1, pages)
+  if #list == 0 and (showHidden or meTop.rows) then
+    put(2, y + 1, showHidden and "Keine Items ausgeblendet" or "Alles liegt schon in Bulk-/Infinity-Zellen", colors.gray)
+  end
+  for i = 1, per do
+    local idx = (state.mengePage - 1) * per + i
+    local r = list[idx]
+    if not r then break end
+    local ry = y + i - 1
+    local bg = (i % 2 == 1) and colors.gray or colors.black
+    fill(1, ry, W, ry, bg)
+    if showHidden then
+      put(2, ry, fit(prettyName(r), W - 12), colors.white, bg)
+      drawButton(W - 7, ry, W, ry, "ZEIGEN", colors.black, colors.lime, function() setMeTopHidden(r, false) end)
+    else
+      local cnt = fmtNum(r.count)
+      put(1, ry, string.format("%2d.", idx), colors.lightGray, bg)
+      put(5, ry, fit(r.label or prettyName(r.name), W - #cnt - 10), colors.white, bg)
+      put(W - #cnt - 4, ry, cnt, colors.yellow, bg)
+      drawButton(W - 2, ry, W, ry, "X", colors.white, colors.red, function() setMeTopHidden(r.name, true) end)
+    end
+  end
+
+  local defs
+  if showHidden then
+    defs = { { "ZURUECK", "ZURUECK", colors.blue, function() state.mengeView = nil; state.mengePage = 1 end } }
+  else
+    defs = {
+      { "AKTUALISIEREN", "AKT.", colors.green, refreshMeTop },
+      { "AUSGEBLENDET (" .. #hiddenNames .. ")", "AUSG.", colors.purple, function() state.mengeView = "hidden"; state.mengePage = 1 end },
+    }
+  end
+  footer(defs, pages, footRows, "mengePage")
+end
+
 function drawStockScreen()
   header()
   local y = HH + 1
@@ -3556,6 +3739,7 @@ function draw()
   elseif state.screen == "stats" then drawStats()
   elseif state.screen == "energy" then drawEnergyScreen()
   elseif state.screen == "stock" then drawStockScreen()
+  elseif state.screen == "menge" then drawMengeScreen()
   elseif state.screen == "info" then drawInfoScreen()
   elseif state.screen == "chat" then drawChatScreen()
   elseif state.screen == "setup" then drawSetupScreen()
@@ -3823,6 +4007,7 @@ end
 loadFarms()
 loadStats()
 loadStock()
+loadMeTop()
 loadChat()
 detectChat()
 detectExtras()
