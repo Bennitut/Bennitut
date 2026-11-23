@@ -81,7 +81,7 @@ const CLIPS = [
       await tap(page, page.getByText("Monatsplan erstellen", { exact: true }).last(), 0);
       await page.getByText(/^Woche 1/).first().waitFor({ timeout: 60_000 });
       await page.waitForTimeout(2200);
-      caption("Ohne Reste: Packungen\nwerden aufgebraucht");
+      caption("Reste werden\ngleich mitverplant");
       await scroll(page, 520);
       await page.waitForTimeout(1200);
       await scroll(page, 420);
@@ -100,7 +100,7 @@ const CLIPS = [
       const prices = page.getByText(/^(€\s?\d+,\d\d|\d+,\d\d\s?€)$/);
       for (let i = 0; i < 3; i++) await tap(page, prices.nth(i), 650);
       await page.waitForTimeout(800);
-      caption("Packungen so gewählt,\ndass nichts übrig bleibt");
+      caption("Passende Packungen –\nkaum Reste");
       await scroll(page, 420);
       await page.waitForTimeout(1500);
       await scroll(page, -680);
