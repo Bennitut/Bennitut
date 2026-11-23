@@ -7,15 +7,17 @@ später priorisiert – Stabilität und Bedienbarkeit vor neuen Funktionen.
 
 Vor jedem Commit: `cd server && npm run check` und `cd app && npm run check` (Typecheck, Lint und `npm test`),
 bei Web-relevanten Änderungen zusätzlich `cd app && npm run web:export && npm run web:smoke`
-(Rauchtest im headless Chromium, braucht Playwright).
+(Rauchtest im headless Chromium, braucht Playwright). Nach Änderungen an dieser Datei oder an `reports/`:
+`node --test reports/make-report.test.cjs` – prüft, dass der Tagesbericht alles Erledigte findet. Erledigtes
+heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen und Erkenntnisse“ enden mit „(TT.MM.JJJJ)“
+(Einzelheiten im Kopf von `reports/make-report.cjs`).
 Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die generierten
 `package-lock.json` nicht mit.
 
 **Stand 24.11.2026:** PR #2 hat die Grenze von etwa 1.500 geänderten Zeilen überschritten. Bis Benjamin ihn mergt, nur
-Fixes und Tests: Punkt 6 (Tests für die App-Logik), das doppelte Emoji und Neuplanen/Fixieren sind erledigt. Als
-Nächstes: der Tagesbericht soll erledigte Vorrang-Abschnitte zeigen (vor dem Bericht für den 24.11.), danach
-`localizeRecipe`/`needsTranslation` testbar machen (siehe „Ideen und Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem
-Mergen im neuen PR.
+Fixes und Tests: Punkt 6 (Tests für die App-Logik), das doppelte Emoji, Neuplanen/Fixieren und der Tagesbericht
+(zeigt jetzt auch Vorrang-Abschnitte und erledigte Ideen) sind erledigt. Als Nächstes: `localizeRecipe`/
+`needsTranslation` testbar machen (siehe „Ideen und Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem Mergen im neuen PR.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -123,10 +125,11 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **„Run workflow“ für den Pages-Workflow** zeigt GitHub nur an, wenn die Workflow-Datei auch auf dem
   Standard-Branch `master` liegt. Nicht nötig: Jeder Push auf `feature/food-tracker-app`, der die App ändert,
   startet den Workflow. (24.11.2026)
-- **Tagesbericht:** `make-report.cjs` zeigt unter „Was heute passiert ist“ nur nummerierte Aufgaben; erledigte
-  Vorrang-Abschnitte (z. B. GitHub Pages) und erledigte Punkte aus „Ideen und Erkenntnisse“ (✅ mit Datum) stehen nur
-  in der Commit-Liste. Vor dem Bericht für den 24.11. beheben – an dem Tag waren das GitHub Pages, das doppelte Emoji
-  und Neuplanen/Fixieren. (24.11.2026)
+- ✅ **Tagesbericht: auch Vorrang und erledigte Ideen zeigen:** erledigt 24.11.2026 – „Was heute passiert ist“
+  zeigt jetzt auch erledigte Vorrang-Abschnitte und ✅-Punkte aus „Ideen und Erkenntnisse“ (beide zählen bei
+  „Aufgaben erledigt“ mit) und listet die an dem Tag neu notierten Punkte. `node --test reports/make-report.test.cjs`
+  prüft das Lesen und das Format dieser Datei. Keine fast leere letzte Seite mehr (PR-Link steht jetzt oben).
+  (24.11.2026)
 - **Datenschutz (für Punkt 7):** Die Web-Version und die App laden Rezeptfotos direkt von `upload.wikimedia.org` und
   `live.staticflickr.com` – dabei sehen diese Dienste die IP-Adresse. In der Datenschutzerklärung erwähnen oder die
   Fotos später selbst ausliefern. (23.11.2026)
