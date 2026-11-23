@@ -528,4 +528,8 @@ export const es: Dictionary = {
     install: "Instalar",
     later: "Más tarde",
   },
+  comingSoon: {
+    title: "Próximamente",
+    text: "Esta función necesita el servidor de FoodTracker y llegará pronto. El plan, la lista de la compra, la despensa y el diario ya funcionan, sin cuenta.",
+  },
 };

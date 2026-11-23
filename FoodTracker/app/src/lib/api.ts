@@ -44,6 +44,8 @@ function serverUrl(): string | null {
 }
 
 export const BASE_URL = serverUrl();
+/** Ob es überhaupt einen Server gibt; sonst zeigen Server-Funktionen „Bald verfügbar“ statt eines Fehlers. */
+export const HAS_SERVER = BASE_URL !== null;
 
 export type ImageMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
 export interface ImagePayload {

@@ -528,4 +528,8 @@ export const de = {
     install: "Installieren",
     later: "Später",
   },
+  comingSoon: {
+    title: "Bald verfügbar",
+    text: "Diese Funktion braucht den FoodTracker-Server und kommt bald. Planen, Einkaufsliste, Vorrat und Tagebuch funktionieren schon jetzt – ganz ohne Konto.",
+  },
 };

@@ -528,4 +528,8 @@ export const en: Dictionary = {
     install: "Install",
     later: "Later",
   },
+  comingSoon: {
+    title: "Coming soon",
+    text: "This feature needs the FoodTracker server and is coming soon. Planning, shopping list, pantry and diary already work – no account needed.",
+  },
 };
