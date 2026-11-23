@@ -40,7 +40,7 @@ Kreislauf: **Plan → Einkaufsliste → Bestellung → Vorrat → Kochen/Essen �
 
 ```
 FoodTracker/
-├── app/      Expo / React Native App (iOS + Android, TypeScript, Expo Router)
+├── app/      Expo / React Native App (iOS, Android und Web, TypeScript, Expo Router)
 │   ├── src/app/(tabs)/   Heute, Erfassen, Plan, Rezepte, Vorrat, Einkauf
 │   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
@@ -83,6 +83,13 @@ Die App findet den Server automatisch (gleicher Rechner, Port 3000). Für einen 
 Katalog und Zero-Waste-Planer sind in die App eingebaut. Den Server braucht man nur für Foto-/Bon-Erkennung,
 KI-Rezepte, Import, Übersetzen, Community und Bestellungen.
 
+**Im Browser:** In `npx expo start` die Taste `w` drücken (Entwicklung, nutzt den Server auf demselben Rechner).
+`npm run web:export` baut die statische Web-Version nach `app/dist/` – eine Single-Page-App, die ohne Server
+läuft und auf jedem Webspace liegen kann (Direktlinks wie `/plan` brauchen eine Weiterleitung auf `index.html`).
+Daten bleiben im Browser (localStorage). „Foto aufnehmen“ öffnet im Handy-Browser die Kamera, am PC einen
+Dateidialog; Einzelbilder aus Videos und die Apple-Anmeldung gibt es nur in der App. Ohne fest eingetragenen
+Server (`EXPO_PUBLIC_API_URL` beim Export) fragt die Web-Version keinen Server an.
+
 **Windows: „Keine Verbindung zum Server“** – meist blockiert die Windows-Firewall Port 3000.
 Einmalig in einer PowerShell **als Administrator**:
 
@@ -97,9 +104,12 @@ Für App-Store-/Play-Store-Builds: `npx eas-cli@latest build --platform all`.
 ```bash
 cd server && npm run check   # Typecheck + Tests
 cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen)
+cd app && npm run web:export && npm run web:smoke   # Web-Version bauen und im Browser durchklicken
 ```
 
 Einzeln: `npm run typecheck`, `npm test` (Server) bzw. `npm run lint` (App).
+Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf → Vorrat
+durch; er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet
