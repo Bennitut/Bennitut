@@ -89,8 +89,9 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
-- ✅ **Web-Version hosten:** entschieden (GitHub Pages unter `https://bennitut.github.io/Bennitut/`) und vorbereitet;
-  Unterpfad, Manifest-Pfade, `404.html` und der Tester-Link in `clips.md` sind erledigt. (23./24.11.2026)
+- ✅ **Web-Version hosten:** entschieden 23.11.2026, erledigt 24.11.2026: GitHub Pages unter
+  `https://bennitut.github.io/Bennitut/` mit Unterpfad, Manifest-Pfaden, `404.html` und dem Tester-Link in `clips.md`
+  vorbereitet. (23.11.2026)
 - **Abgehakte Einkäufe landen nicht im Vorrat:** Nur gelieferte Bestellungen und Kassenbons (beides braucht den
   Server) buchen in den Vorrat. In der Web-Version bleibt der Vorrat deshalb leer, solange man nicht alles von Hand
   einträgt, und „Gegessen“ zieht nichts ab – der Kreislauf Einkauf → Vorrat → Kochen bricht ab. Vorschlag: Beim
