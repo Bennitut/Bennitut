@@ -23,6 +23,9 @@
     },
     "web": {
       "output": "single",
+      "lang": "de",
+      "themeColor": "#1E9E5A",
+      "description": "Essen planen ohne Reste: Monatsplan, Einkaufsliste, Vorrat und Ernährungstagebuch.",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
