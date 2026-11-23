@@ -38,6 +38,7 @@
     "web": "expo start --web",
     "web:export": "expo export --platform web",
     "web:smoke": "node scripts/web-smoke.cjs",
+    "web:pages": "node scripts/web-pages.cjs",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint --max-warnings 0",
     "check": "npm run typecheck && npm run lint"

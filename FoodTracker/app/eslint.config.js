@@ -5,6 +5,11 @@ const expoConfig = require("eslint-config-expo/flat");
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["dist/*", ".expo/*"],
+    ignores: ["dist/*", "dist-pages/*", ".expo/*"],
+  },
+  {
+    // Hilfsskripte und app.config.js laufen in Node, nicht in der App.
+    files: ["scripts/**", "app.config.js"],
+    languageOptions: { globals: { __dirname: "readonly", __filename: "readonly" } },
   },
 ]);
