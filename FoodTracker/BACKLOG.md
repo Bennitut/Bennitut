@@ -20,13 +20,14 @@ Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die gene
   Video-Thumbnails, Apple-Login), sauber abfangen oder ausblenden. Ziel: Die App läuft ohne Server als
   statische Web-App.
   - 23.11.2026: Export läuft (`npm run web:export`, Single-Page-App in `app/dist/`); Fragebogen → Monatsplan → Einkauf → Vorrat klappt im Browser ohne Server, der Plan bleibt nach dem Neuladen erhalten; ohne Server keine Anfragen an `localhost`; Video-Einzelbilder nur in der App; Tab-Beschriftung nicht mehr abgeschnitten; neuer Browser-Rauchtest `npm run web:smoke`.
-- [ ] **3. Promo-Clips, um erste Tester zu gewinnen:** Sobald die Web-Version läuft, mit Playwright
+- [x] **3. Promo-Clips, um erste Tester zu gewinnen:** Sobald die Web-Version läuft, mit Playwright
   (headless Chromium) Bildschirmaufnahmen der wichtigsten Abläufe im Handy-Format aufnehmen, etwa
   Fragebogen → Monatsplan → Einkaufsliste → Vorrat. Daraus mit ffmpeg 2 bis 3 Hochkant-Clips schneiden
   (1080×1920, 15 bis 30 Sekunden, H.264, deutsche Texteinblendungen, ohne Musik), jeder unter 5 MB, unter
   `marketing/clips/`. Dazu `marketing/clips/clips.md` mit Vorschlägen für Beitragstexte (TikTok,
   Instagram, YouTube Shorts) und einer Anleitung, wo Interessierte die Web-Version testen können. Keine
   fremden Inhalte, Musik oder Logos ohne Lizenz.
+  - 23.11.2026: drei Clips (20/16/18 s, je unter 1 MB) mit `make-clips.cjs` (Playwright-Screencast + ffmpeg, reproduzierbar), `clips.md` mit Beitragstexten und Tester-Anleitung (Link noch Platzhalter, bis das Hosting entschieden ist), `bildnachweise.md` für die Rezeptfotos.
 - [ ] **4. PWA:** Web-Manifest, Name, Icons, Theme-Farbe und ein Hinweis „Zum Home-Bildschirm hinzufügen“.
 - [ ] **5. Offline-Modus als Standard:** Ohne Server-URL die Server-Funktionen (Foto- und Bon-Erkennung,
   Import, Übersetzen, Community, Bestellungen) freundlich als „bald verfügbar“ kennzeichnen statt Fehler
@@ -52,6 +53,13 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   `experiments.baseUrl` auf `/Bennitut` stehen (sonst zeigen die Skript-Pfade ins Leere) und eine Kopie von
   `index.html` als `404.html` dazu, damit Direktlinks wie `/plan` funktionieren. Einschalten (Pages bzw. eine
   Action) muss Benjamin selbst – die Nachtschicht veröffentlicht nichts. (23.11.2026)
+- **Tester-Link in `marketing/clips/clips.md`:** steht als Platzhalter `<LINK ZUR WEB-VERSION>` drin, bis das
+  Hosting entschieden ist; dann ersetzen. (23.11.2026)
+- **Datenschutz (für Punkt 7):** Die Web-Version und die App laden Rezeptfotos direkt von `upload.wikimedia.org` und
+  `live.staticflickr.com` – dabei sehen diese Dienste die IP-Adresse. In der Datenschutzerklärung erwähnen oder die
+  Fotos später selbst ausliefern. (23.11.2026)
+- **Promo-Clips aktuell halten:** Ändert sich die Oberfläche deutlich, die Clips mit `node make-clips.cjs` neu
+  aufnehmen (etwa drei Minuten). Die Texteinblendungen versprechen bewusst nur, was ohne Server geht. (23.11.2026)
 - **Web: `<html lang="en">`** im exportierten `index.html` – für Screenreader und Suchmaschinen sollte dort
   `de` stehen. Zusammen mit Punkt 4 (PWA) über eine eigene HTML-Vorlage lösen. (23.11.2026)
 - **Web: Video-Import** ist im Browser ausgeblendet (keine Video-Thumbnails, kein Dateisystem). Machbar wäre

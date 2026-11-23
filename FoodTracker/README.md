@@ -45,6 +45,7 @@ FoodTracker/
 │   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   └── src/i18n/         Übersetzungen (de, en, fr, it, es)
+├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 └── server/   Backend (Node, Hono, TypeScript)
     ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
     ├── src/ai/           Claude: Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge
