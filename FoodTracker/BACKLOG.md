@@ -28,7 +28,8 @@ Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die gene
   Instagram, YouTube Shorts) und einer Anleitung, wo Interessierte die Web-Version testen können. Keine
   fremden Inhalte, Musik oder Logos ohne Lizenz.
   - 23.11.2026: drei Clips (20/16/18 s, je unter 1 MB) mit `make-clips.cjs` (Playwright-Screencast + ffmpeg, reproduzierbar), `clips.md` mit Beitragstexten und Tester-Anleitung (Link noch Platzhalter, bis das Hosting entschieden ist), `bildnachweise.md` für die Rezeptfotos.
-- [ ] **4. PWA:** Web-Manifest, Name, Icons, Theme-Farbe und ein Hinweis „Zum Home-Bildschirm hinzufügen“.
+- [x] **4. PWA:** Web-Manifest, Name, Icons, Theme-Farbe und ein Hinweis „Zum Home-Bildschirm hinzufügen“.
+  - 23.11.2026: `public/manifest.json`, eigenes Symbol (Schüssel mit Blättern, `assets/icon-web.svg`) in allen Größen, Theme-Farbe, `lang="de"`; Chromium meldet die Web-App als installierbar. Hinweis „Als App nutzen“ unter „Heute“, sobald es einen Plan gibt (iPhone: Teilen → Zum Home-Bildschirm, Chrome/Android mit „Installieren“-Knopf), „Später“ blendet ihn dauerhaft aus.
 - [ ] **5. Offline-Modus als Standard:** Ohne Server-URL die Server-Funktionen (Foto- und Bon-Erkennung,
   Import, Übersetzen, Community, Bestellungen) freundlich als „bald verfügbar“ kennzeichnen statt Fehler
   zu zeigen.
@@ -60,8 +61,12 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Fotos später selbst ausliefern. (23.11.2026)
 - **Promo-Clips aktuell halten:** Ändert sich die Oberfläche deutlich, die Clips mit `node make-clips.cjs` neu
   aufnehmen (etwa drei Minuten). Die Texteinblendungen versprechen bewusst nur, was ohne Server geht. (23.11.2026)
-- **Web: `<html lang="en">`** im exportierten `index.html` – für Screenreader und Suchmaschinen sollte dort
-  `de` stehen. Zusammen mit Punkt 4 (PWA) über eine eigene HTML-Vorlage lösen. (23.11.2026)
+- **App-Symbol ist noch das Expo-Standardsymbol** (`assets/icon.png`, Android-Symbole, Splash): Für die Stores
+  braucht es ein eigenes. Vorschlag: das neue Web-Symbol (`assets/icon-web.svg`, Schüssel mit Blättern) auch dafür
+  verwenden – Benjamin entscheidet über das Aussehen. (23.11.2026)
+- **Web unter einem Unterpfad (z. B. GitHub Pages `/Bennitut/`):** `public/index.html` und `public/manifest.json`
+  verweisen absolut auf `/manifest.json`, `/icons/…` und `start_url: "/"`; beim Hosting unter einem Unterpfad
+  müssen diese Pfade das Präfix bekommen. (23.11.2026)
 - **Web: Video-Import** ist im Browser ausgeblendet (keine Video-Thumbnails, kein Dateisystem). Machbar wäre
   es mit `<video>` + Canvas; lohnt erst, wenn es einen Server gibt. Achtung: `expo-image-picker` liefert die
   Videolänge im Browser in Sekunden, in der App in Millisekunden. (23.11.2026)
