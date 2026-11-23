@@ -11,6 +11,14 @@ bei Web-relevanten Änderungen zusätzlich `cd app && npm run web:export && npm 
 Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die generierten
 `package-lock.json` nicht mit.
 
+## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
+
+Jeden Tag einmal, direkt nach dem Setup und vor der obersten offenen Aufgabe: Fehlt
+`reports/<Vortag>.pdf` (Datum des Vortags in Japan-Zeit, `JJJJ-MM-TT`) oder wurde sie noch am Vortag selbst
+committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly`, dann
+`node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
+„Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
+
 ## Aufgaben
 
 - [x] **1. Gesundheitscheck und `npm run check`** in `app/` und `server/` (Typecheck, Server-Tests, Lint der App).
