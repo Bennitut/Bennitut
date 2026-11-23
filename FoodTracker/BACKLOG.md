@@ -6,7 +6,8 @@ einer Zeile Notiz versehen. Neue Bugs und Ideen landen unter „Ideen und Erkenn
 später priorisiert – Stabilität und Bedienbarkeit vor neuen Funktionen.
 
 Vor jedem Commit: `cd server && npm run check` und `cd app && npm run check`,
-bei Web-relevanten Änderungen zusätzlich `cd app && npx expo export --platform web`.
+bei Web-relevanten Änderungen zusätzlich `cd app && npm run web:export && npm run web:smoke`
+(Rauchtest im headless Chromium, braucht Playwright).
 Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die generierten
 `package-lock.json` nicht mit.
 
@@ -14,10 +15,11 @@ Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die gene
 
 - [x] **1. Gesundheitscheck und `npm run check`** in `app/` und `server/` (Typecheck, Server-Tests, Lint der App).
   - 23.11.2026: alles grün (Server-Typecheck, 55 Tests, App-Typecheck); ESLint eingerichtet, 2 Fehler und 5 Warnungen behoben, Expo-Pakete auf SDK-57-Stand, Sicherheitsupdates für hono im Server.
-- [ ] **2. Web-Version:** `npx expo export --platform web` muss durchlaufen (Stand 23.11.2026: scheitert,
+- [x] **2. Web-Version:** `npx expo export --platform web` muss durchlaufen (Stand 23.11.2026: scheitert,
   weil `react-native-web` fehlt). Funktionen, die im Browser nicht gehen (Kamera, Dateisystem,
   Video-Thumbnails, Apple-Login), sauber abfangen oder ausblenden. Ziel: Die App läuft ohne Server als
   statische Web-App.
+  - 23.11.2026: Export läuft (`npm run web:export`, Single-Page-App in `app/dist/`); Fragebogen → Monatsplan → Einkauf → Vorrat klappt im Browser ohne Server, der Plan bleibt nach dem Neuladen erhalten; ohne Server keine Anfragen an `localhost`; Video-Einzelbilder nur in der App; Tab-Beschriftung nicht mehr abgeschnitten; neuer Browser-Rauchtest `npm run web:smoke`.
 - [ ] **3. Promo-Clips, um erste Tester zu gewinnen:** Sobald die Web-Version läuft, mit Playwright
   (headless Chromium) Bildschirmaufnahmen der wichtigsten Abläufe im Handy-Format aufnehmen, etwa
   Fragebogen → Monatsplan → Einkaufsliste → Vorrat. Daraus mit ffmpeg 2 bis 3 Hochkant-Clips schneiden
@@ -45,9 +47,21 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
-- **Web-Export (für Punkt 2):** Der Fehler kommt aus `expo-router/build/renderRootComponent.js`, das
-  `react-native-web/dist/index` importiert. `react-dom` ist schon installiert. Paket mit
-  `npx expo install react-native-web` ergänzen, danach den nächsten Fehler ansehen. (23.11.2026)
+- **Web-Version hosten (für Punkt 3, braucht Benjamins Entscheidung):** Für Tester braucht es einen Link.
+  Kostenlos und ohne neues Konto ginge GitHub Pages unter `bennitut.github.io/Bennitut/`; dafür muss
+  `experiments.baseUrl` auf `/Bennitut` stehen (sonst zeigen die Skript-Pfade ins Leere) und eine Kopie von
+  `index.html` als `404.html` dazu, damit Direktlinks wie `/plan` funktionieren. Einschalten (Pages bzw. eine
+  Action) muss Benjamin selbst – die Nachtschicht veröffentlicht nichts. (23.11.2026)
+- **Web: `<html lang="en">`** im exportierten `index.html` – für Screenreader und Suchmaschinen sollte dort
+  `de` stehen. Zusammen mit Punkt 4 (PWA) über eine eigene HTML-Vorlage lösen. (23.11.2026)
+- **Web: Video-Import** ist im Browser ausgeblendet (keine Video-Thumbnails, kein Dateisystem). Machbar wäre
+  es mit `<video>` + Canvas; lohnt erst, wenn es einen Server gibt. Achtung: `expo-image-picker` liefert die
+  Videolänge im Browser in Sekunden, in der App in Millisekunden. (23.11.2026)
+- **Doppeltes Emoji im Nutzerverzeichnis:** Die Karte zeigt „👥 👥 Nutzerverzeichnis“, weil der Text
+  `account.directory` schon das Emoji enthält und die Karte zusätzlich `icon="👥"` bekommt (`app/src/app/users.tsx`).
+  Kleiner Fix: Emoji aus dem Text nehmen (alle fünf Sprachen) oder das `icon` weglassen. (23.11.2026)
+- **`expo lint` prüft keine `.cjs`-Dateien** (z. B. `app/scripts/web-smoke.cjs`); die einmal von Hand mit
+  `npx eslint scripts/web-smoke.cjs` prüfen, wenn sie geändert werden. (23.11.2026)
 - **Lint ist streng:** `npm run lint` bricht schon bei Warnungen ab (`--max-warnings 0`), damit sich keine
   Warnungen ansammeln. Bewusst gewollte Ausnahmen mit `// eslint-disable-next-line <regel>` und einer
   Begründung markieren. (23.11.2026)
