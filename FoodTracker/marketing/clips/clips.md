@@ -12,8 +12,9 @@ Alle Inhalte stammen aus FoodTracker selbst; Bildnachweise der Rezeptfotos stehe
 
 ## Wo Interessierte die App testen können
 
-**Link: `<LINK ZUR WEB-VERSION>`** – noch offen, bis entschieden ist, wo die Web-Version liegt (siehe
-„Brauche deine Entscheidung“ im Pull Request; Vorschlag: GitHub Pages unter `https://bennitut.github.io/Bennitut/`).
+**Link: https://bennitut.github.io/Bennitut/** – die Web-Version auf GitHub Pages. Erreichbar, sobald der
+Workflow `.github/workflows/foodtracker-pages.yml` auf `feature/food-tracker-app` gelaufen ist (nach dem Mergen,
+Einrichtung siehe Kopf der Workflow-Datei). Vor dem ersten Beitrag den Link einmal am Handy öffnen.
 Den Link in die Bio bzw. Profilbeschreibung setzen; die Clips enden mit „Link in der Bio“.
 
 Kurzanleitung für Tester (für Bio, angepinnten Kommentar oder Antwort auf Nachfragen):
@@ -42,7 +43,7 @@ gewünscht; die Clips selbst haben keinen Ton.
   Ich suche gerade die ersten Tester:innen: Link in der Bio, kostenlos und ohne Konto.
   `#mealprep #essensplanung #zerowaste #vegetarisch`
 - **YouTube Shorts:** Titel „30 Tage Essen planen in 1 Sekunde“ · Beschreibung: Sechs Fragen, ein Monatsplan mit
-  Einkaufsliste – so geplant, dass möglichst nichts übrig bleibt. Kostenlos im Browser testen: `<LINK ZUR WEB-VERSION>`
+  Einkaufsliste – so geplant, dass möglichst nichts übrig bleibt. Kostenlos im Browser testen: https://bennitut.github.io/Bennitut/
   · Bildnachweise: Link auf bildnachweise.md
 
 ### Clip 2 – Einkaufsliste
@@ -53,7 +54,7 @@ gewünscht; die Clips selbst haben keinen Ton.
   Richtpreisen und Packungen, die aufgehen. Jede Woche eine eigene Liste. Teste die App kostenlos – Link in der Bio.
   `#einkaufsliste #zerowaste #haushalt #mealprep`
 - **YouTube Shorts:** Titel „Diese Einkaufsliste plant gegen Lebensmittelverschwendung“ · Beschreibung: Mengen und
-  Packungsgrößen passend zum Monatsplan, Woche für Woche. Kostenlos testen: `<LINK ZUR WEB-VERSION>`
+  Packungsgrößen passend zum Monatsplan, Woche für Woche. Kostenlos testen: https://bennitut.github.io/Bennitut/
 
 ### Clip 3 – Kochen und abhaken
 
@@ -62,7 +63,7 @@ gewünscht; die Clips selbst haben keinen Ton.
 - **Instagram (Reels):** Kochen, abhaken, fertig ✅ Geplante Gerichte landen mit einem Tipp im Ernährungstagebuch,
   inklusive Kalorien und Makros. Kostenlos im Browser testen – Link in der Bio. `#ernährung #kochen #rezepte #mealprep`
 - **YouTube Shorts:** Titel „Essensplan, Rezept und Kalorien in einer App“ · Beschreibung: Rezept öffnen, kochen,
-  als gegessen abhaken – das Tagebuch füllt sich von selbst. Kostenlos testen: `<LINK ZUR WEB-VERSION>`
+  als gegessen abhaken – das Tagebuch füllt sich von selbst. Kostenlos testen: https://bennitut.github.io/Bennitut/
 
 ## Clips neu aufnehmen
 
