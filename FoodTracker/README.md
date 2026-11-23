@@ -95,9 +95,12 @@ Für App-Store-/Play-Store-Builds: `npx eas-cli@latest build --platform all`.
 ## Tests
 
 ```bash
-cd server && npm test && npm run typecheck
-cd app && npm run typecheck
+cd server && npm run check   # Typecheck + Tests
+cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen)
 ```
+
+Einzeln: `npm run typecheck`, `npm test` (Server) bzw. `npm run lint` (App).
+Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet
 

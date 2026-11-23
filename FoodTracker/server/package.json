@@ -10,7 +10,8 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "translate-ui": "tsx scripts/translate-ui.ts"
+    "translate-ui": "tsx scripts/translate-ui.ts",
+    "check": "npm run typecheck && npm test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

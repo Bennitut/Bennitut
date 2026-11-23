@@ -1,4 +1,7 @@
 // Domain-Typen des Backends; reine Typ-Importe, im Bundle entfällt der Import.
+import type { Allergen, Cuisine, Diet, FoodRule, MealType, Nutrients, Recipe } from "../../../server/src/types";
+import type { Region, UILanguage } from "../i18n";
+
 export type {
   Allergen,
   Cuisine,
@@ -19,8 +22,6 @@ export type {
   ShoppingItem,
   WeekPlan,
 } from "../../../server/src/types";
-import type { Allergen, Cuisine, Diet, FoodRule, MealType, Nutrients, Recipe } from "../../../server/src/types";
-import type { Region, UILanguage } from "../i18n";
 
 export const ALLERGENS: Allergen[] = ["gluten", "laktose", "ei", "nuesse", "erdnuss", "soja", "fisch", "krebstiere", "sellerie", "sesam"];
 export const DIETS: Diet[] = ["alles", "pescetarisch", "vegetarisch", "vegan"];

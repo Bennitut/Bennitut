@@ -248,6 +248,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setTopPhotos(top);
       })
       .catch(() => {});
+    // Absichtlich nur einmal nach dem Laden: eine spätere Anmeldung bringt das Konto über setAuth mit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
   const store = useMemo<Store>(() => {

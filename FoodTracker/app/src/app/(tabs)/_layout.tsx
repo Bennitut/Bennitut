@@ -5,9 +5,8 @@ import { colors } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
 
 /** Emoji-Symbol; der aktive Tab bekommt einen farbigen Hintergrund. */
-const icon =
-  (emoji: string) =>
-  ({ focused }: { focused: boolean }) => (
+function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
+  return (
     <View
       style={{
         width: 40,
@@ -21,6 +20,12 @@ const icon =
       <Text style={{ fontSize: 17, lineHeight: 22, opacity: focused ? 1 : 0.55 }}>{emoji}</Text>
     </View>
   );
+}
+
+const icon = (emoji: string) => {
+  const renderTabIcon = ({ focused }: { focused: boolean }) => <TabIcon emoji={emoji} focused={focused} />;
+  return renderTabIcon;
+};
 
 export default function TabsLayout() {
   const { t } = useI18n();

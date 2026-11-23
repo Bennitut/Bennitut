@@ -104,12 +104,16 @@ export default function PlanScreen() {
     }
   };
 
-  // Nach dem Fragebogen direkt den ersten Plan erstellen.
+  // Nach dem Fragebogen direkt den ersten Plan erstellen. Der Start läuft im nächsten Tick,
+  // damit der Effekt nicht selbst State setzt (sonst rendert alles doppelt) und ein doppelt
+  // ausgeführter Effekt (Strict Mode) nicht zwei Pläne rechnet.
   useEffect(() => {
-    if (store.pendingPlan && settings.onboarded) {
+    if (!store.pendingPlan || !settings.onboarded) return;
+    const timer = setTimeout(() => {
       store.setPendingPlan(false);
       createPlan(0);
-    }
+    }, 0);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.pendingPlan, settings.onboarded]);
 
