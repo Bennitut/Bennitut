@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Platform, View } from "react-native";
 import { colors } from "../components/ui";
 import { useI18n } from "../lib/i18n";
 import { StoreProvider } from "../lib/store";
@@ -35,7 +36,16 @@ export default function RootLayout() {
   return (
     <StoreProvider>
       <StatusBar style="dark" />
-      <RootStack />
+      {Platform.OS === "web" ? (
+        // Im breiten Browserfenster bleibt die App eine schmale Spalte in der Mitte, statt sich zu strecken.
+        <View style={{ flex: 1, backgroundColor: colors.border }}>
+          <View style={{ flex: 1, width: "100%", maxWidth: 600, alignSelf: "center", backgroundColor: colors.background }}>
+            <RootStack />
+          </View>
+        </View>
+      ) : (
+        <RootStack />
+      )}
     </StoreProvider>
   );
 }

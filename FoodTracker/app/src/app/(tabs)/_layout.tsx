@@ -1,6 +1,7 @@
 import { Link } from "expo-router";
 import { Tabs } from "expo-router/js-tabs";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
 
@@ -29,6 +30,10 @@ const icon = (emoji: string) => {
 
 export default function TabsLayout() {
   const { t } = useI18n();
+  const insets = useSafeAreaInsets();
+  // Die Standardhöhe (49) reicht nicht für Emoji und Beschriftung, wenn unten kein Home-Indikator Platz lässt
+  // (Browser, iPhone SE) – die Beschriftung wäre abgeschnitten.
+  const tallTabBar = Platform.OS === "web" || insets.bottom === 0;
   const profileButton = () => (
     <Link href="/profile" accessibilityLabel={t("profile.title")} style={{ marginRight: 16 }}>
       <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.selected, alignItems: "center", justifyContent: "center" }}>
@@ -42,7 +47,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, ...(tallTabBar ? { height: 58 + insets.bottom } : null) },
         headerStyle: { backgroundColor: colors.background },
         headerTitleStyle: { fontSize: 22, fontWeight: "800", color: colors.text },
         headerTitleAlign: "left",
