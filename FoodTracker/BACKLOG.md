@@ -11,6 +11,10 @@ bei Web-relevanten Änderungen zusätzlich `cd app && npm run web:export && npm 
 Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die generierten
 `package-lock.json` nicht mit.
 
+**Stand 24.11.2026:** PR #2 hat mit rund 1.470 geänderten Zeilen die Grenze erreicht. Bis Benjamin ihn mergt, nur
+Fixes und Tests – nächster Schritt ist deshalb Punkt 6 (Tests für die App-Logik); Punkt 5, Teil 2 folgt nach dem
+Mergen im neuen PR.
+
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
 Jeden Tag einmal, direkt nach dem Setup und vor der obersten offenen Aufgabe: Fehlt
@@ -19,7 +23,12 @@ committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
 „Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
 
-## Vorrang: GitHub Pages vorbereiten (Benjamin richtet Pages ein, 23.11.2026)
+## ✅ Vorrang: GitHub Pages vorbereiten (Benjamin richtet Pages ein, 23.11.2026) – erledigt 24.11.2026
+
+24.11.2026: `.github/workflows/foodtracker-pages.yml` (Unterpfad aus `actions/configure-pages`), `app.config.js` setzt
+`experiments.baseUrl` nur mit `WEB_BASE_PATH`, `npm run web:pages` baut nach `app/dist-pages/` samt angepasstem
+Manifest und `404.html`; Rauchtest unter `/Bennitut/` wie auf GitHub Pages grün; Link in `clips.md` eingetragen.
+Einschalten und mergen macht Benjamin (Anleitung im Kopf der Workflow-Datei und im PR).
 
 Vor Punkt 5 erledigen – die Web-Version soll unter `https://bennitut.github.io/Bennitut/` laufen. Selbst nichts
 veröffentlichen, nur vorbereiten; einschalten und mergen macht Benjamin.
@@ -77,13 +86,19 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
-- **Web-Version hosten (für Punkt 3, braucht Benjamins Entscheidung):** Für Tester braucht es einen Link.
-  Kostenlos und ohne neues Konto ginge GitHub Pages unter `bennitut.github.io/Bennitut/`; dafür muss
-  `experiments.baseUrl` auf `/Bennitut` stehen (sonst zeigen die Skript-Pfade ins Leere) und eine Kopie von
-  `index.html` als `404.html` dazu, damit Direktlinks wie `/plan` funktionieren. Einschalten (Pages bzw. eine
-  Action) muss Benjamin selbst – die Nachtschicht veröffentlicht nichts. (23.11.2026)
-- **Tester-Link in `marketing/clips/clips.md`:** steht als Platzhalter `<LINK ZUR WEB-VERSION>` drin, bis das
-  Hosting entschieden ist; dann ersetzen. (23.11.2026)
+- ✅ **Web-Version hosten:** entschieden (GitHub Pages unter `https://bennitut.github.io/Bennitut/`) und vorbereitet;
+  Unterpfad, Manifest-Pfade, `404.html` und der Tester-Link in `clips.md` sind erledigt. (23./24.11.2026)
+- **GitHub Pages antwortet auf Direktlinks mit Status 404** (`404.html` enthält die App, im Browser funktioniert
+  alles). Suchmaschinen indexieren Unterseiten deshalb nicht – für eine Testversion egal; für den echten Start
+  einen Webspace mit SPA-Weiterleitung nehmen (Netlify, Cloudflare Pages o. Ä.). (24.11.2026)
+- **Pages-Workflow ohne Rauchtest:** Der Workflow baut und veröffentlicht, ohne vorher `web:smoke` laufen zu lassen
+  (Playwright und Chromium kosten pro Lauf etwa 1–2 Minuten). Die Nachtschicht prüft vor jedem Commit; falls trotzdem
+  einmal eine kaputte Version online geht, den Rauchtest als Schritt vor dem Hochladen ergänzen. (24.11.2026)
+- **„Run workflow“ für den Pages-Workflow** zeigt GitHub nur an, wenn die Workflow-Datei auch auf dem
+  Standard-Branch `master` liegt. Nicht nötig: Jeder Push auf `feature/food-tracker-app`, der die App ändert,
+  startet den Workflow. (24.11.2026)
+- **Tagesbericht:** `make-report.cjs` zeigt unter „Was heute passiert ist“ nur nummerierte Aufgaben; erledigte
+  Vorrang-Abschnitte (z. B. GitHub Pages) stehen nur in der Commit-Liste. (24.11.2026)
 - **Datenschutz (für Punkt 7):** Die Web-Version und die App laden Rezeptfotos direkt von `upload.wikimedia.org` und
   `live.staticflickr.com` – dabei sehen diese Dienste die IP-Adresse. In der Datenschutzerklärung erwähnen oder die
   Fotos später selbst ausliefern. (23.11.2026)
@@ -92,9 +107,6 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **App-Symbol ist noch das Expo-Standardsymbol** (`assets/icon.png`, Android-Symbole, Splash): Für die Stores
   braucht es ein eigenes. Vorschlag: das neue Web-Symbol (`assets/icon-web.svg`, Schüssel mit Blättern) auch dafür
   verwenden – Benjamin entscheidet über das Aussehen. (23.11.2026)
-- **Web unter einem Unterpfad (z. B. GitHub Pages `/Bennitut/`):** `public/index.html` und `public/manifest.json`
-  verweisen absolut auf `/manifest.json`, `/icons/…` und `start_url: "/"`; beim Hosting unter einem Unterpfad
-  müssen diese Pfade das Präfix bekommen. (23.11.2026)
 - **Web: Video-Import** ist im Browser ausgeblendet (keine Video-Thumbnails, kein Dateisystem). Machbar wäre
   es mit `<video>` + Canvas; lohnt erst, wenn es einen Server gibt. Achtung: `expo-image-picker` liefert die
   Videolänge im Browser in Sekunden, in der App in Millisekunden. (23.11.2026)
@@ -107,7 +119,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Warnungen ansammeln. Bewusst gewollte Ausnahmen mit `// eslint-disable-next-line <regel>` und einer
   Begründung markieren. (23.11.2026)
 - **expo-doctor:** läuft inzwischen auch in der Cloud-Sitzung (`npx --yes expo-doctor`): 21 von 21 Checks
-  bestanden, `npx expo install --check` ist grün. (23.11.2026)
+  bestanden, `npx expo install --check` ist grün. (23.11.2026) Expo veröffentlicht oft Patchstände; am 24.11.
+  fehlten schon vier (u. a. expo-router 57.0.32) → `npx expo install --fix`, danach wieder 21 von 21. (24.11.2026)
 - **npm audit (App):** 12 Meldungen (8 mittel, 4 hoch), alle in Abhängigkeiten von Expo und ESLint
   (u. a. `query-string`/`decode-uri-component` in expo-router, `minimatch`, `zod`). Nicht mit
   `npm audit fix --force` beheben, sondern über neue Expo-Patchstände (`npx expo install --check`).
