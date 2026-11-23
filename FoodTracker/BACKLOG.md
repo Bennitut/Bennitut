@@ -65,8 +65,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Lint ist streng:** `npm run lint` bricht schon bei Warnungen ab (`--max-warnings 0`), damit sich keine
   Warnungen ansammeln. Bewusst gewollte Ausnahmen mit `// eslint-disable-next-line <regel>` und einer
   Begründung markieren. (23.11.2026)
-- **expo-doctor:** lief in der Cloud-Sitzung nicht (das Paket wird erst beim Aufruf heruntergeladen).
-  Bei Gelegenheit lokal `npx expo-doctor` ausführen. `npx expo install --check` ist grün. (23.11.2026)
+- **expo-doctor:** läuft inzwischen auch in der Cloud-Sitzung (`npx --yes expo-doctor`): 21 von 21 Checks
+  bestanden, `npx expo install --check` ist grün. (23.11.2026)
 - **npm audit (App):** 12 Meldungen (8 mittel, 4 hoch), alle in Abhängigkeiten von Expo und ESLint
   (u. a. `query-string`/`decode-uri-component` in expo-router, `minimatch`, `zod`). Nicht mit
   `npm audit fix --force` beheben, sondern über neue Expo-Patchstände (`npx expo install --check`).
