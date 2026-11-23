@@ -1,3 +1,4 @@
+import { daysBetween } from "./dates";
 import type { Ingredient, Nutrients, PantryItem, PlannedMeal, Recipe } from "./types";
 
 /**
@@ -32,7 +33,9 @@ export function takeFromPantry(stock: StockItem[], ingredientId: string, amount:
     }
     const used = Math.min(s.amount, remaining);
     remaining -= used;
-    if (s.amount - used > 0.01) next.push({ ...s, amount: round1(s.amount - used) });
+    // Was gerundet 0 ergibt, ist aufgebraucht – sonst bliebe ein leerer Posten mit altem Einkaufsdatum stehen.
+    const left = round1(s.amount - used);
+    if (left > 0) next.push({ ...s, amount: left });
   }
   return next;
 }
@@ -66,14 +69,14 @@ export function aggregatePantry(stock: StockItem[]): PantryItem[] {
 
 /** Tage, bis der älteste Posten einer Zutat voraussichtlich verdirbt (negativ = überfällig). */
 export function daysLeft(stock: StockItem[], ingredient: Ingredient, now = new Date()): number | null {
+  // Leere Posten (aus älteren Versionen) zählen nicht, sonst wirkt frische Ware abgelaufen.
   const oldest = stock
-    .filter((s) => s.ingredientId === ingredient.id)
+    .filter((s) => s.ingredientId === ingredient.id && s.amount > 0)
     .map((s) => s.addedAt)
     .sort()[0];
   if (!oldest) return null;
-  const added = new Date(`${oldest}T00:00:00`);
-  const age = Math.floor((startOfDay(now).getTime() - added.getTime()) / 86_400_000);
-  return ingredient.shelfLifeDays - age;
+  // In Kalendertagen: Am Tag der Umstellung auf Sommerzeit hat ein Tag nur 23 Stunden.
+  return ingredient.shelfLifeDays - daysBetween(oldest, today(now));
 }
 
 /** Ältere Speicherstände kannten kein Einkaufsdatum. */
@@ -89,11 +92,10 @@ export function sumNutrients(list: Nutrients[]): Nutrients {
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-export const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-export const nowTime = () => new Date().toTimeString().slice(0, 5);
+/** Heutiges Datum (YYYY-MM-DD) in Ortszeit. */
+export const today = (now = new Date()) =>
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+/** Uhrzeit (HH:MM) in Ortszeit. */
+export const nowTime = (now = new Date()) => now.toTimeString().slice(0, 5);
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
