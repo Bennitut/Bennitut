@@ -44,7 +44,8 @@ FoodTracker/
 │   ├── src/app/(tabs)/   Heute, Erfassen, Plan, Rezepte, Vorrat, Einkauf
 │   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
-│   └── src/i18n/         Übersetzungen (de, en, fr, it, es)
+│   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
+│   └── test/             Tests der App-Logik (Datum, Vorrat, Nährwerte, Planer, Übersetzungen)
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 └── server/   Backend (Node, Hono, TypeScript)
     ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
@@ -109,12 +110,16 @@ Für App-Store-/Play-Store-Builds: `npx eas-cli@latest build --platform all`.
 
 ```bash
 cd server && npm run check   # Typecheck + Tests
-cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen)
+cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen) + Tests der App-Logik
 cd app && npm run web:export && npm run web:smoke   # Web-Version bauen und im Browser durchklicken
 cd app && npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe wie auf GitHub Pages (/Bennitut/)
 ```
 
-Einzeln: `npm run typecheck`, `npm test` (Server) bzw. `npm run lint` (App).
+Einzeln: `npm run typecheck` und `npm test` (in beiden Ordnern) bzw. `npm run lint` (App).
+Die Tests der App (`app/test/`) laufen mit dem Test-Runner von Node (`node:test`, TypeScript über `tsx`) in wenigen
+Sekunden – ohne Simulator und ohne native Module. Sie prüfen die Datumslogik in mehreren Zeitzonen (auch an den Tagen
+der Zeitumstellung), Vorrat und Haltbarkeit, Nährwerte und Kalorienbedarf, den Planer so, wie die App ihn ohne Server
+aufruft (mit den Einkaufslisten ist jedes Gericht kochbar), und die Übersetzungen (gleiche Platzhalter in allen Sprachen).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf → Vorrat
 durch; er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
