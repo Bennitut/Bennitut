@@ -438,7 +438,7 @@ export const fr: Dictionary = {
     discard: "Ignorer",
     restore: "Rétablir le texte d'origine",
     improved: "✨ Texte amélioré par l'IA",
-    topRated: "⭐ Les mieux notées",
+    topRated: "Les mieux notées",
     improvedNote: "Amélioration IA appliquée",
   },
   account: {
@@ -459,6 +459,7 @@ export const fr: Dictionary = {
     signOut: "Se déconnecter",
     notSignedIn: "Non connecté·e – photos et notes ne valent que pour cet appareil.",
     directory: "👥 Annuaire des utilisateurs",
+    directoryTitle: "Annuaire des utilisateurs",
     adminArea: "🛠️ Espace admin",
     roleAdmin: "Admin",
     roleUser: "Utilisateur·rice",

@@ -438,7 +438,7 @@ export const de = {
     discard: "Verwerfen",
     restore: "Originaltext wiederherstellen",
     improved: "✨ Text mit KI verbessert",
-    topRated: "⭐ Am besten bewertet",
+    topRated: "Am besten bewertet",
     improvedNote: "KI-Verbesserung übernommen",
   },
   account: {
@@ -459,6 +459,7 @@ export const de = {
     signOut: "Abmelden",
     notSignedIn: "Nicht angemeldet – Fotos und Bewertungen gelten nur für dieses Gerät.",
     directory: "👥 Nutzerverzeichnis",
+    directoryTitle: "Nutzerverzeichnis",
     adminArea: "🛠️ Admin-Bereich",
     roleAdmin: "Admin",
     roleUser: "Nutzer:in",

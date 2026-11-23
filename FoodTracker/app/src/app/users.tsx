@@ -32,7 +32,7 @@ export default function UsersScreen() {
   if (!auth) {
     return (
       <Screen>
-        <Card title={t("account.directory")} icon="👥">
+        <Card title={t("account.directoryTitle")} icon="👥">
           <Muted>{t("account.needSignIn")}</Muted>
           <Button label={t("account.signIn")} onPress={() => router.push("/login")} />
         </Card>

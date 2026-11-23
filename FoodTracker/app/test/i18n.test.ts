@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   DICTIONARIES,
@@ -27,6 +29,27 @@ function flatten(tree: Tree, prefix = "", out = new Map<string, string>()): Map<
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
+/** Öffnende `<Card …>`-Tags aus allen Bildschirmen und Komponenten, mit Datei (Klammern in Attributen zählen mit). */
+function cardTags(): { file: string; tag: string }[] {
+  const src = join(__dirname, "../src");
+  const tags: { file: string; tag: string }[] = [];
+  for (const file of readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".tsx"))) {
+    const source = readFileSync(join(src, file), "utf8");
+    for (const match of source.matchAll(/<Card\b/g)) {
+      let depth = 0;
+      for (let i = match.index; i < source.length; i++) {
+        if (source[i] === "{") depth++;
+        else if (source[i] === "}") depth--;
+        else if (source[i] === ">" && depth === 0) {
+          tags.push({ file, tag: source.slice(match.index, i + 1) });
+          break;
+        }
+      }
+    }
+  }
+  return tags;
+}
+
 describe("Übersetzungen", () => {
   it("setzt Platzhalter ein und lässt unbekannte stehen", () => {
     assert.equal(translate("de", "plan.week", { n: 2 }), "Woche 2");
@@ -48,6 +71,25 @@ describe("Übersetzungen", () => {
       for (const [key, text] of texts) {
         assert.ok(text.trim().length > 0, `${language}: ${key} ist leer`);
         assert.deepEqual(placeholders(text), placeholders(german.get(key)!), `${language}: ${key}`);
+      }
+    }
+  });
+
+  it("zeigt in Karten mit eigenem Symbol kein zweites Emoji vor dem Titel", () => {
+    // <Card title={t("…")} icon="👥"> zeigt das Symbol schon in der Blase; beginnt der Text auch mit einem Emoji,
+    // stehen zwei nebeneinander (früher „👥 👥 Nutzerverzeichnis“). Texte mit Emoji für Knöpfe bekommen einen eigenen
+    // Schlüssel, z. B. account.directory (Knopf) und account.directoryTitle (Karte, Kopfzeile).
+    const texts = new Map(UI_LANGUAGES.map((language) => [language, flatten(DICTIONARIES[language] as unknown as Tree)]));
+    const withIcon = cardTags().filter(({ tag }) => /\sicon=/.test(tag));
+    assert.ok(withIcon.length > 20, `nur ${withIcon.length} Karten mit Symbol gefunden`);
+    for (const { file, tag } of withIcon) {
+      const title = tag.match(/\stitle=\{([^}]*)\}/)?.[1] ?? "";
+      for (const [, key] of title.matchAll(/\bt\("([\w.]+)"/g)) {
+        for (const [language, dictionary] of texts) {
+          const text = dictionary.get(key!);
+          assert.ok(text !== undefined, `${file}: ${key} fehlt (${language})`);
+          assert.doesNotMatch(text, /^\p{Extended_Pictographic}/u, `${file}: ${key} (${language}) = „${text}“`);
+        }
       }
     }
   });
