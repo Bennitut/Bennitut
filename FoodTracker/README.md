@@ -91,6 +91,11 @@ Daten bleiben im Browser (localStorage). „Foto aufnehmen“ öffnet im Handy-B
 Dateidialog; Einzelbilder aus Videos und die Apple-Anmeldung gibt es nur in der App. Ohne fest eingetragenen
 Server (`EXPO_PUBLIC_API_URL` beim Export) fragt die Web-Version keinen Server an.
 
+**Online (GitHub Pages):** https://bennitut.github.io/Bennitut/ – der Workflow `.github/workflows/foodtracker-pages.yml`
+baut und veröffentlicht die Web-Version bei jedem Push auf `feature/food-tracker-app`, der die App ändert.
+Einmalig einrichten: siehe Kopf der Workflow-Datei. Lokal nachbauen: `npm run web:pages` (Unterpfad `/Bennitut`,
+Ergebnis in `app/dist-pages/` samt `404.html` für Direktlinks), prüfen mit `npm run web:smoke -- dist-pages`.
+
 **Windows: „Keine Verbindung zum Server“** – meist blockiert die Windows-Firewall Port 3000.
 Einmalig in einer PowerShell **als Administrator**:
 
@@ -106,6 +111,7 @@ Für App-Store-/Play-Store-Builds: `npx eas-cli@latest build --platform all`.
 cd server && npm run check   # Typecheck + Tests
 cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen)
 cd app && npm run web:export && npm run web:smoke   # Web-Version bauen und im Browser durchklicken
+cd app && npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe wie auf GitHub Pages (/Bennitut/)
 ```
 
 Einzeln: `npm run typecheck`, `npm test` (Server) bzw. `npm run lint` (App).
