@@ -57,5 +57,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   (u. a. `query-string`/`decode-uri-component` in expo-router, `minimatch`, `zod`). Nicht mit
   `npm audit fix --force` beheben, sondern über neue Expo-Patchstände (`npx expo install --check`).
   Der Server meldet nach dem Update 0 Schwachstellen. (23.11.2026)
+- **„App-Daten zurücksetzen“ im Profil fehlt:** Den ersten Fragebogen (mit automatischem Plan) kann man
+  in Expo Go nur testen, wenn man Expo Go neu installiert. Ein Knopf mit Sicherheitsabfrage hilft beim
+  Testen und passt zur Datenschutzerklärung (Daten selbst löschen). (23.11.2026)
 - **ESLint 9** gilt laut npm als nicht mehr unterstützt; erst auf ESLint 10 wechseln, wenn
   `eslint-config-expo` es offiziell unterstützt. (23.11.2026)
