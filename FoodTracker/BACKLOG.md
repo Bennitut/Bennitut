@@ -94,7 +94,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Server) buchen in den Vorrat. In der Web-Version bleibt der Vorrat deshalb leer, solange man nicht alles von Hand
   einträgt, und „Gegessen“ zieht nichts ab – der Kreislauf Einkauf → Vorrat → Kochen bricht ab. Vorschlag: Beim
   Abhaken einer Zeile (oder mit „Alles eingekauft“) Packungen × Packungsgröße in den Vorrat buchen. Der Test
-  „Einkaufen und Kochen“ zeigt, dass die Mengen dann aufgehen. Neue Funktion – Benjamin entscheidet. (24.11.2026)
+  „Einkaufen und Kochen“ zeigt, dass die Mengen dann aufgehen. Neue Funktion – Benjamin entscheidet; die Frage steht
+  in PR #2 unter „Brauche deine Entscheidung“ (vor dem Umsetzen seine Antwort dort nachlesen). (24.11.2026)
 - **Neuplanen und Fixieren testbar machen:** Startdatum, behaltene Wochen und fixierte Gerichte beim Tauschen
   berechnet `createPlan` direkt im Bildschirm (`app/src/app/(tabs)/plan.tsx`), deshalb ist das ungetestet. In eine
   Funktion in `lib/` auslagern und testen; ebenso `localizeRecipe`/`needsTranslation` aus `lib/i18n.ts` (die Datei
