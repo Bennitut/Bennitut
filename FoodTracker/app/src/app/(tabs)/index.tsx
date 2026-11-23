@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { Image, Pressable, Text, View } from "react-native";
+import { InstallHint } from "../../components/InstallHint";
 import { Card, Chip, HeroCard, Muted, ProgressBar, Screen, styles } from "../../components/ui";
 import { daysBetween } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
@@ -38,6 +39,9 @@ export default function TodayScreen() {
           ))}
         </View>
       </HeroCard>
+
+      {/* Erst wer schon einen Plan hat, bekommt im Browser den Hinweis, FoodTracker als App abzulegen. */}
+      {plan ? <InstallHint /> : null}
 
       {planned.length > 0 ? (
         <Card title={t("today.planned")} icon="🍽️">

@@ -521,4 +521,11 @@ export const de = {
     noLimit: "egal",
     mealsPerDay: "Mahlzeiten im Plan",
   },
+  install: {
+    title: "Als App nutzen",
+    ios: "Tippe unten auf „Teilen“ und dann auf „Zum Home-Bildschirm“ – FoodTracker startet dann wie eine App.",
+    other: "Im Browsermenü „App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen – FoodTracker startet dann wie eine App.",
+    install: "Installieren",
+    later: "Später",
+  },
 };

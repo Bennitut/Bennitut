@@ -521,4 +521,11 @@ export const en: Dictionary = {
     noLimit: "any",
     mealsPerDay: "Meals in the plan",
   },
+  install: {
+    title: "Use it like an app",
+    ios: "Tap “Share” and then “Add to Home Screen” – FoodTracker then opens like an app.",
+    other: "Choose “Install app” or “Add to Home screen” in the browser menu – FoodTracker then opens like an app.",
+    install: "Install",
+    later: "Later",
+  },
 };

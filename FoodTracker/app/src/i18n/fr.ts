@@ -521,4 +521,11 @@ export const fr: Dictionary = {
     noLimit: "peu importe",
     mealsPerDay: "Repas dans le menu",
   },
+  install: {
+    title: "Utiliser comme une app",
+    ios: "Touche « Partager », puis « Sur l’écran d’accueil » – FoodTracker s’ouvre alors comme une app.",
+    other: "Choisis « Installer l’application » ou « Ajouter à l’écran d’accueil » dans le menu du navigateur – FoodTracker s’ouvre alors comme une app.",
+    install: "Installer",
+    later: "Plus tard",
+  },
 };
