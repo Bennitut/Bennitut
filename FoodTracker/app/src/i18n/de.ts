@@ -160,7 +160,7 @@ export const de = {
     lock: "Fixieren",
     unlock: "Lösen",
     swap: "Tauschen",
-    swapTitle: "{meal} an Tag {day} tauschen",
+    swapTitle: "{meal} am {day} tauschen",
     swapHint: "Das gewählte Gericht wird fixiert und der übrige Plan neu berechnet.",
     noAlternatives: "Keine passenden Alternativen gefunden.",
     aiOffline: "Für neue KI-Rezepte braucht die App eine Verbindung zum Server. Der Plan wurde aus den vorhandenen Rezepten erstellt.",

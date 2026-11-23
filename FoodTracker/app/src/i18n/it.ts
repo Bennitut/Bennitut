@@ -160,7 +160,7 @@ export const it: Dictionary = {
     lock: "Blocca",
     unlock: "Sblocca",
     swap: "Cambia",
-    swapTitle: "Cambia {meal} del giorno {day}",
+    swapTitle: "Cambia {meal} del {day}",
     swapHint: "Il piatto scelto viene bloccato e il resto del piano ricalcolato.",
     noAlternatives: "Nessuna alternativa adatta.",
     aiOffline: "Le nuove ricette IA richiedono una connessione al server. Il piano è stato creato con le ricette esistenti.",

@@ -160,7 +160,7 @@ export const en: Dictionary = {
     lock: "Lock",
     unlock: "Unlock",
     swap: "Swap",
-    swapTitle: "Swap {meal} on day {day}",
+    swapTitle: "Swap {meal} on {day}",
     swapHint: "The chosen dish is locked and the rest of the plan is recalculated.",
     noAlternatives: "No matching alternatives found.",
     aiOffline: "New AI recipes need a connection to the server. The plan was created from the existing recipes.",

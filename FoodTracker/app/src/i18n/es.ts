@@ -160,7 +160,7 @@ export const es: Dictionary = {
     lock: "Fijar",
     unlock: "Soltar",
     swap: "Cambiar",
-    swapTitle: "Cambiar {meal} del día {day}",
+    swapTitle: "Cambiar {meal} del {day}",
     swapHint: "El plato elegido se fija y se recalcula el resto del plan.",
     noAlternatives: "No hay alternativas adecuadas.",
     aiOffline: "Las nuevas recetas de IA necesitan conexión con el servidor. El plan se ha creado con las recetas existentes.",

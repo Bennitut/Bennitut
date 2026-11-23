@@ -160,7 +160,7 @@ export const fr: Dictionary = {
     lock: "Verrouiller",
     unlock: "Déverrouiller",
     swap: "Échanger",
-    swapTitle: "Échanger le {meal} du jour {day}",
+    swapTitle: "Échanger le {meal} du {day}",
     swapHint: "Le plat choisi est verrouillé et le reste du menu est recalculé.",
     noAlternatives: "Aucune alternative adaptée.",
     aiOffline: "Les nouvelles recettes IA nécessitent une connexion au serveur. Le menu a été créé à partir des recettes existantes.",
