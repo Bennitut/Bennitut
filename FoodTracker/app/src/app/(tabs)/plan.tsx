@@ -8,6 +8,7 @@ import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
 import { aggregatePantry, today } from "../../lib/pantry";
 import { planOptions } from "../../lib/profile";
+import { prepareReplan } from "../../lib/replan";
 import { mealKey, useStore } from "../../lib/store";
 import type { LockedMeal, MonthPlan, PlannedMeal, WeekPlan } from "../../lib/types";
 
@@ -44,13 +45,7 @@ export default function PlanScreen() {
     setError(null);
     setNotice(null);
     setProgress(fromWeek + 1);
-    const startDate = plan && (fromWeek > 0 || plan.startDate === today()) ? plan.startDate : today();
-    const keepWeeks = plan && fromWeek > 0 ? plan.weeks.slice(0, fromWeek) : [];
-    const locked: LockedMeal[] = (plan && plan.startDate === startDate ? plan.weeks.flatMap((w) => w.meals) : [])
-      .filter((m) => m.locked && settings.mealTypes.includes(m.mealType))
-      .filter((m) => !(extraLock && m.day === extraLock.day && m.mealType === extraLock.mealType))
-      .map(({ day, mealType, recipeId }) => ({ day, mealType, recipeId }));
-    if (extraLock) locked.push(extraLock);
+    const { startDate, keepWeeks, locked } = prepareReplan({ plan, fromWeek, swapped: extraLock, mealTypes: settings.mealTypes, today: today() });
     const request = {
       ...options,
       people: settings.people,

@@ -15,6 +15,7 @@ import {
 import { addDays } from "../src/lib/dates";
 import { addToPantry, aggregatePantry, consumeMeal, totalOf, type StockItem } from "../src/lib/pantry";
 import { planOptions } from "../src/lib/profile";
+import { prepareReplan } from "../src/lib/replan";
 import type { MonthPlan, PlannedMeal, Recipe, Settings } from "../src/lib/types";
 import { settings } from "./fixtures";
 
@@ -113,6 +114,24 @@ describe("Planer in der App (ohne Server)", () => {
 
   it("plant Woche für Woche (mit Fortschrittsanzeige) denselben Monat wie in einem Rutsch", () => {
     assert.deepEqual(month, planMonth({ request: requestFor(answers), recipes: RECIPES, ingredients, startDate: START }));
+  });
+
+  it("Tauschen drei Tage nach Planbeginn: Das Rezept kommt an den gewählten Tag, fixierte Gerichte bleiben", () => {
+    // Wie im Plan-Tab: Mittagessen an Tag 2 ist fixiert, heute ist Tag 3, getauscht wird das Abendessen an Tag 5.
+    const at = (plan: MonthPlan, day: number, mealType: string) => plan.weeks.flatMap((w) => w.meals).find((m) => m.day === day && m.mealType === mealType)!;
+    const withLock: MonthPlan = {
+      ...month,
+      weeks: month.weeks.map((w) => ({ ...w, meals: w.meals.map((m) => (m.day === 2 && m.mealType === "lunch" ? { ...m, locked: true } : m)) })),
+    };
+    const options = planOptions(answers);
+    const alternative = RECIPES.find((r) => r.mealTypes.includes("dinner") && r.id !== at(month, 5, "dinner").recipeId && matchesPreferences(r, options, ingredients))!;
+    const swapped = { day: 5, mealType: "dinner" as const, recipeId: alternative.id };
+    const replan = prepareReplan({ plan: withLock, fromWeek: weekOfDay(swapped.day), swapped, mealTypes: answers.mealTypes, today: addDays(START, 3) });
+    const next = planMonth({ request: { ...requestFor(answers), locked: replan.locked }, recipes: RECIPES, ingredients, startDate: replan.startDate, keepWeeks: replan.keepWeeks });
+    assert.equal(next.startDate, START);
+    assert.equal(at(next, 5, "dinner").recipeId, alternative.id);
+    assert.equal(at(next, 2, "lunch").recipeId, at(month, 2, "lunch").recipeId);
+    assert.ok(at(next, 5, "dinner").locked && at(next, 2, "lunch").locked);
   });
 
   it("Einkaufen und Kochen: Mit den Einkaufslisten ist jedes Gericht des Monats kochbar", () => {
