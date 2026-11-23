@@ -15,9 +15,10 @@ Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die gene
 `package-lock.json` nicht mit.
 
 **Stand 24.11.2026:** PR #2 hat die Grenze von etwa 1.500 geänderten Zeilen überschritten. Bis Benjamin ihn mergt, nur
-Fixes und Tests: Punkt 6 (Tests für die App-Logik), das doppelte Emoji, Neuplanen/Fixieren und der Tagesbericht
-(zeigt jetzt auch Vorrang-Abschnitte und erledigte Ideen) sind erledigt. Als Nächstes: `localizeRecipe`/
-`needsTranslation` testbar machen (siehe „Ideen und Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem Mergen im neuen PR.
+Fixes und Tests: Punkt 6 (Tests für die App-Logik), das doppelte Emoji, Neuplanen/Fixieren, der Tagesbericht, die
+Rezepttexte je Sprache (Tests) und die Fotos mit Fleisch oder Fisch bei vegetarischen Rezepten sind erledigt. Als
+Nächstes: prüfen, ob die Promo-Clips das entfernte Kürbisrisotto-Foto zeigen (dann neu aufnehmen), danach „Entdecken“
+lädt alle Katalogfotos auf einmal (siehe „Ideen und Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem Mergen im neuen PR.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -104,8 +105,30 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   (Startdatum, behaltene Wochen, fixierte Gerichte), 7 Tests plus einer mit dem echten Planer. Dabei zwei Fehler
   behoben: Tauschen in der ersten Woche an einem späteren Tag ließ den Plan heute beginnen (Rezept landete Tage zu
   spät, Fixierungen, Gegessenes und Abgehaktes gingen verloren); „Neu planen“ an einem späteren Tag ließ fixierte
-  Gerichte fallen. **Noch offen:** `localizeRecipe`/`needsTranslation` aus `lib/i18n.ts` testbar machen (die Datei
-  importiert den Store und damit native Module). (24.11.2026)
+  Gerichte fallen. (24.11.2026)
+- ✅ **Rezepttexte je Sprache testbar machen:** erledigt 24.11.2026 – `localizeRecipe`, `needsTranslation` und die
+  bisher im Store eingebaute Logik für gespeicherte Übersetzungen und verbesserte Texte (`withStoredTexts`) stehen in
+  `lib/recipeText.ts` (ohne Store und native Module); 8 Tests, u. a. Fallback auf Englisch, wann „Übersetzen“
+  erscheint, verbesserter Text vor der Übersetzung und alle Katalogrezepte in fünf Sprachen. Kein Fehler gefunden.
+  (24.11.2026)
+- ✅ **Fotos mit Fleisch oder Fisch bei vegetarischen und veganen Rezepten:** erledigt 24.11.2026 – beim Prüfen des
+  Rezept-Details zeigten die Ofenkartoffeln mit Kräuterquark ein Ribeye-Steak. Die Titel aller 107 Fotos vegetarischer
+  und veganer Rezepte an der Quelle geprüft; neun nennen Fleisch oder Fisch und sind entfernt (Burrito-Bowl, Gebratener
+  Reis mit Ei, Ofenkartoffeln, Kürbisrisotto, Quesadillas, Reis-Congee, Rotes Kürbis-Curry, Calzone, Palak mit
+  Halloumi). Jetzt haben 184 von 236 Rezepten ein Foto; der Server-Test verlangt mindestens 180. (24.11.2026)
+- **Fotos, die vielleicht nicht passen:** Bei der Linsen-Bolognese (Quelle: „Julia's Bolognese Sauce“, sieht nach
+  Fleisch-Ragù aus), den vegetarischen Enchiladas („tacos and enchiladas“), Mapo Tofu und Nasi Goreng mit Tempeh nennt
+  der Titel kein Fleisch, die Gerichte enthalten es aber oft – Benjamin sieht sie sich am besten selbst an. Ersetzen
+  nur durch andere frei lizenzierte Fotos (Openverse), sonst Platzhalter. (24.11.2026)
+- **Promo-Clips und das entfernte Kürbisrisotto-Foto:** `bildnachweise.md` nennt es für alle drei Clips (dort stehen
+  alle beim Aufnehmen geladenen Fotos). Prüfen, ob es im Bild zu sehen ist; wenn ja, die Clips mit `node make-clips.cjs`
+  neu aufnehmen (das Huhn ist auf dem Foto kaum zu erkennen, die Clips zeigen aber einen vegetarischen Plan).
+  (24.11.2026)
+- **„Entdecken“ lädt alle Katalogfotos auf einmal:** Die Rezeptliste rendert alle 236 Katalogrezepte samt 184
+  Vorschaubildern in einer ScrollView. Auf älteren iPhones kostet das Speicher, und Wikimedia drosselt viele
+  gleichzeitige Bildabrufe (HTTP 429 – beim gleichzeitigen Laden von gut 100 Fotos blieben fünf leer, einzeln
+  abgerufen kamen sie kurz danach). Vorschlag: zuerst etwa 30 zeigen und „Mehr anzeigen“, oder eine virtualisierte
+  Liste. Langfristig helfen selbst ausgelieferte Fotos (siehe Datenschutz). (24.11.2026)
 - **Tauschen in der laufenden Woche plant die schon vergangenen Tage dieser Woche mit:** Dort kann danach ein
   anderes Gericht stehen, auch bei schon als gegessen markierten (der Haken hängt am Platz, nicht am Rezept). „Neu
   planen“ an einem späteren Tag beginnt einen neuen Monat und setzt Gegessenes zurück, auch das von heute. Idee:
