@@ -19,6 +19,25 @@ committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
 „Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
 
+## Vorrang: GitHub Pages vorbereiten (Benjamin richtet Pages ein, 23.11.2026)
+
+Vor Punkt 5 erledigen – die Web-Version soll unter `https://bennitut.github.io/Bennitut/` laufen. Selbst nichts
+veröffentlichen, nur vorbereiten; einschalten und mergen macht Benjamin.
+
+- `.github/workflows/foodtracker-pages.yml` im Wurzelordner des Repos: bei Push auf `feature/food-tracker-app`
+  (Pfade `FoodTracker/app/**` und `FoodTracker/server/src/**`) und per Hand (`workflow_dispatch`). Node 22,
+  `npm ci` und Web-Export in `FoodTracker/app` mit Basis-Pfad `/Bennitut`, in `index.html` und `manifest.json` die
+  absoluten Pfade (`/manifest.json`, `/icons/…`, `start_url`, `scope`) auf `/Bennitut/…` umschreiben, `404.html`
+  als Kopie von `index.html` (Direktlinks), dann `actions/upload-pages-artifact` und `actions/deploy-pages`
+  (Rechte `pages: write`, `id-token: write`, Umgebung `github-pages`).
+- Den Basis-Pfad nur für diesen Build setzen (z. B. `app.config.js`, das `experiments.baseUrl` aus einer
+  Umgebungsvariable liest), damit `npx expo start` lokal unverändert bleibt. Lokal mit Export und Rauchtest unter
+  `/Bennitut/` prüfen.
+- In `marketing/clips/clips.md` den Platzhalter durch `https://bennitut.github.io/Bennitut/` ersetzen und im PR
+  erklären: nach dem Mergen unter Settings → Pages bei „Source“ „GitHub Actions“ wählen; lehnt GitHub die
+  Bereitstellung wegen der Umgebung `github-pages` ab, dort unter Settings → Environments `feature/food-tracker-app`
+  als erlaubten Branch eintragen.
+
 ## Aufgaben
 
 - [x] **1. Gesundheitscheck und `npm run check`** in `app/` und `server/` (Typecheck, Server-Tests, Lint der App).
