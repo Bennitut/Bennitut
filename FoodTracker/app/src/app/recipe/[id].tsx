@@ -6,9 +6,10 @@ import { api } from "../../lib/api";
 import { ImproveCard, PhotoGallery, RatingCard } from "../../components/RecipeFeedback";
 import { communityCache } from "../../lib/communityCache";
 import { ingredientEmoji } from "../../lib/emoji";
-import { needsTranslation, useI18n } from "../../lib/i18n";
+import { useI18n } from "../../lib/i18n";
 import { recipeNutrients } from "../../lib/nutrition";
 import { newId } from "../../lib/pantry";
+import { needsTranslation } from "../../lib/recipeText";
 import { useStore } from "../../lib/store";
 import type { Recipe } from "../../lib/types";
 

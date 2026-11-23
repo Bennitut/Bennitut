@@ -5,6 +5,7 @@ import { isUILanguage, regionFromCode } from "../i18n";
 import { ApiError, api, setAuthToken, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
+import { withStoredTexts } from "./recipeText";
 import type {
   Account,
   DiaryEntry,
@@ -259,16 +260,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const userRecipes = [...state.myRecipes, ...state.savedRecipes, ...state.planRecipes];
     const recipes = new Map<string, Recipe>();
     for (const recipe of [...catalog.recipes, ...userRecipes]) {
-      const cached = state.translations[recipe.id];
-      let r = cached ? { ...recipe, translations: { ...recipe.translations, ...cached } } : recipe;
-      // Verbesserte Texte ersetzen das Original bzw. die Übersetzung der jeweiligen Sprache.
-      for (const [language, text] of Object.entries(state.textOverrides[recipe.id] ?? {})) {
-        r =
-          language === r.language
-            ? { ...r, name: text.name, steps: text.steps ?? r.steps, otherIngredients: text.otherIngredients ?? r.otherIngredients }
-            : { ...r, translations: { ...r.translations, [language]: text } };
-      }
-      recipes.set(recipe.id, r);
+      recipes.set(recipe.id, withStoredTexts(recipe, state.translations[recipe.id], state.textOverrides[recipe.id]));
     }
     return {
       ...state,
