@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 import type {
   Account,
   AdminUser,
@@ -26,14 +27,20 @@ import type {
 } from "./types";
 
 /**
- * Adresse des Backends. Während der Entwicklung läuft es auf demselben Rechner wie Expo;
+ * Adresse des Backends, null = kein Server. Während der Entwicklung läuft es auf demselben Rechner wie Expo;
  * dessen Adresse kennt die App (z. B. "10.0.0.7:8081"), also nehmen wir denselben Host mit Port 3000.
  * Mit EXPO_PUBLIC_API_URL lässt sich die Adresse fest vorgeben (z. B. für einen echten Server).
  */
-function serverUrl(): string {
+function serverUrl(): string | null {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   const devHost = Constants.expoConfig?.hostUri?.split(":")[0];
-  return devHost ? `http://${devHost}:3000` : "http://localhost:3000";
+  if (devHost) return `http://${devHost}:3000`;
+  if (Platform.OS === "web") {
+    // `npx expo start --web`: Server auf dem Rechner, von dem die Seite kommt. Die exportierte Web-Version
+    // (`npx expo export --platform web`) läuft ohne Server und fragt nicht bei „localhost“ der Besucher:innen an.
+    return __DEV__ && typeof window !== "undefined" ? `http://${window.location.hostname}:3000` : null;
+  }
+  return "http://localhost:3000";
 }
 
 export const BASE_URL = serverUrl();
@@ -67,6 +74,8 @@ export function setDeviceId(id: string) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Ohne Server wie ohne Verbindung: Katalog, Planer, Vorrat und Tagebuch laufen in der App weiter.
+  if (!BASE_URL) throw new ApiError("network");
   let res: Response;
   try {
     // KI-Anfragen dürfen dauern; ohne Server soll die App aber nicht ewig warten.

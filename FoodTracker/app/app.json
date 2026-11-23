@@ -22,6 +22,7 @@
       "package": "com.bennitut.foodtracker"
     },
     "web": {
+      "output": "single",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
