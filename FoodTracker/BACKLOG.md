@@ -5,15 +5,16 @@ Aufgabe erledigt (bei großen Aufgaben ein abgeschlossener Teilschritt), abgehak
 einer Zeile Notiz versehen. Neue Bugs und Ideen landen unter „Ideen und Erkenntnisse“ und werden
 später priorisiert – Stabilität und Bedienbarkeit vor neuen Funktionen.
 
-Vor jedem Commit: `cd server && npm run check` und `cd app && npm run check`,
+Vor jedem Commit: `cd server && npm run check` und `cd app && npm run check` (Typecheck, Lint und `npm test`),
 bei Web-relevanten Änderungen zusätzlich `cd app && npm run web:export && npm run web:smoke`
 (Rauchtest im headless Chromium, braucht Playwright).
 Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die generierten
 `package-lock.json` nicht mit.
 
-**Stand 24.11.2026:** PR #2 hat mit rund 1.470 geänderten Zeilen die Grenze erreicht. Bis Benjamin ihn mergt, nur
-Fixes und Tests – nächster Schritt ist deshalb Punkt 6 (Tests für die App-Logik); Punkt 5, Teil 2 folgt nach dem
-Mergen im neuen PR.
+**Stand 24.11.2026:** PR #2 hat die Grenze von etwa 1.500 geänderten Zeilen überschritten. Bis Benjamin ihn mergt, nur
+Fixes und Tests: Punkt 6 (Tests für die App-Logik) ist erledigt; als Nächstes kleine Fixes und Tests aus „Ideen und
+Erkenntnisse“ (doppeltes Emoji im Nutzerverzeichnis, Neuplanen/Fixieren testbar machen). Punkt 5, Teil 2 folgt nach
+dem Mergen im neuen PR.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -70,8 +71,9 @@ veröffentlichen, nur vorbereiten; einschalten und mergen macht Benjamin.
   Import, Übersetzen, Community, Bestellungen) freundlich als „bald verfügbar“ kennzeichnen statt Fehler
   zu zeigen.
   - 23.11.2026, Teil 1: `HAS_SERVER` in `lib/api.ts` und Karte `components/ComingSoon.tsx` („🚧 Bald verfügbar“, fünf Sprachen); Erfassen (Foto/Kassenbon) und Rezept-Import nutzen sie. Offen: Übersetzen, Community (Entdecken, Teilen), Bestellungen, KI-Wünsche im Plan, Anmeldung, Fotos/Bewertungen und „Text mit KI verbessern“.
-- [ ] **6. Tests für die App-Logik** in `app/src/lib` (Planer, Vorrat, Nährwerte, Datumslogik) mit einem
+- [x] **6. Tests für die App-Logik** in `app/src/lib` (Planer, Vorrat, Nährwerte, Datumslogik) mit einem
   leichtgewichtigen Test-Runner ohne native Module.
+  - 24.11.2026: `npm test` in `app/` (Node-Test-Runner + `tsx`, Teil von `npm run check`, rund 4 s): 79 Tests für Datum (fünf Zeitzonen, Zeitumstellung), Vorrat, Nährwerte/Kalorienbedarf, Planer wie in der App ohne Server (mit den Einkaufslisten ist jedes Gericht kochbar) und Übersetzungen. Zwei Fehler im Vorrat gefunden und behoben: leere Posten nach dem Runden und eine um einen Tag zu lange Haltbarkeit nach der Umstellung auf Sommerzeit.
 - [ ] **7. Rechtstexte als Entwürfe:** Datenschutzerklärung und Impressum (Österreich) mit klar markierten
   Platzhaltern für Benjamins Angaben. Nichts erfinden.
 - [ ] **8. `docs/MONETARISIERUNG.md`:** Vorschlag kostenlos gegenüber Premium (KI-Funktionen verursachen
@@ -88,6 +90,20 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 - ✅ **Web-Version hosten:** entschieden (GitHub Pages unter `https://bennitut.github.io/Bennitut/`) und vorbereitet;
   Unterpfad, Manifest-Pfade, `404.html` und der Tester-Link in `clips.md` sind erledigt. (23./24.11.2026)
+- **Abgehakte Einkäufe landen nicht im Vorrat:** Nur gelieferte Bestellungen und Kassenbons (beides braucht den
+  Server) buchen in den Vorrat. In der Web-Version bleibt der Vorrat deshalb leer, solange man nicht alles von Hand
+  einträgt, und „Gegessen“ zieht nichts ab – der Kreislauf Einkauf → Vorrat → Kochen bricht ab. Vorschlag: Beim
+  Abhaken einer Zeile (oder mit „Alles eingekauft“) Packungen × Packungsgröße in den Vorrat buchen. Der Test
+  „Einkaufen und Kochen“ zeigt, dass die Mengen dann aufgehen. Neue Funktion – Benjamin entscheidet. (24.11.2026)
+- **Neuplanen und Fixieren testbar machen:** Startdatum, behaltene Wochen und fixierte Gerichte beim Tauschen
+  berechnet `createPlan` direkt im Bildschirm (`app/src/app/(tabs)/plan.tsx`), deshalb ist das ungetestet. In eine
+  Funktion in `lib/` auslagern und testen; ebenso `localizeRecipe`/`needsTranslation` aus `lib/i18n.ts` (die Datei
+  importiert den Store und damit native Module). (24.11.2026)
+- **Tests der App (`app/test/`):** TypeScript 6 bindet `@types/*` nicht mehr automatisch ein; die Tests haben deshalb
+  eine eigene `test/tsconfig.json` mit Node-Typen, der App-Code bleibt ohne (damit nichts aus Node hineinrutscht).
+  Zeitzonen stellen die Tests über `process.env.TZ` um. Unter Windows geht das nicht: Dann laufen sie in der Zeitzone
+  des Rechners, und der Test für `today()`/`nowTime()` wird übersprungen. Statt der noch experimentellen Mock-Uhr von
+  Node nehmen `today()` und `nowTime()` optional einen Zeitpunkt. (24.11.2026)
 - **GitHub Pages antwortet auf Direktlinks mit Status 404** (`404.html` enthält die App, im Browser funktioniert
   alles). Suchmaschinen indexieren Unterseiten deshalb nicht – für eine Testversion egal; für den echten Start
   einen Webspace mit SPA-Weiterleitung nehmen (Netlify, Cloudflare Pages o. Ä.). (24.11.2026)
