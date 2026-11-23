@@ -12,9 +12,10 @@ Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die gene
 `package-lock.json` nicht mit.
 
 **Stand 24.11.2026:** PR #2 hat die Grenze von etwa 1.500 geänderten Zeilen überschritten. Bis Benjamin ihn mergt, nur
-Fixes und Tests: Punkt 6 (Tests für die App-Logik) ist erledigt; als Nächstes kleine Fixes und Tests aus „Ideen und
-Erkenntnisse“ (doppeltes Emoji im Nutzerverzeichnis, Neuplanen/Fixieren testbar machen). Punkt 5, Teil 2 folgt nach
-dem Mergen im neuen PR.
+Fixes und Tests: Punkt 6 (Tests für die App-Logik), das doppelte Emoji und Neuplanen/Fixieren sind erledigt. Als
+Nächstes: der Tagesbericht soll erledigte Vorrang-Abschnitte zeigen (vor dem Bericht für den 24.11.), danach
+`localizeRecipe`/`needsTranslation` testbar machen (siehe „Ideen und Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem
+Mergen im neuen PR.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -96,10 +97,17 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Abhaken einer Zeile (oder mit „Alles eingekauft“) Packungen × Packungsgröße in den Vorrat buchen. Der Test
   „Einkaufen und Kochen“ zeigt, dass die Mengen dann aufgehen. Neue Funktion – Benjamin entscheidet; die Frage steht
   in PR #2 unter „Brauche deine Entscheidung“ (vor dem Umsetzen seine Antwort dort nachlesen). (24.11.2026)
-- **Neuplanen und Fixieren testbar machen:** Startdatum, behaltene Wochen und fixierte Gerichte beim Tauschen
-  berechnet `createPlan` direkt im Bildschirm (`app/src/app/(tabs)/plan.tsx`), deshalb ist das ungetestet. In eine
-  Funktion in `lib/` auslagern und testen; ebenso `localizeRecipe`/`needsTranslation` aus `lib/i18n.ts` (die Datei
+- ✅ **Neuplanen und Fixieren testbar machen:** erledigt 24.11.2026 – `prepareReplan()` in `lib/replan.ts`
+  (Startdatum, behaltene Wochen, fixierte Gerichte), 7 Tests plus einer mit dem echten Planer. Dabei zwei Fehler
+  behoben: Tauschen in der ersten Woche an einem späteren Tag ließ den Plan heute beginnen (Rezept landete Tage zu
+  spät, Fixierungen, Gegessenes und Abgehaktes gingen verloren); „Neu planen“ an einem späteren Tag ließ fixierte
+  Gerichte fallen. **Noch offen:** `localizeRecipe`/`needsTranslation` aus `lib/i18n.ts` testbar machen (die Datei
   importiert den Store und damit native Module). (24.11.2026)
+- **Tauschen in der laufenden Woche plant die schon vergangenen Tage dieser Woche mit:** Dort kann danach ein
+  anderes Gericht stehen, auch bei schon als gegessen markierten (der Haken hängt am Platz, nicht am Rezept). „Neu
+  planen“ an einem späteren Tag beginnt einen neuen Monat und setzt Gegessenes zurück, auch das von heute. Idee:
+  Vergangenes und Gegessenes beim Neuplanen wie fixiert behandeln. Achtung: Der Planer setzt bei fixierten Gerichten
+  `locked: true` (zeigt 🔒), das müsste danach wieder weg. (24.11.2026)
 - **Tests der App (`app/test/`):** TypeScript 6 bindet `@types/*` nicht mehr automatisch ein; die Tests haben deshalb
   eine eigene `test/tsconfig.json` mit Node-Typen, der App-Code bleibt ohne (damit nichts aus Node hineinrutscht).
   Zeitzonen stellen die Tests über `process.env.TZ` um (unter Windows noch nicht ausprobiert). Klappt das nicht,
@@ -115,7 +123,9 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Standard-Branch `master` liegt. Nicht nötig: Jeder Push auf `feature/food-tracker-app`, der die App ändert,
   startet den Workflow. (24.11.2026)
 - **Tagesbericht:** `make-report.cjs` zeigt unter „Was heute passiert ist“ nur nummerierte Aufgaben; erledigte
-  Vorrang-Abschnitte (z. B. GitHub Pages) stehen nur in der Commit-Liste. (24.11.2026)
+  Vorrang-Abschnitte (z. B. GitHub Pages) und erledigte Punkte aus „Ideen und Erkenntnisse“ (✅ mit Datum) stehen nur
+  in der Commit-Liste. Vor dem Bericht für den 24.11. beheben – an dem Tag waren das GitHub Pages, das doppelte Emoji
+  und Neuplanen/Fixieren. (24.11.2026)
 - **Datenschutz (für Punkt 7):** Die Web-Version und die App laden Rezeptfotos direkt von `upload.wikimedia.org` und
   `live.staticflickr.com` – dabei sehen diese Dienste die IP-Adresse. In der Datenschutzerklärung erwähnen oder die
   Fotos später selbst ausliefern. (23.11.2026)
@@ -127,9 +137,12 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Web: Video-Import** ist im Browser ausgeblendet (keine Video-Thumbnails, kein Dateisystem). Machbar wäre
   es mit `<video>` + Canvas; lohnt erst, wenn es einen Server gibt. Achtung: `expo-image-picker` liefert die
   Videolänge im Browser in Sekunden, in der App in Millisekunden. (23.11.2026)
-- **Doppeltes Emoji im Nutzerverzeichnis:** Die Karte zeigt „👥 👥 Nutzerverzeichnis“, weil der Text
+- ✅ **Doppeltes Emoji im Nutzerverzeichnis:** Die Karte zeigte „👥 👥 Nutzerverzeichnis“, weil der Text
   `account.directory` schon das Emoji enthält und die Karte zusätzlich `icon="👥"` bekommt (`app/src/app/users.tsx`).
-  Kleiner Fix: Emoji aus dem Text nehmen (alle fünf Sprachen) oder das `icon` weglassen. (23.11.2026)
+  (23.11.2026) Erledigt 24.11.2026: Karte und Kopfzeile nutzen `account.directoryTitle` ohne Emoji (wie `admin.title`
+  neben `account.adminArea`); dieselbe Ursache hatte „🏆 ⭐ Am besten bewertet“ unter Rezepte. Ein Test in
+  `test/i18n.test.ts` prüft jetzt alle `<Card title={t(…)} icon=…>`: Der Titel darf in keiner Sprache mit einem
+  Emoji beginnen. Texte mit Emoji für Knöpfe bekommen einen eigenen Schlüssel.
 - **`expo lint` prüft keine `.cjs`-Dateien** (z. B. `app/scripts/web-smoke.cjs`); die einmal von Hand mit
   `npx eslint scripts/web-smoke.cjs` prüfen, wenn sie geändert werden. (23.11.2026)
 - **Lint ist streng:** `npm run lint` bricht schon bei Warnungen ab (`--max-warnings 0`), damit sich keine

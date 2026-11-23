@@ -45,7 +45,7 @@ FoodTracker/
 │   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
-│   └── test/             Tests der App-Logik (Datum, Vorrat, Nährwerte, Planer, Übersetzungen)
+│   └── test/             Tests der App-Logik (Datum, Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen)
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 └── server/   Backend (Node, Hono, TypeScript)
     ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
@@ -119,7 +119,8 @@ Einzeln: `npm run typecheck` und `npm test` (in beiden Ordnern) bzw. `npm run li
 Die Tests der App (`app/test/`) laufen mit dem Test-Runner von Node (`node:test`, TypeScript über `tsx`) in wenigen
 Sekunden – ohne Simulator und ohne native Module. Sie prüfen die Datumslogik in mehreren Zeitzonen (auch an den Tagen
 der Zeitumstellung), Vorrat und Haltbarkeit, Nährwerte und Kalorienbedarf, den Planer so, wie die App ihn ohne Server
-aufruft (mit den Einkaufslisten ist jedes Gericht kochbar), und die Übersetzungen (gleiche Platzhalter in allen Sprachen).
+aufruft (mit den Einkaufslisten ist jedes Gericht kochbar), Neuplanen und Tauschen (Startdatum, fixierte Gerichte) und
+die Übersetzungen (gleiche Platzhalter in allen Sprachen, kein doppeltes Emoji in Kartentiteln).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf → Vorrat
 durch; er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
