@@ -74,8 +74,9 @@ export function settings(patch: Partial<Settings> = {}): Settings {
 }
 
 /**
- * Stellt für die Tests der umgebenden `describe`-Gruppe die Zeitzone um. Node übernimmt `process.env.TZ`
- * zur Laufzeit unter Linux und macOS; unter Windows bleibt die Zeitzone des Rechners (siehe `timeZoneActive`).
+ * Stellt für die Tests der umgebenden `describe`-Gruppe die Zeitzone um (Node übernimmt `process.env.TZ` zur
+ * Laufzeit). Klappt das auf einem System nicht, laufen die Tests in dessen Zeitzone; `timeZoneActive` sagt, ob die
+ * Umstellung gegriffen hat.
  */
 export function useTimeZone(zone: string): void {
   const previous = process.env.TZ;

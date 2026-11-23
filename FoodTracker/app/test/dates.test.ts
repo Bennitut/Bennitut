@@ -4,7 +4,7 @@ import { addDays, daysBetween, formatDay } from "../src/lib/dates";
 import { useTimeZone } from "./fixtures";
 
 // Die Datumsfunktionen rechnen in Ortszeit. Geprüft wird deshalb in Zeitzonen mit und ohne Sommerzeit.
-// Umstellungen 2026: EU 29.3./25.10., USA 8.3./1.11., Chile 5.4./6.9. (dort fällt Mitternacht aus).
+// Umstellungen 2026: EU 29.3./25.10., USA 8.3./1.11., Chile 5.4./6.9. (am 6.9. fällt dort Mitternacht aus).
 const ZONES = ["Europe/Vienna", "Asia/Tokyo", "America/New_York", "America/Santiago", "UTC"];
 
 /** Wochentag eines Kalendertags, unabhängig von der Zeitzone berechnet. */

@@ -101,9 +101,9 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   importiert den Store und damit native Module). (24.11.2026)
 - **Tests der App (`app/test/`):** TypeScript 6 bindet `@types/*` nicht mehr automatisch ein; die Tests haben deshalb
   eine eigene `test/tsconfig.json` mit Node-Typen, der App-Code bleibt ohne (damit nichts aus Node hineinrutscht).
-  Zeitzonen stellen die Tests über `process.env.TZ` um. Unter Windows geht das nicht: Dann laufen sie in der Zeitzone
-  des Rechners, und der Test für `today()`/`nowTime()` wird übersprungen. Statt der noch experimentellen Mock-Uhr von
-  Node nehmen `today()` und `nowTime()` optional einen Zeitpunkt. (24.11.2026)
+  Zeitzonen stellen die Tests über `process.env.TZ` um (unter Windows noch nicht ausprobiert). Klappt das nicht,
+  laufen sie in der Zeitzone des Rechners, und nur der Test für `today()`/`nowTime()` wird übersprungen. Statt der
+  noch experimentellen Mock-Uhr von Node nehmen `today()` und `nowTime()` optional einen Zeitpunkt. (24.11.2026)
 - **GitHub Pages antwortet auf Direktlinks mit Status 404** (`404.html` enthält die App, im Browser funktioniert
   alles). Suchmaschinen indexieren Unterseiten deshalb nicht – für eine Testversion egal; für den echten Start
   einen Webspace mit SPA-Weiterleitung nehmen (Netlify, Cloudflare Pages o. Ä.). (24.11.2026)
