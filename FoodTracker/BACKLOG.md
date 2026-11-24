@@ -14,18 +14,17 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 24.11.2026:** Benjamin hat am 24.11.2026 im Chat entschieden: (1) Die PR-Grenze von etwa 1.500 Zeilen ist
-aufgehoben, neue Funktionen sind wieder erlaubt und kommen in den offenen PR #2. (2) Rezeptfotos zuerst – erledigt: die
-vier unklaren Fotos ersetzt bzw. entfernt, Schlagwörter und Beschreibungen aller Fotos sowie die Videotitel vegetarischer
-und veganer Rezepte geprüft, danach der Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog.
-(3) Vorrat: Variante (b), ein Knopf „Abgehaktes in den Vorrat“ unter der Einkaufsliste – erledigt (Vorrang unten).
-Promo-Clips neu aufgenommen (Clip 2 zeigt jetzt auch den Vorrat), Punkt 5 erledigt (Teil 2: Bestellungen, Community;
-Teil 3: Rezept, Übersetzen, KI-Wünsche, Anmeldung), danach Clips 1 und 3 noch einmal aufgenommen. Punkt 7 erledigt:
-Entwürfe für Impressum und Datenschutzerklärung in `docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet
-drei Dinge (Impressum-Variante, Rezeptfotos, Mindestalter; im PR gefragt).
-Als Nächstes: der Vorrang „Impressum & Datenschutz in App und Web-Version“ (unten), danach 8–10; der erste Lauf am
-25.11. (Japan-Zeit) macht vorher den Tagesbericht für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version
-nicht“ (unten) vorher drankommen soll – ohne Antwort nach dem Vorrang weiter mit Punkt 8.
+**Stand 24.11.2026 (abends):** Benjamins Entscheidungen vom 24.11.2026 sind umgesetzt: (1) PR-Grenze aufgehoben, neue
+Funktionen kommen in den offenen PR #2; (2) Rezeptfotos zuerst – unklare Fotos ersetzt bzw. entfernt, Schlagwörter,
+Beschreibungen und Videotitel vegetarischer und veganer Rezepte geprüft, Platzhalter für Rezepte ohne Foto; (3) Vorrat
+Variante (b), Knopf „Abgehaktes in den Vorrat“. Ebenfalls erledigt: Punkt 5 (Offline-Modus), Punkt 7 (Entwürfe in
+`docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet drei Dinge, im PR gefragt) und Expo SDK 58 (Vorrang
+unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten.
+Reihenfolge ab jetzt: Vorrang 8.1 (Server zum Testen auf dem Laptop) → 8.2 (Ernährungshistorie) → 8.3 (Videos je
+Sprache, danach als Daueraufgabe pro Lauf etwa 40 Rezepte nach der obersten Aufgabe) → Vorrang „Impressum & Datenschutz
+in App und Web-Version“ → Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
+vorher den für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll –
+ohne Antwort nach dem Vorrang „Impressum“ weiter mit Punkt 8.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -35,9 +34,88 @@ committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
 „Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
 
+## ✅ Vorrang: Expo SDK 58 für Expo Go auf iPhone und Android (Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
+
+24.11.2026: Expo SDK 58 mit React Native 0.88.1 und React 19.3 (`npx expo install expo@^58.0.0`, dann `--fix`); am Code
+war nichts anzupassen, nur `package-lock.json` neu erzeugt und `tsconfig.json` so, wie SDK 58 sie schreibt. Geprüft:
+expo-doctor 20/20, `npx expo install --check`, `npm run check` (112 App-, 56 Server-Tests), Web-Export und Rauchtest,
+`expo export` für iOS und Android, das Manifest von `npx expo start` (`exposdk:58.0.0`) und die Entwicklungs-Bundles,
+die Expo Go für iOS und Android lädt. Android ohne Gerät nicht abschließend prüfbar (unter „Ideen und Erkenntnisse“).
+
+Expo Go aus dem App Store bzw. Play Store unterstützt nur SDK 58 („Project is incompatible with this version of Expo
+Go“), auf iOS lässt sich keine ältere Version installieren. Nach dem Upgrade-Leitfaden heben, Breaking Changes prüfen,
+alle Checks plus Bundles für beide Plattformen; im PR „In 5 Minuten testen“ mit Expo Go für SDK 58 und den
+Windows-Voraussetzungen (Git und Node.js LTS per winget, `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`).
+
+## Vorrang: Server zum Testen auf dem Laptop, ohne XAMPP (8.1, Benjamins Wunsch vom 24.11.2026)
+
+Im Browser (`npx expo start`, Taste `w`) zeigt der Rezept-Import „Keine Verbindung zum Server.“ Kein XAMPP: Es bringt
+Apache, PHP und MySQL mit und kann den Node-Server nicht ausführen; der Server läuft direkt mit Node.js auf dem Laptop
+(gleicher Rechner, Port 3000). Ziel: Ein Doppelklick startet alles; Import, Foto- und Bon-Erkennung, Übersetzen und
+KI-Wünsche funktionieren, ohne dass Benjamin Geld ausgibt. Ein Server im Internet für echte Tester gehört nicht dazu
+(nur unter „Ideen und Erkenntnisse“ notieren, was dafür nötig wäre).
+
+- [ ] CORS mit `hono/cors`: `http://localhost`, `127.0.0.1` und private Netze (10.x, 172.16–31.x, 192.168.x) mit
+  beliebigem Port, weitere Ursprünge über `CORS_ORIGINS` (kommagetrennt); nicht pauschal jede Website. Mit Tests.
+- [ ] `server/.env` lesen, falls vorhanden; eingechecktes `server/.env.example` ohne Geheimnisse erklärt alle Variablen
+  (`ALLOW_DEV_LOGIN=1` nur zum Testen); `.env` und `server/data/` stehen in `.gitignore`.
+- [ ] Kostenlose KI: Anbieter Ollama neben Claude. `AI_PROVIDER` (`claude` oder `ollama`); ohne Angabe Claude, wenn
+  `ANTHROPIC_API_KEY` gesetzt ist, sonst Ollama, wenn es unter `OLLAMA_URL` (Standard `http://127.0.0.1:11434`)
+  antwortet. Modell `gemma4:e4b` (versteht Bilder, `OLLAMA_MODEL`; im README `qwen3-vl:8b` als Alternative).
+  `/api/chat` ohne Streaming, Temperatur 0, Bilder als Base64, `format` = JSON-Schema aus dem Zod-Schema, Denken aus;
+  Antwort mit demselben Zod-Schema prüfen, Fehler auf die `AnalysisError`-Codes abbilden, großzügiges Zeitlimit (auch in
+  der App). Alle KI-Funktionen über diese eine Stelle; Tests mit nachgebautem `fetch`, ohne echtes Ollama.
+- [ ] Ohne KI: KI-Endpunkte antworten mit 503 `ai_not_configured`, die App zeigt einen verständlichen Text in allen
+  fünf Sprachen; `/api/health` meldet, welche KI aktiv ist.
+- [ ] `FoodTracker/start-test.cmd` zum Doppelklicken: bei Bedarf `npm install` in `server` und `app`, Server im eigenen
+  Fenster, danach `npx expo start`. Beim Serverstart: Adresse im WLAN, aktive KI bzw. ob Ollama erreichbar ist,
+  Hinweis auf die Firewall-Regel für Port 3000 (fürs iPhone).
+- [ ] Profil: eine Zeile zum Server – verbunden mit Claude, mit lokaler KI, ohne KI oder nicht erreichbar.
+- [ ] README und PR („In 5 Minuten testen“): `winget install Ollama.Ollama`, `ollama pull gemma4:e4b`, `git pull`,
+  `FoodTracker\start-test.cmd` doppelklicken, im Browser Taste `w`, am iPhone den QR-Code, Firewall-Regel als
+  Administrator; Instagram gibt die Beschreibung ohne Anmeldung oft nicht heraus → Caption ins Feld „Beschreibung“.
+- [ ] Prüfen: Server-Tests; im Browser mit `npx expo start --web` und laufendem Server scheitert der Import nicht mehr
+  an der Verbindung (ohne KI kommt die neue Meldung); dazu der bisherige Web-Rauchtest.
+
+## Vorrang: Ernährungshistorie automatisch und dauerhaft speichern (8.2, Benjamins Wunsch vom 24.11.2026)
+
+Heute liegt das Tagebuch mit allem anderen unter einem Schlüssel in AsyncStorage bzw. localStorage, Speicherfehler
+werden verschluckt, und das Profil zeigt nur 7 oder 30 Tage.
+
+1. Nichts löscht Tagebucheinträge automatisch (keine Migration, kein neuer Plan, kein neuer Fragebogen); ein Test
+   sichert das ab.
+2. Tagebuch unter einem eigenen Schlüssel (mit Migration), damit es auch gespeichert wird, wenn der übrige Zustand mit
+   Fotos und importierten Rezepten zu groß wird (localStorage meist etwa 5 MB, AsyncStorage unter Android 6 MB).
+   Scheitert das Speichern, einen Hinweis zeigen.
+3. Automatische Sicherung auf dem Server, sobald einer erreichbar ist: neue, geänderte und gelöschte Einträge im
+   Hintergrund hochladen und beim Start abgleichen (über die Eintrags-ID; Gelöschtes als Löschmarke). Ablage unter
+   `server/data/`, pro Konto, sonst pro Geräte-ID. Mit Konto (zum Testen Dev-Login) kommt die Historie auf einem neuen
+   Gerät oder nach dem Löschen der Browserdaten zurück; im Profil in einem Satz erklären. Ohne Server alles lokal.
+4. Im Profil „Historie exportieren“ (CSV und JSON) und „Importieren“ (JSON, ohne Duplikate).
+5. Ansicht: neben 7 und 30 Tagen „1 Jahr“ und „Alles“; bei langen Zeiträumen Balken pro Woche bzw. Monat, Durchschnitt
+   über die erfassten Tage und eine Liste zum Blättern durch alle vergangenen Tage.
+6. Logik ohne native Module in `app/src/lib` mit Tests, Server-Endpunkte mit Tests, Texte in allen fünf Sprachen; die
+   Sicherung in Teil B des Datenschutz-Entwurfs ergänzen.
+
+## Vorrang: Verlinkte Videos in der gewählten Sprache (8.3, Benjamins Wunsch vom 24.11.2026)
+
+Heute hat jedes Katalogrezept ein YouTube-Video (`server/src/data/recipeVideos.ts`), fast alle auf Deutsch.
+
+1. Videos je Sprache (de, en, fr, it, es); `RecipeVideo` bekommt das Feld `language`, die vorhandenen Videos ihrer
+   Sprache zuordnen.
+2. Im Rezept nur Videos in der gewählten Sprache (de-AT und de-CH zählen als de). Gibt es dort keins, öffnet derselbe
+   Knopf eine YouTube-Suche in dieser Sprache (Rezeptname in der Sprache plus `searchSuffix`). Die Suchlinks unter „Mehr
+   Videos“, Originalbeiträge importierter Rezepte und selbst eingetragene Links bleiben. Logik in `app/src/lib` mit Tests.
+3. Danach Daueraufgabe in Etappen (pro Lauf nach der obersten Aufgabe etwa 40 Rezepte): je Katalogrezept und Sprache ein
+   passendes, öffentlich verfügbares YouTube-Video, zuerst en, dann es, fr, it, dazu de, wo es fehlt. Kandidaten über die
+   Websuche; Verfügbarkeit, Titel und Kanal per YouTube-oEmbed prüfen; Titel in der Zielsprache und dasselbe Gericht. Bei
+   vegetarischen und veganen Rezepten kein Fleisch und kein Fisch im Titel; den Server-Test für Videotitel auf alle fünf
+   Sprachen erweitern. Fortschritt je Sprache hier festhalten (z. B. „en: 120/236“). Lieber kein Video als ein
+   ungeprüftes.
+
 ## Vorrang: Impressum & Datenschutz in App und Web-Version (Nachtschicht, 24.11.2026)
 
-Vor Punkt 8 erledigen. Grund: Nach dem Mergen geht die Web-Version auf GitHub Pages online, und laut USP braucht
+Nach den Vorrang-Abschnitten 8.1–8.3 und vor Punkt 8 erledigen. Grund: Nach dem Mergen geht die Web-Version auf GitHub Pages online, und laut USP braucht
 „jegliche Website“ die Offenlegung nach § 25 Mediengesetz (Strafe bis 20.000 Euro). Die Entwürfe liegen in
 `docs/recht/` (Erklärungen und Quellen in `docs/recht/README.md`).
 
@@ -186,6 +264,12 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   entfernten Fotos). Clip 2 zeigt jetzt auch „Gekauft? Ein Tipp – ab in den Vorrat“ (Knopf, Vorrat mit Haltbarkeit,
   „🧺 im Vorrat“ in der Liste) und ist 23 s lang; „Liefern lassen“ zeigt dabei „Bald verfügbar“. `bildnachweise.md`
   ohne Frittata, Kürbisrisotto und Nasi Goreng, `clips.md` mit neuen Texten zu Clip 2.
+- **Android in Expo Go ohne Gerät nicht prüfbar:** Manifest und Entwicklungs-Bundle für Android entstehen mit SDK 58
+  fehlerfrei; Android-spezifisch im Code sind nur der Schatten (`elevation`) und die Google-Client-ID, die
+  Android-Einstellungen in `app.json` (Symbole, `predictiveBackGestureEnabled`, Paketname) wirken in Expo Go nicht.
+  Läuft die App auf Benjamins Android-Gerät trotzdem nicht, braucht es die genaue Fehlermeldung (im PR gefragt).
+  Häufige Ursachen ohne Fehler im Code: Expo Go nicht aktuell, Handy in einem anderen WLAN, die Windows-Firewall
+  blockiert Port 8081 (Ausweg `npx expo start --tunnel`, dann aber ohne Server-Funktionen). (24.11.2026)
 - **Löschen geht in der Web-Version nicht:** `Alert.alert` ist in react-native-web eine leere Funktion. „Löschen“ bei
   eigenen Rezepten und eigenen Fotos zeigt im Browser deshalb keine Abfrage und löscht nichts (ebenso die Abfragen im
   Admin-Bereich, der ohne Server aber nicht erreichbar ist). Vorschlag: eine kleine Funktion `confirm()` in `lib/`, die
