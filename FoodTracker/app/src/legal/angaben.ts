@@ -41,12 +41,12 @@ export interface Angaben {
 
 export const ANGABEN: Angaben = {
   name: "Benjamin Thurn und Taxis",
-  strasse: "[[ANGABE: Straße]]",
-  hausnummer: "[[ANGABE: Hausnummer mit Stiege und Tür]]",
-  plz: "[[ANGABE: Postleitzahl]]",
-  ort: "[[ANGABE: Ort]]",
-  email: "[[ANGABE: E-Mail-Adresse]]",
-  zweiterKontakt: "[[ANGABE: Zweiter Kontaktweg, z. B. Telefonnummer]]",
-  stand: "[[ANGABE: Datum („Stand“)]]",
+  strasse: "Wehrbrücklstraße",
+  hausnummer: "37/3/8",
+  plz: "1220",
+  ort: "Wien",
+  email: "tut.benjamin@gmail.com",
+  zweiterKontakt: "+43 660 5551543",
+  stand: "24. November 2026",
   webAdresse: "bennitut.github.io",
 };
