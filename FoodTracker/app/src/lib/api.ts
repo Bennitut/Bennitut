@@ -25,6 +25,7 @@ import type {
   Role,
   ShoppingItem,
 } from "./types";
+import type { DiarySyncRequest, DiarySyncResponse } from "./diary";
 import type { ServerHealth } from "./serverStatus";
 
 /**
@@ -84,7 +85,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // bricht nach 240 Sekunden selbst ab und meldet „ai_timeout“; ohne Server soll die App nicht ewig warten.
   const slow = path.startsWith("/api/analyze") || /^\/api\/recipes\/(import|translate|improve)$/.test(path) || path === "/api/plan";
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), slow ? 300_000 : 10_000);
+  // Die Sicherung des Tagebuchs schickt beim ersten Mal alles (bis zu 2000 Einträge pro Anfrage).
+  const timer = setTimeout(() => controller.abort(), slow ? 300_000 : path === "/api/diary/sync" ? 60_000 : 10_000);
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       signal: controller.signal,
@@ -143,6 +145,9 @@ export const api = {
       // Fotos eigener Rezepte braucht der Server nicht.
       recipes: body.recipes.map(({ media: _media, ...r }) => r),
     }),
+
+  /** Tagebuch abgleichen (siehe lib/diary.ts, syncDiary). */
+  diarySync: (body: DiarySyncRequest) => post<DiarySyncResponse>("/api/diary/sync", body),
 
   importRecipe: (body: { url?: string; caption?: string; frames: ImagePayload[]; language: string }) =>
     post<{ recipe: Recipe; author: string | null }>("/api/recipes/import", body),

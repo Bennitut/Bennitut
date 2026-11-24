@@ -55,6 +55,8 @@ export interface DiaryEntry {
   title: string;
   nutrients: Nutrients;
   source: "foto" | "plan" | "manuell";
+  /** Letzte Änderung (ISO) – für den Abgleich mit dem Server; fehlt bei Einträgen aus älteren Versionen. */
+  updatedAt?: string;
 }
 
 export interface MealAnalysis {

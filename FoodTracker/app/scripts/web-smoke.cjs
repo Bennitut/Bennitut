@@ -5,7 +5,10 @@
 //                                     # abhaken, „Abgehaktes in den Vorrat“, „Liefern lassen“ zeigt „Bald verfügbar“)
 //                                     # → Vorrat durch, danach „Entdecken“ (Community „Bald verfügbar“) und Tauschen
 //                                     # (zuerst 30 Rezepte, nicht alle Fotos auf einmal), zuletzt „Bald verfügbar“
-//                                     # im Rezept, im Profil, bei der Anmeldung und beim Übersetzen (Französisch)
+//                                     # im Rezept, im Profil, bei der Anmeldung und beim Übersetzen (Französisch),
+//                                     # dann die Ernährungshistorie: Umzug aus dem alten Speicherort, „Alles“,
+//                                     # Export (JSON, CSV), Import nach gelöschten Browserdaten ohne Duplikate und
+//                                     # der Hinweis bei vollem Speicher
 //   npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe für GitHub Pages (Unterpfad /Bennitut)
 //
 // Den Unterpfad erkennt der Test selbst an den Skript-Pfaden in index.html. Gibt es eine 404.html, verhält sich
@@ -248,6 +251,92 @@ async function main() {
   } catch (e) {
     failures.push(`Bald verfügbar: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
+  }
+
+  // Ernährungshistorie: Das Tagebuch zieht aus dem alten Zustand in den eigenen Speicher, bleibt nach gelöschten
+  // Browserdaten per Sicherung erhalten (ohne Duplikate) und meldet einen vollen Speicher.
+  try {
+    const history = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT", acceptDownloads: true });
+    await history.addInitScript(() => {
+      if (localStorage.getItem("smoke/seeded")) return;
+      localStorage.setItem("smoke/seeded", "1");
+      const day = (offset) => {
+        const d = new Date();
+        d.setDate(d.getDate() - offset);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      };
+      const nutrients = { kcal: 650, protein: 25, carbs: 70, fat: 20 };
+      // So speicherte die App das Tagebuch bis November 2026: im übrigen Zustand, ohne `updatedAt`.
+      localStorage.setItem(
+        "foodtracker/state/v2",
+        JSON.stringify({
+          deviceId: "smoke-device-0001",
+          settings: { onboarded: true, language: "de", region: "AT" },
+          diary: [
+            { id: "alt1", date: day(400), time: "12:00", title: "Kaspressknödel", nutrients, source: "manuell" },
+            { id: "alt2", date: day(2), time: "19:00", title: "Linsen-Bolognese", nutrients, source: "plan" },
+          ],
+        }),
+      );
+    });
+    const hp = await history.newPage();
+    watch(hp, "/profile (Historie)");
+    await hp.goto(site + "/profile", { waitUntil: "networkidle" });
+    await hp.getByText("1 von 7 Tagen erfasst", { exact: true }).waitFor({ timeout: 10_000 });
+    const stored = await hp.evaluate(() => ({ keys: Object.keys(localStorage), main: JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}") }));
+    if (!stored.keys.includes("foodtracker/diary/v1") || stored.keys.filter((k) => /^foodtracker\/diary\/v1\/\d{4}$/.test(k)).length !== 2) {
+      throw new Error(`Tagebuch nicht im eigenen Speicher (ein Teil pro Jahr): ${stored.keys.join(", ")}`);
+    }
+    if ("diary" in stored.main) throw new Error("Der übrige Zustand enthält nach dem Umzug noch das Tagebuch");
+    await hp.getByRole("button", { name: "Alles", exact: true }).click();
+    await hp.getByText("2 von 401 Tagen erfasst", { exact: true }).waitFor({ timeout: 5_000 });
+    await hp.getByText(/^Ein Balken pro Monat/).waitFor({ timeout: 5_000 });
+
+    const download = async (label) => {
+      const [file] = await Promise.all([hp.waitForEvent("download", { timeout: 10_000 }), hp.getByText(label, { exact: true }).click()]);
+      return { name: file.suggestedFilename(), path: await file.path() };
+    };
+    const backup = await download("📤 Als Sicherung (JSON)");
+    const exported = JSON.parse(fs.readFileSync(backup.path, "utf8"));
+    if (!/^FoodTracker-Historie-\d{4}-\d{2}-\d{2}\.json$/.test(backup.name) || exported.entries.length !== 2) {
+      throw new Error(`Sicherung ${backup.name} mit ${exported.entries?.length} Einträgen statt 2`);
+    }
+    const csv = fs.readFileSync((await download("📤 Als Tabelle (CSV)")).path, "utf8");
+    if (!csv.startsWith("\uFEFFDatum;Uhrzeit;Gericht;kcal;") || !csv.includes(";Kaspressknödel;650;")) throw new Error(`CSV: ${csv.slice(0, 120)}`);
+
+    // Browserdaten gelöscht: leer – nach dem Import ist alles wieder da, ein zweiter Import bringt nichts doppelt.
+    await hp.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("smoke/seeded", "1");
+    });
+    await hp.reload({ waitUntil: "networkidle" });
+    await hp.getByText(/^Noch keine Einträge\./).waitFor({ timeout: 10_000 });
+    const importFile = async (file, message) => {
+      const [chooser] = await Promise.all([hp.waitForEvent("filechooser", { timeout: 10_000 }), hp.getByText("📥 Sicherung importieren", { exact: true }).click()]);
+      await chooser.setFiles(file);
+      await hp.getByText(message, { exact: true }).waitFor({ timeout: 10_000 });
+    };
+    await importFile(backup.path, "✓ Importiert: 2 neu, 0 aktualisiert, 0 schon vorhanden.");
+    await importFile(backup.path, "✓ Importiert: 0 neu, 0 aktualisiert, 2 schon vorhanden.");
+    await hp.reload({ waitUntil: "networkidle" });
+    await hp.getByText("1 von 7 Tagen erfasst", { exact: true }).waitFor({ timeout: 10_000 });
+
+    // Speicher voll: Hinweis statt stillem Verlust.
+    await hp.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (String(key).startsWith("foodtracker/diary")) throw new DOMException("Speicher voll", "QuotaExceededError");
+        return original.call(this, key, value);
+      };
+    });
+    const extra = path.join(path.dirname(backup.path), "smoke-extra.json");
+    fs.writeFileSync(extra, JSON.stringify([{ ...exported.entries[1], id: "neu1", title: "Rösti" }]));
+    await importFile(extra, "✓ Importiert: 1 neu, 0 aktualisiert, 0 schon vorhanden.");
+    await hp.getByText(/^⚠️ Dein Tagebuch konnte nicht gespeichert werden/).first().waitFor({ timeout: 10_000 });
+    await history.close();
+    console.log("Ernährungshistorie ok: Umzug in den eigenen Speicher, „Alles“ mit Monatsbalken, Export (JSON, CSV), Import ohne Duplikate, Hinweis bei vollem Speicher.");
+  } catch (e) {
+    failures.push(`Ernährungshistorie: ${e.message.split("\n")[0]}`);
   }
 
   await browser.close();

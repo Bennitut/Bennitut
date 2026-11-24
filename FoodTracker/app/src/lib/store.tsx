@@ -1,9 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isUILanguage, regionFromCode } from "../i18n";
-import { ApiError, api, setAuthToken, setDeviceId } from "./api";
+import { ApiError, HAS_SERVER, api, setAuthToken, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
+import { addEntry, emptyDiary, loadDiary, removeEntry, saveDiary, syncDiary, type DiaryState } from "./diary";
+import { importDiaryJson, type ImportResult } from "./history";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import { withStoredTexts } from "./recipeText";
 import { checkedToBook, deliveryToBook } from "./shopping";
@@ -25,9 +27,13 @@ import type {
   Settings,
 } from "./types";
 
+/**
+ * Zustand der App unter einem Schlüssel. Das Tagebuch gehört nicht dazu: Es liegt unter eigenen Schlüsseln
+ * (lib/diary.ts), damit es auch gespeichert wird, wenn Fotos und importierte Rezepte den Speicher füllen, und damit
+ * kein neuer Plan, Fragebogen oder Neustart des übrigen Zustands Einträge löschen kann.
+ */
 interface PersistedState {
   deviceId: string;
-  diary: DiaryEntry[];
   /** Lagerbestand in der Küche, je Einkauf ein Posten. */
   pantry: StockItem[];
   plan: MonthPlan | null;
@@ -101,7 +107,6 @@ function defaultSettings(): Settings {
 function initialState(): PersistedState {
   return {
     deviceId: `${newId()}${newId()}`,
-    diary: [],
     pantry: [],
     plan: null,
     planRecipes: [],
@@ -124,44 +129,91 @@ function initialState(): PersistedState {
   };
 }
 
-/** Lädt den gespeicherten Zustand; aus Version 1 werden Tagebuch und Vorrat übernommen. */
-async function loadState(): Promise<PersistedState> {
+/** Unlesbaren Inhalt beiseitelegen, bevor er überschrieben wird. */
+const keepCorrupt = (key: string, raw: string) => AsyncStorage.setItem(`${key}/kaputt-${Date.now()}`, raw).catch(() => {});
+
+/**
+ * Lädt den gespeicherten Zustand; aus Version 1 wird der Vorrat übernommen. `legacyDiary`: Tagebuch vom alten
+ * Speicherort (bis November 2026 lag es hier mit drin) – lib/diary.ts übernimmt es in den eigenen Speicher.
+ */
+async function loadState(): Promise<{ state: PersistedState; legacyDiary: unknown }> {
   const base = initialState();
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   if (raw) {
+    let parsed: (Partial<PersistedState> & { catalog?: unknown; diary?: unknown }) | null = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      await keepCorrupt(STORAGE_KEY, raw);
+    }
+    if (!parsed) return { state: base, legacyDiary: undefined };
     // Ältere Versionen speicherten auch den Katalog; der kommt jetzt immer aus der App.
-    const { catalog: _oldCatalog, ...saved } = JSON.parse(raw) as Partial<PersistedState> & { catalog?: unknown };
-    // Pläne aus Versionen vor dem Monatsplan werden verworfen.
+    const { catalog: _oldCatalog, diary: legacyDiary, ...saved } = parsed;
+    // Pläne aus Versionen vor dem Monatsplan werden verworfen (das Tagebuch bleibt).
     const plan = saved.plan && "weeks" in saved.plan ? saved.plan : null;
     return {
-      ...base,
-      ...saved,
-      plan,
-      eatenMeals: plan ? (saved.eatenMeals ?? []).filter((e): e is string => typeof e === "string") : [],
-      shoppingChecked: plan ? (saved.shoppingChecked ?? []).filter((e): e is string => typeof e === "string") : [],
-      shoppingBooked: plan ? (saved.shoppingBooked ?? []).filter((e): e is string => typeof e === "string") : [],
-      pantry: migrateStock(saved.pantry ?? []),
-      settings: { ...base.settings, ...saved.settings },
+      state: {
+        ...base,
+        ...saved,
+        plan,
+        eatenMeals: plan ? (saved.eatenMeals ?? []).filter((e): e is string => typeof e === "string") : [],
+        shoppingChecked: plan ? (saved.shoppingChecked ?? []).filter((e): e is string => typeof e === "string") : [],
+        shoppingBooked: plan ? (saved.shoppingBooked ?? []).filter((e): e is string => typeof e === "string") : [],
+        pantry: migrateStock(saved.pantry ?? []),
+        settings: { ...base.settings, ...saved.settings },
+      },
+      legacyDiary,
     };
   }
   const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
-  if (!legacy) return base;
-  const old = JSON.parse(legacy) as { diary?: DiaryEntry[]; pantry?: PantryItem[]; settings?: Partial<Settings> };
+  if (!legacy) return { state: base, legacyDiary: undefined };
+  let old: { diary?: unknown; pantry?: PantryItem[]; settings?: Partial<Settings> };
+  try {
+    old = JSON.parse(legacy);
+  } catch {
+    return { state: base, legacyDiary: undefined };
+  }
   return {
-    ...base,
-    diary: old.diary ?? [],
-    pantry: migrateStock(old.pantry ?? []),
-    settings: {
-      ...base.settings,
-      kcalPerPersonPerDay: old.settings?.kcalPerPersonPerDay ?? base.settings.kcalPerPersonPerDay,
-      people: old.settings?.people ?? base.settings.people,
-      days: old.settings?.days ?? base.settings.days,
+    state: {
+      ...base,
+      pantry: migrateStock(old.pantry ?? []),
+      settings: {
+        ...base.settings,
+        kcalPerPersonPerDay: old.settings?.kcalPerPersonPerDay ?? base.settings.kcalPerPersonPerDay,
+        people: old.settings?.people ?? base.settings.people,
+        days: old.settings?.days ?? base.settings.days,
+      },
     },
+    legacyDiary: old.diary,
   };
+}
+
+/** Hinweis, wenn etwas nicht gespeichert werden konnte (Tagebuch: unlesbar bzw. Speichern gescheitert). */
+export interface StorageIssues {
+  diary: "unreadable" | "failed" | null;
+  state: boolean;
+}
+
+/** Sicherung des Tagebuchs auf dem Server: aus (kein Server), gleich, läuft, erledigt oder Server nicht erreichbar. */
+export interface DiarySyncStatus {
+  state: "off" | "waiting" | "syncing" | "synced" | "offline";
+  pending: number;
+  /** Letzter erfolgreicher Abgleich (ISO). */
+  at: string | null;
 }
 
 interface Store extends PersistedState {
   ready: boolean;
+  /** Alle Tagebucheinträge, nach Tag und Uhrzeit sortiert. */
+  diary: DiaryEntry[];
+  /** Tagebuch samt Löschmarken (für den Export). */
+  diaryState: DiaryState;
+  /** Übernimmt eine Sicherung (JSON) ins Tagebuch, ohne Doppeltes. */
+  importDiary: (text: string) => Omit<Extract<ImportResult, { ok: true }>, "state"> | Extract<ImportResult, { ok: false }>;
+  diarySync: DiarySyncStatus;
+  /** Jetzt mit dem Server abgleichen (z. B. beim Öffnen des Profils). */
+  refreshDiary: () => void;
+  storageIssues: StorageIssues;
   catalog: typeof baseCatalog;
   /** Anmelden (Konto und Token speichern) bzw. mit null abmelden. */
   setAuth: (auth: { token: string; user: Account } | null) => void;
@@ -216,24 +268,133 @@ const StoreContext = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
+  const [diary, setDiary] = useState<DiaryState>(emptyDiary);
   const [ready, setReady] = useState(false);
   const [pendingPlan, setPendingPlan] = useState(false);
   const [topPhotos, setTopPhotos] = useState<Record<string, RecipePhoto>>({});
+  const [storageIssues, setStorageIssues] = useState<StorageIssues>({ diary: null, state: false });
+  const [syncState, setSyncState] = useState<"idle" | "syncing" | "offline">("idle");
+  const [syncRequest, setSyncRequest] = useState(0);
+  // Speichern: was darf geschrieben werden (nach einem Lesefehler nichts, damit nichts überschrieben wird), was steht
+  // schon im Speicher, und das Tagebuch vom alten Speicherort, bis es unter dem eigenen Schlüssel gespeichert ist.
+  const persist = useRef({
+    main: true,
+    diary: true,
+    legacyDiary: undefined as unknown,
+    written: new Map<string, string>(),
+    queue: Promise.resolve(),
+  });
+  const sync = useRef({ running: false, pulled: false, latest: emptyDiary() });
+  // Gerade abgehakte Mahlzeiten (Plan-Start und Mahlzeit), damit ein schneller Doppeltipp nicht zweimal einträgt.
+  const marked = useRef(new Set<string>());
 
   useEffect(() => {
-    loadState()
-      .catch(() => initialState())
-      .then((loaded) => {
-        setDeviceId(loaded.deviceId);
-        setAuthToken(loaded.auth?.token ?? null);
-        setState(loaded);
-      })
-      .finally(() => setReady(true));
+    (async () => {
+      let loaded: Awaited<ReturnType<typeof loadState>>;
+      try {
+        loaded = await loadState();
+      } catch {
+        // Speicher nicht lesbar: in dieser Sitzung nichts speichern, sonst wäre der alte Zustand weg.
+        persist.current.main = false;
+        loaded = { state: initialState(), legacyDiary: undefined };
+        setStorageIssues((i) => ({ ...i, state: true }));
+      }
+      try {
+        const loadedDiary = await loadDiary(AsyncStorage, loaded.legacyDiary);
+        persist.current.written = loadedDiary.written;
+        if (loadedDiary.migrated) {
+          // Erst unter dem eigenen Schlüssel speichern; bis das klappt, bleibt das Tagebuch auch am alten Ort.
+          persist.current.legacyDiary = loaded.legacyDiary;
+          await saveDiary(AsyncStorage, loadedDiary.state, loadedDiary.written).then(
+            () => (persist.current.legacyDiary = undefined),
+            () => setStorageIssues((i) => ({ ...i, diary: "failed" })),
+          );
+        }
+        setDiary(loadedDiary.state);
+      } catch {
+        persist.current.diary = false;
+        persist.current.legacyDiary = loaded.legacyDiary;
+        setStorageIssues((i) => ({ ...i, diary: "unreadable" }));
+      }
+      setDeviceId(loaded.state.deviceId);
+      setAuthToken(loaded.state.auth?.token ?? null);
+      setState(loaded.state);
+      setReady(true);
+    })();
   }, []);
 
   useEffect(() => {
-    if (ready) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
+    if (!ready || !persist.current.main) return;
+    const legacyDiary = persist.current.legacyDiary;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(legacyDiary === undefined ? state : { ...state, diary: legacyDiary })).then(
+      () => setStorageIssues((i) => (i.state ? { ...i, state: false } : i)),
+      () => setStorageIssues((i) => (i.state ? i : { ...i, state: true })),
+    );
   }, [state, ready]);
+
+  useEffect(() => {
+    sync.current.latest = diary;
+    if (!ready || !persist.current.diary) return;
+    const p = persist.current;
+    // Nacheinander speichern, damit ein älterer Stand nie einen neueren überschreibt.
+    p.queue = p.queue
+      .then(() => saveDiary(AsyncStorage, diary, p.written))
+      .then(
+        () => {
+          p.legacyDiary = undefined;
+          setStorageIssues((i) => (i.diary === "failed" ? { ...i, diary: null } : i));
+        },
+        () => setStorageIssues((i) => (i.diary ? i : { ...i, diary: "failed" })),
+      );
+  }, [diary, ready]);
+
+  /** Beim nächsten Durchlauf auch ohne eigene Änderungen beim Server nachfragen (z. B. beim Öffnen des Profils). */
+  const refreshDiary = useCallback(() => {
+    sync.current.pulled = false;
+    setSyncRequest((n) => n + 1);
+  }, []);
+
+  // Sicherung auf dem Server: beim Start einmal abgleichen, danach kurz nach jeder Änderung und nach dem An- oder
+  // Abmelden (dann geht alles hoch und alles kommt zurück). Ohne Verbindung in einer Minute noch einmal.
+  const owner = state.auth ? `user:${state.auth.user.id}` : `device:${state.deviceId}`;
+  const pendingCount = diary.pending.length;
+  const syncedOwner = diary.sync?.owner;
+  useEffect(() => {
+    if (!ready || !HAS_SERVER) return;
+    const s = sync.current;
+    if (s.running || (s.pulled && pendingCount === 0 && syncedOwner === owner)) return;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(
+      async () => {
+        s.running = true;
+        setSyncState("syncing");
+        try {
+          const apply = await syncDiary(s.latest, owner, api.diarySync);
+          s.pulled = true;
+          setDiary((current) => apply(current));
+          setSyncState("idle");
+          // Während des Abgleichs Geändertes gleich hinterherschicken.
+          setSyncRequest((n) => n + 1);
+        } catch (e) {
+          if (e instanceof ApiError && e.code.startsWith("auth_")) {
+            // Sitzung abgelaufen: abmelden, dann geht die Historie wieder unter der Geräte-ID in die Sicherung.
+            setAuthToken(null);
+            setState((st) => ({ ...st, auth: null }));
+          } else {
+            retry = setTimeout(() => setSyncRequest((n) => n + 1), 60_000);
+          }
+          setSyncState("offline");
+        } finally {
+          s.running = false;
+        }
+      },
+      pendingCount > 0 ? 1500 : 0,
+    );
+    return () => {
+      clearTimeout(timer);
+      if (retry) clearTimeout(retry);
+    };
+  }, [ready, owner, pendingCount, syncedOwner, syncRequest]);
 
   // Bewertungen, Galerie-Fotos, Admin-Änderungen und Konto einmal beim Start laden;
   // ohne Server gilt der gespeicherte Stand.
@@ -281,9 +442,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ingredients,
       recipes,
       userRecipes,
-      addDiaryEntry: (entry) =>
-        setState((s) => ({ ...s, diary: [...s.diary, { ...entry, id: newId(), date: today(), time: nowTime() }] })),
-      removeDiaryEntry: (id) => setState((s) => ({ ...s, diary: s.diary.filter((e) => e.id !== id) })),
+      diary: diary.entries,
+      diaryState: diary,
+      addDiaryEntry: (entry) => {
+        const added = { ...entry, id: newId(), date: today(), time: nowTime() };
+        setDiary((d) => addEntry(d, added));
+      },
+      removeDiaryEntry: (id) => setDiary((d) => removeEntry(d, id)),
+      importDiary: (text) => {
+        const result = importDiaryJson(diary, text);
+        if (!result.ok) return result;
+        setDiary((d) => {
+          const again = importDiaryJson(d, text);
+          return again.ok ? again.state : d;
+        });
+        const { state: _state, ...counts } = result;
+        return counts;
+      },
+      diarySync: {
+        state: !HAS_SERVER
+          ? "off"
+          : syncState === "syncing"
+            ? "syncing"
+            : syncState === "offline"
+              ? "offline"
+              : diary.pending.length > 0 || diary.sync?.owner !== owner
+                ? "waiting"
+                : "synced",
+        pending: diary.pending.length,
+        at: diary.sync?.at ?? null,
+      },
+      refreshDiary,
+      storageIssues,
       addPantryItems: (items) => setState((s) => ({ ...s, pantry: addToPantry(s.pantry, items) })),
       setPantryAmount: (ingredientId, amount) =>
         setState((s) => ({ ...s, pantry: setPantryAmount(s.pantry, ingredientId, Math.max(0, amount)) })),
@@ -305,18 +495,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             shoppingBooked: samePlan ? s.shoppingBooked : [],
           };
         }),
-      markMealEaten: (meal, title) =>
-        setState((s) => {
-          const key = mealKey(meal);
-          const recipe = recipes.get(meal.recipeId);
-          if (!recipe || s.eatenMeals.includes(key)) return s;
-          return {
-            ...s,
-            eatenMeals: [...s.eatenMeals, key],
-            pantry: consumeMeal(s.pantry, meal, recipe),
-            diary: [...s.diary, { id: newId(), date: today(), time: nowTime(), title, nutrients: meal.nutrientsPerPortion, source: "plan" }],
-          };
-        }),
+      markMealEaten: (meal, title) => {
+        const key = mealKey(meal);
+        const once = `${state.plan?.startDate}:${key}`;
+        const recipe = recipes.get(meal.recipeId);
+        if (!recipe || state.eatenMeals.includes(key) || marked.current.has(once)) return;
+        marked.current.add(once);
+        setState((s) =>
+          s.eatenMeals.includes(key) ? s : { ...s, eatenMeals: [...s.eatenMeals, key], pantry: consumeMeal(s.pantry, meal, recipe) },
+        );
+        const entry: DiaryEntry = { id: newId(), date: today(), time: nowTime(), title, nutrients: meal.nutrientsPerPortion, source: "plan" };
+        setDiary((d) => addEntry(d, entry));
+      },
       toggleShoppingItem: (key) =>
         setState((s) => ({
           ...s,
@@ -439,7 +629,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ratingAverages: () =>
         Object.fromEntries(Object.entries(state.ratings).filter(([, r]) => r.count > 0).map(([id, r]) => [id, r.avg])),
     };
-  }, [state, ready, pendingPlan, topPhotos]);
+  }, [state, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, owner, refreshDiary]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 import { InstallHint } from "../../components/InstallHint";
 import { RecipeThumb } from "../../components/RecipeThumb";
+import { StorageWarning } from "../../components/StorageWarning";
 import { Card, Chip, HeroCard, Muted, ProgressBar, Screen, styles } from "../../components/ui";
 import { daysBetween } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
@@ -20,6 +21,7 @@ export default function TodayScreen() {
 
   return (
     <Screen>
+      <StorageWarning />
       <HeroCard>
         <Text style={styles.heroMuted}>🔥 {t("today.caloriesToday")}</Text>
         <Text style={styles.heroHeading}>
