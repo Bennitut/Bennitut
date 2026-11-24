@@ -11,15 +11,15 @@ bei Web-relevanten Änderungen zusätzlich `cd app && npm run web:export && npm 
 `node --test reports/make-report.test.cjs` – prüft, dass der Tagesbericht alles Erledigte findet. Erledigtes
 heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen und Erkenntnisse“ enden mit „(TT.MM.JJJJ)“
 (Einzelheiten im Kopf von `reports/make-report.cjs`).
-Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die generierten
-`package-lock.json` nicht mit.
+Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
+offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 24.11.2026:** PR #2 hat die Grenze von etwa 1.500 geänderten Zeilen überschritten. Bis Benjamin ihn mergt, nur
-Fixes und Tests: Punkt 6 (Tests für die App-Logik), das doppelte Emoji, Neuplanen/Fixieren, der Tagesbericht, die
-Rezepttexte je Sprache (Tests), die Fotos mit Fleisch oder Fisch bei vegetarischen Rezepten, die Prüfung der Promo-Clips
-und „Entdecken“ (zuerst 30 Rezepte statt aller Fotos) sind erledigt. Als Nächstes: am 25.11. der Tagesbericht für den
-24.11., dann der fehlende Platzhalter für Rezepte ohne Foto im Plan und im Tausch-Dialog (siehe „Ideen und
-Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem Mergen im neuen PR.
+**Stand 24.11.2026:** Benjamin hat am 24.11.2026 im Chat entschieden: (1) Die PR-Grenze von etwa 1.500 Zeilen ist
+aufgehoben, neue Funktionen sind wieder erlaubt und kommen in den offenen PR #2. (2) Rezeptfotos zuerst – erledigt: die
+vier unklaren Fotos ersetzt bzw. entfernt, Schlagwörter und Beschreibungen aller Fotos sowie die Videotitel vegetarischer
+und veganer Rezepte geprüft, danach der Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog.
+(3) Vorrat: Variante (b), ein Knopf „Abgehaktes in den Vorrat“ – steht als Vorrang unten und ist als Nächstes dran.
+Danach: Promo-Clips 1 und 3 neu aufnehmen, am 25.11. der Tagesbericht für den 24.11., dann Punkt 5, Teil 2.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -28,6 +28,14 @@ Jeden Tag einmal, direkt nach dem Setup und vor der obersten offenen Aufgabe: Fe
 committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly`, dann
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
 „Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
+
+## Vorrang: Abgehaktes in den Vorrat (Benjamins Entscheidung vom 24.11.2026, Variante b)
+
+Direkt nach den Rezeptfotos umsetzen. Unter der Einkaufsliste ein Knopf „Abgehaktes in den Vorrat“: bucht alle
+abgehakten Zeilen der Woche als Packungen × Packungsgröße in den Vorrat (mit Einkaufsdatum, damit die Haltbarkeit
+stimmt). Nichts doppelt buchen: Was schon gebucht ist, merken; ein zweiter Tipp bucht nur neu Abgehaktes, und wird
+später doch eine Bestellung für diese Woche geliefert, kommen die schon gebuchten Zeilen nicht noch einmal in den Vorrat.
+Logik ohne native Module in `app/src/lib` mit Tests in `app/test/`, Texte in allen fünf Sprachen, im Browser prüfen.
 
 ## ✅ Vorrang: GitHub Pages vorbereiten (Benjamin richtet Pages ein, 23.11.2026) – erledigt 24.11.2026
 
@@ -98,10 +106,9 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   vorbereitet. (23.11.2026)
 - **Abgehakte Einkäufe landen nicht im Vorrat:** Nur gelieferte Bestellungen und Kassenbons (beides braucht den
   Server) buchen in den Vorrat. In der Web-Version bleibt der Vorrat deshalb leer, solange man nicht alles von Hand
-  einträgt, und „Gegessen“ zieht nichts ab – der Kreislauf Einkauf → Vorrat → Kochen bricht ab. Vorschlag: Beim
-  Abhaken einer Zeile (oder mit „Alles eingekauft“) Packungen × Packungsgröße in den Vorrat buchen. Der Test
-  „Einkaufen und Kochen“ zeigt, dass die Mengen dann aufgehen. Neue Funktion – Benjamin entscheidet; die Frage steht
-  in PR #2 unter „Brauche deine Entscheidung“ (vor dem Umsetzen seine Antwort dort nachlesen). (24.11.2026)
+  einträgt, und „Gegessen“ zieht nichts ab – der Kreislauf Einkauf → Vorrat → Kochen bricht ab. Der Test „Einkaufen
+  und Kochen“ zeigt, dass die Mengen aufgehen, wenn man Packungen × Packungsgröße bucht. Benjamin hat am 24.11.2026
+  Variante (b) gewählt (Knopf unter der Einkaufsliste) – steht jetzt als Vorrang oben. (24.11.2026)
 - ✅ **Neuplanen und Fixieren testbar machen:** erledigt 24.11.2026 – `prepareReplan()` in `lib/replan.ts`
   (Startdatum, behaltene Wochen, fixierte Gerichte), 7 Tests plus einer mit dem echten Planer. Dabei zwei Fehler
   behoben: Tauschen in der ersten Woche an einem späteren Tag ließ den Plan heute beginnen (Rezept landete Tage zu
@@ -117,10 +124,18 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   und veganer Rezepte an der Quelle geprüft; neun nennen Fleisch oder Fisch und sind entfernt (Burrito-Bowl, Gebratener
   Reis mit Ei, Ofenkartoffeln, Kürbisrisotto, Quesadillas, Reis-Congee, Rotes Kürbis-Curry, Calzone, Palak mit
   Halloumi). Jetzt haben 184 von 236 Rezepten ein Foto; der Server-Test verlangt mindestens 180. (24.11.2026)
-- **Fotos, die vielleicht nicht passen:** Bei der Linsen-Bolognese (Quelle: „Julia's Bolognese Sauce“, sieht nach
-  Fleisch-Ragù aus), den vegetarischen Enchiladas („tacos and enchiladas“), Mapo Tofu und Nasi Goreng mit Tempeh nennt
-  der Titel kein Fleisch, die Gerichte enthalten es aber oft – Benjamin sieht sie sich am besten selbst an. Ersetzen
-  nur durch andere frei lizenzierte Fotos (Openverse), sonst Platzhalter. (24.11.2026)
+- ✅ **Fotos, die vielleicht nicht passen:** Bei der Linsen-Bolognese, den vegetarischen Enchiladas, Mapo Tofu und Nasi
+  Goreng mit Tempeh nannte der Titel kein Fleisch, die Gerichte enthalten es aber oft. Erledigt 24.11.2026: Benjamin hat
+  sie angesehen und entfernen lassen. Ersetzt nur, wo die Quelle ausdrücklich die vegetarische Variante nennt und weder
+  Fleisch noch Fisch (alle Wikimedia Commons): Mapo Tofu („Vegan mapo tofu“), Enchiladas („Corn and bean enchiladas“),
+  Linsen-Bolognese („Nudeln mit Tomatensauce, roten Linsen“, Kategorie „Vegan food“). Nasi Goreng bleibt beim
+  Platzhalter (einziger Fund „Vegetarian Nasi Goreng“ mit Spiegelei, das Rezept ist vegan). Zusätzlich Schlagwörter und
+  Beschreibungen aller 98 Fotos vegetarischer und veganer Rezepte geprüft: entfernt Kartoffel-Lauch-Suppe („bacon“),
+  Kartoffel-Spinat-Frittata („ham“), Erbsensuppe (mit Schinkenknochen gekocht) und Kürbis-Kokos-Suppe (mit Fischsauce);
+  Pancakes und Tofu-Gemüse-Pfanne gibt es bei Flickr nicht mehr. Acht Videos ersetzt (Titel nannten u. a. Huhn,
+  Garnelen, Hackfleisch; dazu Erbsensuppe „nach Bundeswehr Art“ und „authentisches“ Mapo Tofu), ein Server-Test prüft
+  die Titel. Jetzt 177 Fotos (Test: mindestens 175). Pescetarische Rezepte auf Fleisch gegengeprüft: unauffällig.
+  (24.11.2026)
 - ✅ **Promo-Clips und das entfernte Kürbisrisotto-Foto:** erledigt 24.11.2026 – Bild für Bild geprüft: Das Foto ist in
   keinem Clip zu sehen, neu aufnehmen war nicht nötig. Vom Plan zeigen die Clips nur Montag und das Frühstück am Dienstag
   (Rösti, Krautfleckerl, Mujaddara, Çılbır), dazu das Rösti-Rezept, „Heute“ und die Einkaufsliste (ohne Rezeptfotos).
@@ -133,10 +148,23 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   prüft beide Listen (vorher lud „Entdecken“ 176 Fotos auf einmal, jetzt 20). Eine virtualisierte Liste (FlatList) hätte
   geheißen, den ganzen Bildschirm umzubauen. Langfristig helfen selbst ausgelieferte Fotos (siehe Datenschutz).
   (24.11.2026)
-- **Kein Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog:** Dort steht dann gar kein
-  Bild, der Name rückt nach links und die Zeilen stehen versetzt (z. B. Mujaddara). „Entdecken“ zeigt in dem Fall 🍽️ auf
-  grauem Grund (`components/RecipeRow.tsx`). Kleiner Fix: denselben Platzhalter verwenden, danach die Promo-Clips 1 und 3
-  neu aufnehmen (dort ist Mujaddara zu sehen). (24.11.2026)
+- ✅ **Kein Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog:** Dort stand gar kein Bild,
+  der Name rückte nach links und die Zeilen standen versetzt (z. B. Mujaddara). Erledigt 24.11.2026: neue Komponente
+  `components/RecipeThumb.tsx` (🍽️ auf grauem Grund, 64 × 36) an allen vier Stellen, auch in „Entdecken“; im Browser mit
+  einem vegetarischen Plan geprüft. Die Promo-Clips neu aufzunehmen steht als eigener Punkt unten. (24.11.2026)
+- **Promo-Clips 1 und 3 neu aufnehmen:** Dort steht Mujaddara noch ohne Platzhalter (Zeile versetzt). Mit
+  `node make-clips.cjs` (etwa drei Minuten), danach Bild für Bild prüfen; `bildnachweise.md` schreibt das Skript neu.
+  Nur ein Schönheitsfehler – die Clips können bis dahin so gepostet werden. (24.11.2026)
+- **Fotos verschwinden an der Quelle:** Zwei Flickr-Fotos gab es am 24.11.2026 nicht mehr (Pancakes, Tofu-Gemüse-Pfanne,
+  jetzt Platzhalter). Dann zeigt die App ein leeres Bild, und der Link unter dem Foto führt ins Leere. Ab und zu prüfen
+  (z. B. monatlich) oder die Fotos langfristig selbst ausliefern (siehe Datenschutz). Die Fotos der übrigen Rezepte
+  gibt es noch (vier Wikimedia-Abfragen wurden gedrosselt). (24.11.2026)
+- **Fotos und Videos aus der Cloud prüfen:** Openverse lieferte am 24.11.2026 keine Treffer (selbst für „tofu“),
+  Wikimedia drosselt schnelle Abfragen (HTTP 429, ein paar Sekunden Pause hilft), Flickr-Bilder selbst sind gesperrt,
+  Flickr-Seiten mit Titel, Beschreibung und Schlagwörtern aber lesbar. YouTube-Titel kommen über oEmbed; fünf Videos
+  antworten dort mit 401 (Einbetten abgeschaltet, Vorschaubild vorhanden – der Link funktioniert). (24.11.2026)
+- **Video bei der Calzone zeigt Cannelloni:** `vg_calzone_spinat` verlinkt „Schnelles Cannelloni mit
+  Spinat-Ricotta-Füllung“ – vegetarisch, aber ein anderes Gericht. Bei Gelegenheit ein Calzone-Video suchen. (24.11.2026)
 - **Suche im Tausch-Dialog:** Ohne Einschränkungen passen fast 190 Rezepte; trotz „Mehr anzeigen“ ist das viel Blättern.
   Ein Suchfeld wie in „Entdecken“ wäre eine neue Funktion – erst nach dem Mergen. (24.11.2026)
 - **Tauschen in der laufenden Woche plant die schon vergangenen Tage dieser Woche mit:** Dort kann danach ein
