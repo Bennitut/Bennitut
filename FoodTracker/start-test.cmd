@@ -9,8 +9,9 @@ title FoodTracker - Expo
 
 rem Aktualisieren. git pull kann diese Datei selbst aendern, und cmd liest Batch-Dateien beim Ausfuehren Zeile fuer
 rem Zeile von der Platte. Deshalb steht alles in einem Klammerblock, den cmd vorab komplett einliest; danach startet
-rem die (vielleicht neue) Datei frisch mit --ohne-pull. Scheitert git pull, weil npm install package-lock.json
-rem angepasst hat, wird nur diese Aenderung verworfen (npm erzeugt die Datei selbst) und es noch einmal versucht.
+rem die (vielleicht neue) Datei frisch mit --ohne-pull. Scheitert git pull an lokalen Aenderungen (meist von npm oder
+rem Expo an package.json, package-lock.json, tsconfig.json), werden sie mit git stash beiseitegelegt (zurueckholen mit
+rem git stash pop) und es wird noch einmal versucht.
 rem Im Block keine Kommentare und in Texten runde Klammern nur mit ^ davor.
 if /i not "%~1"=="--ohne-pull" (
   set "FT_GIT="
@@ -22,10 +23,13 @@ if /i not "%~1"=="--ohne-pull" (
     echo Hole den neuesten Stand ^(git pull^) ...
     git pull --ff-only && set "FT_PULL_OK=1"
     if not defined FT_PULL_OK (
-      git diff --quiet -- app/package-lock.json server/package-lock.json
-      if errorlevel 1 (
-        echo npm hatte package-lock.json angepasst - verwerfe das und versuche es noch einmal ...
-        git checkout -- app/package-lock.json server/package-lock.json
+      set "FT_LOCAL="
+      git diff --quiet || set "FT_LOCAL=1"
+      git diff --cached --quiet || set "FT_LOCAL=1"
+      if defined FT_LOCAL (
+        echo Lokale Aenderungen ^(meist von npm oder Expo^) lege ich beiseite und versuche es noch einmal ...
+        echo Zurueckholen mit: git stash pop
+        git stash push -m "start-test.cmd: vor dem Aktualisieren beiseitegelegt"
         git pull --ff-only && set "FT_PULL_OK=1"
       )
     )
