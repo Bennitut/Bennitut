@@ -1,6 +1,7 @@
 import { Link, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { RecipeThumb } from "../../components/RecipeThumb";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, ShowMore, colors, styles } from "../../components/ui";
 import { ApiError, api } from "../../lib/api";
 import { MONTH_WEEKS, PlanError, matchesPreferences, planMonth, weekOfDay } from "../../lib/catalog";
@@ -155,7 +156,7 @@ export default function PlanScreen() {
     return (
       <View key={mealKey(meal)} style={{ gap: 4, paddingVertical: 6, borderTopWidth: 1, borderColor: colors.border }}>
         <Pressable onPress={() => router.push(`/recipe/${encodeURIComponent(meal.recipeId)}`)} style={[styles.row, { justifyContent: "flex-start" }]}>
-          {image ? <Image source={{ uri: image }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+          <RecipeThumb uri={image} />
           <View style={{ flex: 1, gap: 2 }}>
             <Muted>
               {i18n.mealType(meal.mealType)}
@@ -295,7 +296,7 @@ export default function PlanScreen() {
                 if (!recipe) return null;
                 return (
                   <Pressable key={id} onPress={() => chooseAlternative(id)} style={[styles.card, styles.row, { justifyContent: "flex-start" }]} accessibilityRole="button">
-                    {store.imageFor(recipe) ? <Image source={{ uri: store.imageFor(recipe)!.uri }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+                    <RecipeThumb uri={store.imageFor(recipe)?.uri} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.text}>
                         {favoriteIds.includes(id) ? "♥ " : ""}

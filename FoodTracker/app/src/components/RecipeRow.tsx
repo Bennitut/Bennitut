@@ -1,9 +1,10 @@
 import { router } from "expo-router";
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { useStore } from "../lib/store";
 import type { Recipe } from "../lib/types";
-import { Muted, colors, styles } from "./ui";
+import { RecipeThumb } from "./RecipeThumb";
+import { Muted, styles } from "./ui";
 
 export function RecipeRow({ recipe, favorite, subtitle }: { recipe: Recipe; favorite: boolean; subtitle?: string }) {
   const i18n = useI18n();
@@ -17,13 +18,7 @@ export function RecipeRow({ recipe, favorite, subtitle }: { recipe: Recipe; favo
       onPress={() => router.push(`/recipe/${encodeURIComponent(recipe.id)}`)}
       style={[styles.row, { paddingVertical: 8 }]}
     >
-      {image ? (
-        <Image source={{ uri: image.uri }} style={{ width: 64, height: 36, borderRadius: 8 }} />
-      ) : (
-        <View style={{ width: 64, height: 36, borderRadius: 8, backgroundColor: colors.border, alignItems: "center", justifyContent: "center" }}>
-          <Text>🍽️</Text>
-        </View>
-      )}
+      <RecipeThumb uri={image?.uri} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.text}>{i18n.recipe(recipe).name}</Text>
         <Muted>
