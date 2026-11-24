@@ -22,10 +22,11 @@ Variante (b), Knopf „Abgehaktes in den Vorrat“. Ebenfalls erledigt: Punkt 5 
 unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten und sind erledigt: 8.1 (Server
 zum Testen auf dem Laptop mit Ollama und `start-test.cmd`), 8.2 (Ernährungshistorie dauerhaft speichern) und 8.3
 (Videos in der gewählten Sprache; das Suchen weiterer Videos läuft als Daueraufgabe, pro Lauf etwa 40 Rezepte nach der
-obersten Aufgabe). Reihenfolge ab jetzt: Vorrang „Impressum & Datenschutz in App und Web-Version“ → Punkte 8–10. Der
-Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht vorher den für den 24.11. Offen im PR: ob
-„Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll – ohne Antwort nach dem Vorrang „Impressum“
-weiter mit Punkt 8.
+obersten Aufgabe). Der Vorrang „Impressum & Datenschutz in App und Web-Version“ ist ebenfalls erledigt (24.11.2026,
+abends) – Benjamin trägt seine Angaben in `app/src/legal/angaben.ts` ein, vorher baut der Pages-Workflow nicht.
+Reihenfolge ab jetzt: Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
+vorher den für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll –
+ohne Antwort weiter mit Punkt 8.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -148,7 +149,13 @@ Heute hat jedes Katalogrezept ein YouTube-Video (`server/src/data/recipeVideos.t
    Videos“, Originalbeiträge importierter Rezepte und selbst eingetragene Links bleiben. Logik in `app/src/lib` mit Tests.
 3. Danach Daueraufgabe in Etappen – steht jetzt als eigener Abschnitt „Daueraufgabe: Videos je Sprache“ oben.
 
-## Vorrang: Impressum & Datenschutz in App und Web-Version (Nachtschicht, 24.11.2026)
+## ✅ Vorrang: Impressum & Datenschutz in App und Web-Version (Nachtschicht, 24.11.2026) – erledigt 24.11.2026
+
+24.11.2026: Bildschirm „Impressum & Datenschutz“ (`/legal`) mit Impressum Variante A und Datenschutzerklärung Teil A
+(Teil B und Mindestalter nur mit Server); in der App unter 👤 Profil, in der Web-Version zusätzlich „Impressum“ oben
+rechts auf jeder Seite. Angaben nur in `app/src/legal/angaben.ts`, Texte in `app/src/legal/texte.ts`; solange etwas
+fehlt, „📝 Entwurf“ mit Liste, und `npm run web:pages` bricht ab (zum Ausprobieren `-- --entwurf`). Platzhalter-Logik in
+`lib/legal.ts` mit 13 Tests (156), Web-Rauchtest öffnet die Seite (auch auf Englisch), fünf Sprachen.
 
 Nach den Vorrang-Abschnitten 8.1–8.3 und vor Punkt 8 erledigen. Grund: Nach dem Mergen geht die Web-Version auf GitHub Pages online, und laut USP braucht
 „jegliche Website“ die Offenlegung nach § 25 Mediengesetz (Strafe bis 20.000 Euro). Die Entwürfe liegen in
@@ -321,6 +328,15 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Admin-Bereich, der ohne Server aber nicht erreichbar ist). Vorschlag: eine kleine Funktion `confirm()` in `lib/`, die
   im Browser `window.confirm` nimmt und in der App `Alert.alert`; im Web-Rauchtest ein eigenes Rezept anlegen und
   löschen. Klein und für Tester spürbar – im PR gefragt, ob es vor Punkt 7 drankommen soll. (24.11.2026)
+- **Rechtstexte an zwei Stellen:** Die Entwürfe mit Erklärungen stehen in `docs/recht/`, die angezeigte Fassung in
+  `app/src/legal/texte.ts`. Wer eines ändert, muss das andere nachziehen. Idee, falls das oft vorkommt: die App-Fassung
+  beim Bauen aus den Markdown-Dateien erzeugen (Hinweise für Benjamin dort als Kommentare). (24.11.2026)
+- **Datenschutzerklärung, „1. Verantwortlich“:** Dort steht wie im Impressum (Variante A) nur der Wohnort. Art. 13 DSGVO
+  verlangt Name und „Kontaktdaten“ – die E-Mail-Adresse ist eine; ob der Ort daneben genügt, ist offen (`[[PRÜFEN]]` in
+  `docs/recht/README.md`, im PR gefragt). (24.11.2026)
+- **Pages-Workflow nach dem Mergen rot, bis das Impressum ausgefüllt ist:** gewollt – `npm run web:pages` bricht ab und
+  listet die fehlenden Angaben im Protokoll; GitHub schickt dann eine Mail „workflow failed“. Nach dem Eintragen läuft
+  er beim nächsten Push von selbst (oder „Re-run jobs“). (24.11.2026)
 - **Anzeigename im Profil ohne Server ohne Wirkung:** Unter „Über dich“ steht „Wird angezeigt, wenn du Rezepte in der
   Community teilst.“ – der Name wird nur fürs Teilen und für öffentliche Fotos genutzt, beides gibt es ohne Server
   nicht. Ohne Server ausblenden oder den Hinweis anpassen. (24.11.2026)
