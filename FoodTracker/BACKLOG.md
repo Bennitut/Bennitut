@@ -19,8 +19,9 @@ aufgehoben, neue Funktionen sind wieder erlaubt und kommen in den offenen PR #2.
 vier unklaren Fotos ersetzt bzw. entfernt, Schlagwörter und Beschreibungen aller Fotos sowie die Videotitel vegetarischer
 und veganer Rezepte geprüft, danach der Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog.
 (3) Vorrat: Variante (b), ein Knopf „Abgehaktes in den Vorrat“ unter der Einkaufsliste – erledigt (Vorrang unten).
-Als Nächstes: Promo-Clips 1 und 3 neu aufnehmen, am 25.11. der Tagesbericht für den 24.11., dann Punkt 5, Teil 2
-(„Bald verfügbar“ u. a. für Bestellungen – die Web-Version zeigt unter „Liefern lassen“ noch „Keine Verbindung“).
+Promo-Clips neu aufgenommen (Clip 2 zeigt jetzt auch den Vorrat), Punkt 5, Teil 2 begonnen (Bestellungen, Community).
+Als Nächstes: am 25.11. der Tagesbericht für den 24.11., dann der Rest von Punkt 5, Teil 2 (Anmeldung, Übersetzen,
+KI-Wünsche, Fotos/Bewertungen, „Text mit KI verbessern“, „Problem melden“), danach Punkt 7 (Rechtstexte).
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -90,6 +91,7 @@ veröffentlichen, nur vorbereiten; einschalten und mergen macht Benjamin.
   Import, Übersetzen, Community, Bestellungen) freundlich als „bald verfügbar“ kennzeichnen statt Fehler
   zu zeigen.
   - 23.11.2026, Teil 1: `HAS_SERVER` in `lib/api.ts` und Karte `components/ComingSoon.tsx` („🚧 Bald verfügbar“, fünf Sprachen); Erfassen (Foto/Kassenbon) und Rezept-Import nutzen sie. Offen: Übersetzen, Community (Entdecken, Teilen), Bestellungen, KI-Wünsche im Plan, Anmeldung, Fotos/Bewertungen und „Text mit KI verbessern“.
+  - 24.11.2026, Teil 2: Bestellungen und Community – „Liefern lassen“ (vorher rot „Keine Verbindung zum Server.“), „Aus der Community“ unter „Entdecken“ (vorher „… konnten nicht geladen werden.“) und „In der Community teilen“ bei eigenen Rezepten zeigen ohne Server den Hinweis `ComingSoonNote` (Abzeichen „🚧 Bald verfügbar“ und ein Satz, was bis dahin geht) und fragen den Server nicht mehr an; Web-Rauchtest prüft beides. Offen: Anmeldung (Profil, Anmelden, Nutzerverzeichnis), Übersetzen, KI-Wünsche im Plan, Fotos/Bewertungen, „Text mit KI verbessern“ und „Problem melden“.
 - [x] **6. Tests für die App-Logik** in `app/src/lib` (Planer, Vorrat, Nährwerte, Datumslogik) mit einem
   leichtgewichtigen Test-Runner ohne native Module.
   - 24.11.2026: `npm test` in `app/` (Node-Test-Runner + `tsx`, Teil von `npm run check`, rund 4 s): 79 Tests für Datum (fünf Zeitzonen, Zeitumstellung), Vorrat, Nährwerte/Kalorienbedarf, Planer wie in der App ohne Server (mit den Einkaufslisten ist jedes Gericht kochbar) und Übersetzungen. Zwei Fehler im Vorrat gefunden und behoben: leere Posten nach dem Runden und eine um einen Tag zu lange Haltbarkeit nach der Umstellung auf Sommerzeit.
@@ -158,9 +160,23 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   der Name rückte nach links und die Zeilen standen versetzt (z. B. Mujaddara). Erledigt 24.11.2026: neue Komponente
   `components/RecipeThumb.tsx` (🍽️ auf grauem Grund, 64 × 36) an allen vier Stellen, auch in „Entdecken“; im Browser mit
   einem vegetarischen Plan geprüft. Die Promo-Clips neu aufzunehmen steht als eigener Punkt unten. (24.11.2026)
-- **Promo-Clips 1 und 3 neu aufnehmen:** Dort steht Mujaddara noch ohne Platzhalter (Zeile versetzt). Mit
-  `node make-clips.cjs` (etwa drei Minuten), danach Bild für Bild prüfen; `bildnachweise.md` schreibt das Skript neu.
-  Nur ein Schönheitsfehler – die Clips können bis dahin so gepostet werden. (24.11.2026)
+- ✅ **Promo-Clips 1 und 3 neu aufnehmen:** Dort stand Mujaddara noch ohne Platzhalter (Zeile versetzt). (24.11.2026)
+  Erledigt 24.11.2026: alle drei Clips neu aufgenommen und Bild für Bild geprüft (Mujaddara mit Platzhalter, keines der
+  entfernten Fotos). Clip 2 zeigt jetzt auch „Gekauft? Ein Tipp – ab in den Vorrat“ (Knopf, Vorrat mit Haltbarkeit,
+  „🧺 im Vorrat“ in der Liste) und ist 23 s lang; „Liefern lassen“ zeigt dabei „Bald verfügbar“. `bildnachweise.md`
+  ohne Frittata, Kürbisrisotto und Nasi Goreng, `clips.md` mit neuen Texten zu Clip 2.
+- **„Bald verfügbar“ gibt es nur ohne Server-Adresse:** In Expo Go und mit `npx expo start` + Taste `w` kennt die App
+  immer eine (der Rechner, Port 3000) und meldet ohne laufenden Server weiter „Keine Verbindung zum Server.“ – gewollt,
+  beim Entwickeln soll ein fehlender Server auffallen. Den Offline-Modus der Web-Version sieht man lokal mit
+  `npm run web:export` und `npx expo serve` (liefert `dist/` aus; Direktlinks wie `/plan` geben dort 404, also bei `/`
+  anfangen). Ein Schalter wie `EXPO_PUBLIC_API_URL=off` für Expo Go wäre machbar, falls Benjamin das braucht. (24.11.2026)
+- **Tab-Leiste auf Französisch abgeschnitten:** Bei 360 px Breite stehen dort „Aujour…“ und „Provisi…“ (Heute, Vorrat);
+  auf Deutsch passt alles. Kürzere Beschriftungen oder etwas kleinere Schrift prüfen, auch auf Italienisch und Spanisch.
+  (24.11.2026)
+- **Kontrast von Orange auf Hellorange:** `colors.warning` (#D9822B) hat auf `colors.accentTint` nur 2,6 : 1 und auf
+  Weiß 2,9 : 1 (empfohlen ab 4,5 : 1), z. B. „⚠️ bald verbrauchen“ unter „Könnte schlecht werden“ und die
+  Resthaltbarkeit im Vorrat. Der neue Hinweis „Bald verfügbar“ nimmt deshalb #A0561A (4,9 : 1). Bei Gelegenheit
+  `colors.warning` für Text abdunkeln. (24.11.2026)
 - **Fotos verschwinden an der Quelle:** Zwei Flickr-Fotos gab es am 24.11.2026 nicht mehr (Pancakes, Tofu-Gemüse-Pfanne,
   jetzt Platzhalter). Dann zeigt die App ein leeres Bild, und der Link unter dem Foto führt ins Leere. Ab und zu prüfen
   (z. B. monatlich) oder die Fotos langfristig selbst ausliefern (siehe Datenschutz). Die Fotos der übrigen Rezepte

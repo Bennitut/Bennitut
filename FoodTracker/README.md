@@ -91,7 +91,10 @@ KI-Rezepte, Import, Übersetzen, Community und Bestellungen.
 läuft und auf jedem Webspace liegen kann (Direktlinks wie `/plan` brauchen eine Weiterleitung auf `index.html`).
 Daten bleiben im Browser (localStorage). „Foto aufnehmen“ öffnet im Handy-Browser die Kamera, am PC einen
 Dateidialog; Einzelbilder aus Videos und die Apple-Anmeldung gibt es nur in der App. Ohne fest eingetragenen
-Server (`EXPO_PUBLIC_API_URL` beim Export) fragt die Web-Version keinen Server an.
+Server (`EXPO_PUBLIC_API_URL` beim Export) fragt die Web-Version keinen Server an; Foto-/Bon-Erkennung, Import,
+Community und Bestellungen zeigen dann „🚧 Bald verfügbar“ statt einer Fehlermeldung (die übrigen folgen, siehe
+`BACKLOG.md`, Punkt 5). Lokal ansehen: `npm run web:export`, dann `npx expo serve` (liefert `dist/` aus; bei `/`
+anfangen, Direktlinks geben dort 404).
 
 **Online (GitHub Pages):** https://bennitut.github.io/Bennitut/ – der Workflow `.github/workflows/foodtracker-pages.yml`
 baut und veröffentlicht die Web-Version bei jedem Push auf `feature/food-tracker-app`, der die App ändert.
