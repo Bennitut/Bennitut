@@ -23,9 +23,9 @@ Promo-Clips neu aufgenommen (Clip 2 zeigt jetzt auch den Vorrat), Punkt 5 erledi
 Teil 3: Rezept, Übersetzen, KI-Wünsche, Anmeldung), danach Clips 1 und 3 noch einmal aufgenommen. Punkt 7 erledigt:
 Entwürfe für Impressum und Datenschutzerklärung in `docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet
 drei Dinge (Impressum-Variante, Rezeptfotos, Mindestalter; im PR gefragt).
-Als Nächstes: am 25.11. der Tagesbericht für den 24.11., dann der Vorrang „Impressum & Datenschutz in App und
-Web-Version“ (unten), danach 8–10. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vorher drankommen
-soll – ohne Antwort nach dem Vorrang weiter mit Punkt 8.
+Als Nächstes: der Vorrang „Impressum & Datenschutz in App und Web-Version“ (unten), danach 8–10; der erste Lauf am
+25.11. (Japan-Zeit) macht vorher den Tagesbericht für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version
+nicht“ (unten) vorher drankommen soll – ohne Antwort nach dem Vorrang weiter mit Punkt 8.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
