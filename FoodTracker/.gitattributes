@@ -1,0 +1,2 @@
+# Windows-Batchdateien brauchen CRLF-Zeilenenden, egal mit welchen Git-Einstellungen sie ausgecheckt werden.
+*.cmd text eol=crlf

@@ -51,7 +51,8 @@ FoodTracker/
 ├── reports/      Tagesberichte der Nachtschicht als PDF (make-report.cjs, Test: node --test reports/make-report.test.cjs)
 └── server/   Backend (Node, Hono, TypeScript)
     ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
-    ├── src/ai/           Claude: Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge
+    ├── src/ai/           KI für Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge: Prompts in tasks.ts,
+    │                     Claude oder Ollama über provider.ts (eine Stelle für alle KI-Anfragen)
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
@@ -59,18 +60,63 @@ FoodTracker/
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
 ```
 
-Der API-Schlüssel für Claude liegt nur auf dem Server; die App spricht ausschließlich mit dem Backend.
+Der API-Schlüssel für Claude liegt nur auf dem Server; die App spricht ausschließlich mit dem Backend. Statt Claude
+kann der Server auch Ollama nutzen – kostenlos, auf dem eigenen Rechner (siehe unten).
 
 ## Starten
 
-Voraussetzungen: Node.js 22+, für die App die **Expo Go**-App auf dem Handy oder ein iOS-/Android-Simulator.
+### Zum Testen auf dem Laptop (Windows, kostenlos)
+
+Der Server läuft direkt mit Node.js – XAMPP o. Ä. braucht es nicht (das bringt Apache, PHP und MySQL mit und kann den
+Node-Server nicht ausführen). Als KI dient [Ollama](https://ollama.com): Open Source, kostenlos, läuft auf dem eigenen
+Rechner (mit einer Grafikkarte wie der RTX 4070 Laptop mit 8 GB schnell genug, ohne dauert es länger).
+
+Einmalig in PowerShell:
+
+```powershell
+winget install Git.Git
+winget install OpenJS.NodeJS.LTS
+winget install Ollama.Ollama
+# PowerShell schließen und neu öffnen, dann:
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # sonst blockiert PowerShell npm
+ollama pull gemma4:e4b                                # KI-Modell, das auch Bilder versteht (rund 9,4 GB)
+```
+
+Jedes Mal: im Repo-Ordner `git pull`, dann **`FoodTracker\start-test.cmd` doppelklicken**. Das Skript installiert bei
+Bedarf die Pakete (`npm install` in `server` und `app`), legt beim ersten Mal `server\.env` aus `server\.env.example`
+an, startet den Server in einem eigenen Fenster und danach Expo. Im Expo-Fenster die Taste **`w`** öffnet die App im
+Browser; am iPhone den QR-Code mit der Kamera scannen, unter Android in Expo Go (Handy und Laptop im selben WLAN).
+
+Das Server-Fenster zeigt die Adresse im WLAN, welche KI aktiv ist (bzw. was noch fehlt) und – unter Windows – die
+Firewall-Regel. Fürs iPhone muss die Windows-Firewall die Ports 3000 (Server) und 8081 (Expo) erlauben; einmalig in
+PowerShell **als Administrator**:
+
+```powershell
+New-NetFirewallRule -DisplayName "FoodTracker Test" -Direction Inbound -Protocol TCP -LocalPort 3000,8081 -Profile Private -Action Allow
+```
+
+Das WLAN muss in Windows als „Privates Netzwerk“ eingestellt sein. Test am iPhone: in Safari
+`http://<WLAN-Adresse>:3000/api/health` öffnen – erscheint `{"ok":true,…}`, passt alles. Im Profil der App zeigt eine
+Zeile, ob der Server erreichbar ist und mit welcher KI (Claude, lokal, ohne KI).
+
+**KI wählen** (in `server\.env`, danach den Server neu starten): Ohne Angabe nimmt der Server Claude, wenn
+`ANTHROPIC_API_KEY` gesetzt ist (kostet API-Guthaben bei Anthropic), sonst Ollama, sobald es läuft – auch wenn Ollama
+erst nach dem Server gestartet wird. Fest wählen mit `AI_PROVIDER=claude` oder `AI_PROVIDER=ollama`; anderes Modell
+mit `OLLAMA_MODEL` (Alternative mit Bildverständnis: `qwen3-vl:8b`). Lokal dauert eine Antwort oft 20–90 Sekunden, die
+erste länger (das Modell wird geladen). Ohne KI melden Foto, Kassenbon, Import, Übersetzen und KI-Wünsche „Auf dem
+Server ist keine KI eingerichtet“ – alles andere geht auch so. Alle Variablen erklärt `server/.env.example`.
+
+**Instagram:** Instagram gibt die Beschreibung ohne Anmeldung oft nicht heraus. Dann die Caption des Beitrags
+kopieren und beim Import ins Feld „Beschreibung“ einfügen.
+
+### Von Hand (alle Systeme)
+
+Voraussetzungen: Node.js 22+, für die App die **Expo Go**-App für SDK 58 auf dem Handy oder ein iOS-/Android-Simulator.
 
 ```bash
-# Backend
+# Backend – Einstellungen in server/.env (Vorlage: server/.env.example), z. B. ANTHROPIC_API_KEY oder Ollama
 cd server
 npm install
-export ANTHROPIC_API_KEY=sk-ant-...   # für Fotos, Kassenbons, Import, Übersetzung, KI-Rezepte
-export META_OEMBED_TOKEN=...          # optional: Instagram-oEmbed (APP_ID|CLIENT_TOKEN einer Meta-App)
 npm start                              # http://localhost:3000, Community-Rezepte in data/community.json, Fotos/Bewertungen in data/feedback.json
 
 # App (zweites Terminal)
@@ -78,6 +124,8 @@ cd app
 npm install
 npx expo start
 ```
+
+Optional für Instagram: `META_OEMBED_TOKEN` (APP_ID|CLIENT_TOKEN einer Meta-App) in `server/.env`.
 
 QR-Code mit der Kamera (iOS) bzw. Expo Go (Android) scannen. Handy und Rechner müssen im selben WLAN sein.
 Die App findet den Server automatisch (gleicher Rechner, Port 3000). Für einen anderen Server:
@@ -103,12 +151,9 @@ baut und veröffentlicht die Web-Version bei jedem Push auf `feature/food-tracke
 Einmalig einrichten: siehe Kopf der Workflow-Datei. Lokal nachbauen: `npm run web:pages` (Unterpfad `/Bennitut`,
 Ergebnis in `app/dist-pages/` samt `404.html` für Direktlinks), prüfen mit `npm run web:smoke -- dist-pages`.
 
-**Windows: „Keine Verbindung zum Server“** – meist blockiert die Windows-Firewall Port 3000.
-Einmalig in einer PowerShell **als Administrator**:
-
-```powershell
-New-NetFirewallRule -DisplayName "FoodTracker Server" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
-```
+**Windows: „Keine Verbindung zum Server“** – am Handy blockiert meist die Windows-Firewall Port 3000 (Regel siehe
+oben); im Browser am selben Rechner läuft der Server vermutlich nicht (Server-Fenster offen?). Der Server erlaubt
+Anfragen aus dem Browser (CORS) von `localhost`, `127.0.0.1` und Adressen im eigenen Netz, weitere über `CORS_ORIGINS`.
 
 Für App-Store-/Play-Store-Builds: `npx eas-cli@latest build --platform all`.
 
@@ -187,8 +232,8 @@ Die Plattformen erlauben kein offizielles Herunterladen von Videos. Der Import n
 
 - **TikTok:** die öffentliche oEmbed-Schnittstelle (Beschreibung + Vorschaubild, ohne Schlüssel).
 - **Instagram:** oEmbed mit Meta-App-Token, sonst die Vorschau-Metadaten der Seite. Je nach Beitrag
-  liefert Instagram ohne Anmeldung wenig – dann die Caption in das Textfeld kopieren.
-- **Gespeichertes Video (beide):** Die App schneidet 6 Einzelbilder aus dem Video, Claude liest
+  liefert Instagram ohne Anmeldung wenig – dann die Caption ins Feld „Beschreibung“ kopieren.
+- **Gespeichertes Video (beide):** Die App schneidet 6 Einzelbilder aus dem Video, die KI liest
   daraus Texteinblendungen und Zutaten.
 
 Der Server ruft nur Instagram-, TikTok- und deren Bild-Server über HTTPS ab, auch bei

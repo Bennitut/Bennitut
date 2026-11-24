@@ -24,7 +24,7 @@ const app = createApp({
   ai,
   corsOrigins: list(process.env.CORS_ORIGINS),
 });
-serve({ fetch: app.fetch, port }, async () => {
+const server = serve({ fetch: app.fetch, port }, async () => {
   const status = await ai.status();
   console.log(
     startupMessage({
@@ -38,4 +38,9 @@ serve({ fetch: app.fetch, port }, async () => {
   );
   if (process.env.ALLOW_DEV_LOGIN === "1") console.log("\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN.");
   console.log("");
+});
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code !== "EADDRINUSE") throw err;
+  console.error(`\nPort ${port} ist schon belegt – läuft der FoodTracker-Server schon in einem anderen Fenster? Das andere Fenster schließen und neu starten.\n`);
+  process.exit(1);
 });
