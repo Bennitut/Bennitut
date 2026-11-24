@@ -26,6 +26,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Vorrat** | Eigener Tab mit dem aktuellen Lagerbestand der Küche, nach Kategorien sortiert, mit geschätzter Resthaltbarkeit („bald verbrauchen“), Mengen zum Nachzählen und Rezeptvorschlägen, die mit dem Vorhandenen kochbar sind. Was man in der Einkaufsliste abhakt, bucht ein Tipp auf „Abgehaktes in den Vorrat“ als ganze Packungen in den Vorrat – auch ohne Server; was später doch geliefert wird, kommt nicht doppelt dazu. |
 | **Lieferdienst** | Die Einkaufsliste wird mit einem Tipp bestellt. Gelieferte Ware landet automatisch im Vorrat. |
 | **Automatisches Tracking** | Hakt man eine geplante Mahlzeit als „Gegessen“ ab, wird sie ins Tagebuch übernommen und die Zutaten werden vom Vorrat abgezogen. |
+| **Impressum & Datenschutz** | Unter 👤 Profil, in der Web-Version zusätzlich oben auf jeder Seite („Impressum“): Offenlegung nach § 25 Mediengesetz und Datenschutzerklärung (Österreich, auf Deutsch). Die eigenen Angaben stehen an einer Stelle (`app/src/legal/angaben.ts`); solange eine fehlt, zeigt die App „Entwurf“, und die Web-Version für GitHub Pages wird nicht gebaut. |
 
 Kreislauf: **Plan → Einkaufsliste → Abhaken oder Bestellung → Vorrat → Kochen/Essen → Tagebuch.**
 
@@ -46,6 +47,7 @@ FoodTracker/
 │   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
+│   ├── src/legal/        Impressum und Datenschutzerklärung: angaben.ts (eigene Angaben, nur hier eintragen), texte.ts
 │   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten, Tagebuch und Historie)
 ├── docs/recht/   Entwürfe für Impressum und Datenschutzerklärung (Österreich) mit Platzhaltern für die eigenen Angaben
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
@@ -153,6 +155,8 @@ Direktlinks geben dort 404).
 baut und veröffentlicht die Web-Version bei jedem Push auf `feature/food-tracker-app`, der die App ändert.
 Einmalig einrichten: siehe Kopf der Workflow-Datei. Lokal nachbauen: `npm run web:pages` (Unterpfad `/Bennitut`,
 Ergebnis in `app/dist-pages/` samt `404.html` für Direktlinks), prüfen mit `npm run web:smoke -- dist-pages`.
+`npm run web:pages` (und damit der Workflow) bricht ab, solange in `app/src/legal/angaben.ts` Angaben für das Impressum
+fehlen – es listet sie auf. Nur zum Ausprobieren auf dem eigenen Rechner: `npm run web:pages -- --entwurf`.
 
 **Windows: „Keine Verbindung zum Server“** – am Handy blockiert meist die Windows-Firewall Port 3000 (Regel siehe
 oben); im Browser am selben Rechner läuft der Server vermutlich nicht (Server-Fenster offen?). Der Server erlaubt
@@ -167,6 +171,7 @@ cd server && npm run check   # Typecheck + Tests
 cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen) + Tests der App-Logik
 cd app && npm run web:export && npm run web:smoke   # Web-Version bauen und im Browser durchklicken
 cd app && npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe wie auf GitHub Pages (/Bennitut/)
+                                                                 # (solange Impressum-Angaben fehlen: web:pages -- --entwurf)
 ```
 
 Einzeln: `npm run typecheck` und `npm test` (in beiden Ordnern) bzw. `npm run lint` (App).
@@ -179,12 +184,13 @@ je Sprache (Fallback auf Englisch, wann „Übersetzen“ erscheint, mit KI verb
 („Entdecken“ und Tauschen zeigen zuerst 30 Rezepte, Sortierung nach Bewertung) und „Abgehaktes in den Vorrat“ (ganze
 Packungen, nichts doppelt – auch nicht, wenn danach eine Bestellung geliefert wird) sowie Tagebuch und Historie (Umzug
 aus dem alten Speicherort, nichts wird automatisch gelöscht, Löschmarken, Abgleich mit dem echten Server-Speicher,
-Auswertung bis „Alles“, CSV und Import ohne Duplikate).
+Auswertung bis „Alles“, CSV und Import ohne Duplikate) und Impressum/Datenschutz (Platzhalter erkennen, vollständige
+Texte ohne Server, Teil B nur mit Server, lückenlose Nummerierung).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
 abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal),
 prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen, und zuletzt die
 Ernährungshistorie (Umzug in den eigenen Speicher, „Alles“, Export, Import nach gelöschten Browserdaten, Hinweis bei
-vollem Speicher); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
+vollem Speicher) und „Impressum & Datenschutz“ (Link oben auf jeder Seite, „Entwurf“, solange Angaben fehlen); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet

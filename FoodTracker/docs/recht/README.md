@@ -8,8 +8,15 @@ Rechtsberatung**. Vor dem Veröffentlichen ausfüllen und am besten von jemandem
 | [`impressum.md`](impressum.md) | Impressum bzw. Offenlegung, zwei Varianten (A: rein privat, B: sobald FoodTracker Geld bringen soll) |
 | [`datenschutz.md`](datenschutz.md) | Datenschutzerklärung. Teil A gilt heute (Web-Version und App ohne Server), Teil B erst, wenn ein Server läuft |
 
-Noch ist keiner der Texte in der App oder der Web-Version verlinkt (das ist der nächste Schritt, siehe
-`BACKLOG.md`).
+**In der App** (seit 24.11.2026): 👤 Profil → „§ Impressum & Datenschutz“, in der Web-Version zusätzlich „Impressum“
+oben rechts auf jeder Seite. Gezeigt werden Impressum Variante A und Teil A der Datenschutzerklärung (Teil B und das
+Mindestalter nur, wenn die App einen Server kennt), ohne die Hinweise für dich und mit den Vorgaben aus dem PR, solange
+du nichts anderes entscheidest (Fotos: Variante c). Die Texte stehen in `app/src/legal/texte.ts` – Änderungen hier
+bitte dort nachziehen (und umgekehrt).
+
+**Deine Angaben trägst du nur an einer Stelle ein: `app/src/legal/angaben.ts`.** Solange dort ein Platzhalter steht,
+zeigt die App über den Texten „Entwurf“ mit der Liste, und `npm run web:pages` – damit auch der GitHub-Pages-Workflow
+nach dem Mergen – bricht mit dieser Liste ab. So geht keine Web-Version ohne Offenlegung online.
 
 ## Platzhalter
 
@@ -26,7 +33,9 @@ Alles in doppelten eckigen Klammern muss vor dem Veröffentlichen ausgefüllt od
 1. **Name** (Vor- und Nachname).
 2. **Wohnort** – für Variante A genügt der Ort (die Gemeinde); für Variante B die **volle Anschrift** (Straße,
    Hausnummer, PLZ, Ort). Die WKO verlangt dafür die „volle geografische Anschrift der tatsächlichen Niederlassung“ –
-   bei dir also wohl die Wohnadresse, solange es kein Büro gibt.
+   bei dir also wohl die Wohnadresse, solange es kein Büro gibt. Derselbe Eintrag steht in der Datenschutzerklärung
+   unter „1. Verantwortlich“. `[[PRÜFEN: Art. 13 DSGVO verlangt dort Name und „Kontaktdaten“ – die E-Mail-Adresse ist
+   eine; ob neben ihr der Ort genügt oder dort die volle Anschrift stehen sollte, konnte ich nicht sicher klären.]]`
 3. **E-Mail-Adresse**, die du liest (auch für Anfragen nach der DSGVO). Tipp: eine eigene Adresse nur für FoodTracker.
 4. Nur Variante B: **zweiter Kontaktweg** – laut WKO „mindestens zwei, z. B. E-Mail plus Telefon oder Web-Formular“.
    Ein Formular braucht einen Server, ohne Server bleibt also nur die Telefonnummer.
@@ -59,12 +68,12 @@ Alles in doppelten eckigen Klammern muss vor dem Veröffentlichen ausgefüllt od
    Lieferdienst, Speicherfristen) und vor dem ersten Senden sensibler Angaben eine ausdrückliche Einwilligung
    einholen (Art. 9 DSGVO). Konto löschen fehlt noch in App und Server (Recht auf Löschung, Art. 17 DSGVO).
 
-## Wo die Texte hinkommen
+## Wo die Texte stehen
 
-- **Web-Version:** ein Link „Impressum & Datenschutz“, der von jeder Seite aus erreichbar ist. Die WKO verlangt,
-  dass die Angaben „ständig leicht und unmittelbar auffindbar“ sind, und rät, das Impressum direkt auf der eigenen
-  Seite zu veröffentlichen statt nur zu verlinken.
-- **App:** Profil → „Impressum & Datenschutz“. Die WKO-Regeln gelten laut WKO „auch für Apps“.
+- **Web-Version:** „Impressum“ oben rechts auf jeder Seite führt zur Seite „Impressum & Datenschutz“ (`/legal`). Die
+  WKO verlangt, dass die Angaben „ständig leicht und unmittelbar auffindbar“ sind, und rät, das Impressum direkt auf
+  der eigenen Seite zu veröffentlichen statt nur zu verlinken – die Texte stehen deshalb in der Web-Version selbst.
+- **App:** Profil → „§ Impressum & Datenschutz“. Die WKO-Regeln gelten laut WKO „auch für Apps“.
 - **App Stores:** verlangen später einen Link zur Datenschutzerklärung (Backlog-Punkt 10).
 
 **Wichtig vor dem Mergen:** Nach dem Mergen geht die Web-Version auf GitHub Pages online. Dann sollte mindestens

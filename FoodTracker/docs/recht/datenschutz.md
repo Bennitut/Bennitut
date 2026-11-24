@@ -20,10 +20,12 @@ Stand: [[ANGABE: Datum]]
 ## 1. Verantwortlich
 
 [[ANGABE: Vor- und Nachname]]  
-[[ANGABE: Anschrift]]  
+[[ANGABE: Wohnort wie im Impressum – bei Variante B die volle Anschrift]]  
 E-Mail: [[ANGABE: E-Mail-Adresse]]
 
 Fragen zum Datenschutz und Anfragen zu deinen Rechten (Abschnitt 6) bitte an diese E-Mail-Adresse.
+[[PRÜFEN: Art. 13 DSGVO verlangt Name und „Kontaktdaten“ – ob neben der E-Mail-Adresse der Ort genügt, siehe
+README, „Was du ausfüllen musst“, Punkt 2.]]
 [[PRÜFEN: Ein Datenschutzbeauftragter ist nicht bestellt. Pflicht wird er nach Art. 37 DSGVO erst, wenn die
 Kerntätigkeit in der umfangreichen Verarbeitung z. B. von Gesundheitsdaten besteht – mit Server (Teil B) neu
 prüfen.]]
@@ -150,9 +152,10 @@ zusätzlich E-Mail-Adresse und letzte Anmeldung.
 Rechtsgrundlage: Bereitstellung des gewünschten Kontos (Art. 6 Abs. 1 lit. b DSGVO). [[ANGABE: Speicherdauer und
 „Konto löschen“ – die Funktion fehlt noch in App und Server.]]
 
-### B3. KI-Funktionen (Claude von Anthropic)
+### B3. KI-Funktionen
 
-Diese Funktionen schicken Daten über den Server an Anthropic, den Anbieter des KI-Modells Claude:
+Diese Funktionen schicken Daten über den Server an den Anbieter des KI-Modells [[ANGABE: Claude von Anthropic oder
+ein Modell auf dem eigenen Server (Ollama) – je nach Einrichtung; mit Ollama verlassen die Daten den Server nicht]]:
 
 | Funktion | Was übermittelt wird |
 |---|---|

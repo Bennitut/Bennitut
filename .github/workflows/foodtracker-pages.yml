@@ -10,6 +10,9 @@
 #    Sonst bricht die Bereitstellung ab mit „Branch "feature/food-tracker-app" is not allowed to deploy to
 #    github-pages due to environment protection rules“.
 #
+# Bricht ab, solange in FoodTracker/app/src/legal/angaben.ts Angaben für Impressum und Datenschutzerklärung fehlen
+# (die Liste steht im Protokoll des Schritts „Web-Version bauen“) – ohne Offenlegung geht keine Web-Version online.
+#
 # Lokal nachbauen und prüfen: cd FoodTracker/app && npm run web:pages && npm run web:smoke -- dist-pages
 name: FoodTracker Web-Version
 
