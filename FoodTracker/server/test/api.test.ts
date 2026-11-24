@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { Ai } from "../src/ai/provider.js";
 import { createApp } from "../src/app.js";
 
+/** Ohne KI, egal ob auf dem Rechner ein Claude-Schlüssel gesetzt ist oder Ollama läuft (KI-Tests: ai.test.ts). */
+const noAi = new Ai({ hasAnthropicKey: false, ollama: { url: "http://ollama.test", model: "gemma4:e4b", numCtx: 1024, timeoutMs: 1000 } }, async () => {
+  throw new TypeError("offline");
+});
 const app = createApp({
   communityFile: null,
   auth: { appleAudiences: ["host.exp.Exponent"], googleAudiences: [], adminEmails: ["chefin@example.com"], allowDevLogin: true },
+  ai: noAi,
 });
 const DEVICE_A = "device-aaaaaaaa";
 const DEVICE_B = "device-bbbbbbbb";

@@ -1,7 +1,9 @@
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { AnalysisError, analyzeMealPhoto, analyzeReceipt, generateRecipes, improveRecipe, importRecipe, translateRecipe } from "./ai/claude.js";
+import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
+import { analyzeMealPhoto, analyzeReceipt, generateRecipes, improveRecipe, importRecipe, translateRecipe } from "./ai/tasks.js";
+import { AI_ERROR_STATUS, AiError, AnalysisError } from "./ai/types.js";
 import { OverrideStore } from "./admin/overrides.js";
 import { AuthError, ROLES, UserStore, verifyAppleToken, verifyGoogleToken, type User } from "./auth/users.js";
 import { FLAG_REASONS, FeedbackStore } from "./community/feedback.js";
@@ -10,7 +12,8 @@ import { INGREDIENTS, RECIPES, ingredientById } from "./data/catalog.js";
 import { findProvider, linesFromShoppingList, pantryFromOrder, providers } from "./delivery/providers.js";
 import { MONTH_DAYS, planMonth } from "./planner/monthPlanner.js";
 import { PlanError, matchesPreferences, recipeDiet } from "./planner/zeroWastePlanner.js";
-import { SocialFetchError, fetchSocialPost } from "./social/fetchPost.js";
+import { corsMiddleware } from "./http/cors.js";
+import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetchPost.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
 const MediaType = z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -151,12 +154,18 @@ export function createApp({
   usersFile = null,
   overridesFile = null,
   auth = NO_AUTH,
+  ai = new Ai(aiSettingsFromEnv()),
+  corsOrigins = [],
 }: {
   communityFile: string | null;
   feedbackFile?: string | null;
   usersFile?: string | null;
   overridesFile?: string | null;
   auth?: AuthConfig;
+  /** Claude oder Ollama (siehe ai/provider.ts); ohne Angabe aus der Umgebung bzw. server/.env. */
+  ai?: Ai;
+  /** Weitere Websites, die den Server aus dem Browser nutzen dürfen (CORS_ORIGINS). */
+  corsOrigins?: string[];
 }) {
   const community = new CommunityStore(communityFile);
   const feedback = new FeedbackStore(feedbackFile);
@@ -188,12 +197,15 @@ export function createApp({
   const me = (user: User) => ({ id: user.id, name: user.name, email: user.email, role: user.role, provider: user.provider, createdAt: user.createdAt });
   const app = new Hono();
 
+  // Zuerst CORS, damit auch Vorab-Anfragen (OPTIONS) und Fehlerantworten im Browser ankommen.
+  app.use("/api/*", corsMiddleware(corsOrigins));
   // Bis zu 10 Videobilder plus Vorschaubild.
   app.use("/api/*", bodyLimit({ maxSize: 30 * 1024 * 1024 }));
 
   app.onError((err, c) => {
     if (err instanceof z.ZodError) return c.json({ error: "invalid_request", details: err.issues }, 400);
     if (err instanceof AnalysisError) return c.json({ error: `analysis_${err.code}` }, 422);
+    if (err instanceof AiError) return c.json({ error: `ai_${err.code}` }, AI_ERROR_STATUS[err.code]);
     if (err instanceof PlanError) return c.json({ error: `plan_${err.code}`, detail: err.detail }, 422);
     if (err instanceof SocialFetchError) return c.json({ error: `social_${err.code}` }, 422);
     if (err instanceof AuthError) {
@@ -204,7 +216,8 @@ export function createApp({
     return c.json({ error: "internal" }, 500);
   });
 
-  app.get("/api/health", (c) => c.json({ ok: true }));
+  /** Lebenszeichen und welche KI gerade nutzbar ist (Profilzeile in der App). */
+  app.get("/api/health", async (c) => c.json({ ok: true, ai: await ai.status() }));
 
   app.get("/api/catalog", (c) =>
     c.json({
@@ -215,12 +228,12 @@ export function createApp({
 
   app.post("/api/analyze/meal", async (c) => {
     const body = ImageBody.parse(await c.req.json());
-    return c.json(await analyzeMealPhoto({ data: body.imageBase64, mediaType: body.mediaType }, body.language));
+    return c.json(await analyzeMealPhoto(ai, { data: body.imageBase64, mediaType: body.mediaType }, body.language));
   });
 
   app.post("/api/analyze/receipt", async (c) => {
     const body = ImageBody.parse(await c.req.json());
-    const receipt = await analyzeReceipt({ data: body.imageBase64, mediaType: body.mediaType }, body.language);
+    const receipt = await analyzeReceipt(ai, { data: body.imageBase64, mediaType: body.mediaType }, body.language);
     const pantry = receipt.items.flatMap((i) =>
       i.isFood && i.ingredientId ? [{ ingredientId: i.ingredientId, amount: i.quantity }] : [],
     );
@@ -229,7 +242,7 @@ export function createApp({
 
   app.post("/api/plan", async (c) => {
     const { preferences, language, recipes, startDate, ...request } = PlanBody.parse(await c.req.json());
-    const extraRecipes = preferences ? await generateRecipes(preferences, 8, language) : [];
+    const extraRecipes = preferences ? await generateRecipes(ai, preferences, 8, language) : [];
     const plan = planMonth({
       request,
       recipes: [...catalogRecipes(), ...recipes.map(asRecipe), ...extraRecipes],
@@ -252,17 +265,20 @@ export function createApp({
 
   app.post("/api/recipes/import", async (c) => {
     const body = ImportBody.parse(await c.req.json());
+    if (body.url && !detectPlatform(body.url)) throw new SocialFetchError("unsupported_url");
+    // Ohne KI gleich abbrechen, bevor der Beitrag geladen wird.
+    await ai.require();
     const post = body.url ? await fetchSocialPost(body.url) : null;
     if (post && !post.caption && !post.thumbnail && !body.caption && body.frames.length === 0) {
       throw new SocialFetchError("fetch_failed");
     }
-    const recipe = await importRecipe({ post, caption: body.caption ?? null, frames: body.frames, language: body.language });
+    const recipe = await importRecipe(ai, { post, caption: body.caption ?? null, frames: body.frames, language: body.language });
     return c.json({ recipe, author: post?.author ?? null });
   });
 
   app.post("/api/recipes/translate", async (c) => {
     const body = z.object({ text: RecipeTextBody, targetLanguage: z.string().min(2).max(10) }).parse(await c.req.json());
-    return c.json(await translateRecipe(body.text, body.targetLanguage));
+    return c.json(await translateRecipe(ai, body.text, body.targetLanguage));
   });
 
   // Bewertungen, Fotos und Meldungen zu Rezepten (Katalog, eigene und Community).
@@ -287,7 +303,7 @@ export function createApp({
         language: Language,
       })
       .parse(await c.req.json());
-    return c.json(await improveRecipe(body));
+    return c.json(await improveRecipe(ai, body));
   });
 
   app.post("/api/recipes/:id/rating", async (c) => {
