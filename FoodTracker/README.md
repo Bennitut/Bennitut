@@ -26,7 +26,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Vorrat** | Eigener Tab mit dem aktuellen Lagerbestand der Küche, nach Kategorien sortiert, mit geschätzter Resthaltbarkeit („bald verbrauchen“), Mengen zum Nachzählen und Rezeptvorschlägen, die mit dem Vorhandenen kochbar sind. Was man in der Einkaufsliste abhakt, bucht ein Tipp auf „Abgehaktes in den Vorrat“ als ganze Packungen in den Vorrat – auch ohne Server; was später doch geliefert wird, kommt nicht doppelt dazu. |
 | **Lieferdienst** | Die Einkaufsliste wird mit einem Tipp bestellt. Gelieferte Ware landet automatisch im Vorrat. |
 | **Automatisches Tracking** | Hakt man eine geplante Mahlzeit als „Gegessen“ ab, wird sie ins Tagebuch übernommen und die Zutaten werden vom Vorrat abgezogen. |
-| **Impressum & Datenschutz** | Unter 👤 Profil, in der Web-Version zusätzlich oben auf jeder Seite („Impressum“): Offenlegung nach § 25 Mediengesetz und Datenschutzerklärung (Österreich, auf Deutsch). Die eigenen Angaben stehen an einer Stelle (`app/src/legal/angaben.ts`); solange eine fehlt, zeigt die App „Entwurf“, und die Web-Version für GitHub Pages wird nicht gebaut. |
+| **Impressum & Datenschutz** | Unter 👤 Profil, in der Web-Version zusätzlich oben auf jeder Seite („Impressum“): Impressum (Angaben nach § 5 E-Commerce-Gesetz und Offenlegung nach § 25 Mediengesetz) und Datenschutzerklärung (Österreich, auf Deutsch). Die eigenen Angaben stehen an einer Stelle (`app/src/legal/angaben.ts`); solange eine fehlt, zeigt die App „Entwurf“, und die Web-Version für GitHub Pages wird nicht gebaut. |
 
 Kreislauf: **Plan → Einkaufsliste → Abhaken oder Bestellung → Vorrat → Kochen/Essen → Tagebuch.**
 

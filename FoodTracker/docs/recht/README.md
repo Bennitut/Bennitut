@@ -5,14 +5,13 @@ Rechtsberatung**. Vor dem Veröffentlichen ausfüllen und am besten von jemandem
 
 | Datei | Inhalt |
 |---|---|
-| [`impressum.md`](impressum.md) | Impressum bzw. Offenlegung, zwei Varianten (A: rein privat, B: sobald FoodTracker Geld bringen soll) |
+| [`impressum.md`](impressum.md) | Impressum: Variante B (Angaben nach § 5 ECG und Offenlegung nach § 25 MedienG, gewählt am 24.11.2026), Variante A zum Vergleich |
 | [`datenschutz.md`](datenschutz.md) | Datenschutzerklärung. Teil A gilt heute (Web-Version und App ohne Server), Teil B erst, wenn ein Server läuft |
 
 **In der App** (seit 24.11.2026): 👤 Profil → „§ Impressum & Datenschutz“, in der Web-Version zusätzlich „Impressum“
-oben rechts auf jeder Seite. Gezeigt werden Impressum Variante A und Teil A der Datenschutzerklärung (Teil B und das
-Mindestalter nur, wenn die App einen Server kennt), ohne die Hinweise für dich und mit den Vorgaben aus dem PR, solange
-du nichts anderes entscheidest (Fotos: Variante c). Die Texte stehen in `app/src/legal/texte.ts` – Änderungen hier
-bitte dort nachziehen (und umgekehrt).
+oben rechts auf jeder Seite. Gezeigt werden Impressum Variante B und Teil A der Datenschutzerklärung (Teil B und das
+Mindestalter nur, wenn die App einen Server kennt), ohne die Hinweise für dich. Die Texte stehen in
+`app/src/legal/texte.ts` – Änderungen hier bitte dort nachziehen (und umgekehrt).
 
 **Deine Angaben trägst du nur an einer Stelle ein: `app/src/legal/angaben.ts`.** Solange dort ein Platzhalter steht,
 zeigt die App über den Texten „Entwurf“ mit der Liste, und `npm run web:pages` – damit auch der GitHub-Pages-Workflow
@@ -30,40 +29,39 @@ Alles in doppelten eckigen Klammern muss vor dem Veröffentlichen ausgefüllt od
 
 ## Was du ausfüllen musst
 
-1. **Name** (Vor- und Nachname).
-2. **Wohnort** – für Variante A genügt der Ort (die Gemeinde); für Variante B die **volle Anschrift** (Straße,
-   Hausnummer, PLZ, Ort). Die WKO verlangt dafür die „volle geografische Anschrift der tatsächlichen Niederlassung“ –
-   bei dir also wohl die Wohnadresse, solange es kein Büro gibt. Derselbe Eintrag steht in der Datenschutzerklärung
-   unter „1. Verantwortlich“. `[[PRÜFEN: Art. 13 DSGVO verlangt dort Name und „Kontaktdaten“ – die E-Mail-Adresse ist
-   eine; ob neben ihr der Ort genügt oder dort die volle Anschrift stehen sollte, konnte ich nicht sicher klären.]]`
+Alles in `app/src/legal/angaben.ts` (Variante B):
+
+1. **Name** (Vor- und Nachname) – eingetragen am 24.11.2026.
+2. **Volle Anschrift:** Straße, Hausnummer mit Stiege und Tür (z. B. „12/3/4“), Postleitzahl und Ort; „Österreich“
+   steht schon im Text. Die WKO verlangt die „volle geografische Anschrift der tatsächlichen Niederlassung“ – bei dir
+   also die Wohnadresse, solange es kein Büro gibt. Dieselbe Anschrift steht in der Datenschutzerklärung unter
+   „1. Verantwortlich“ (Art. 13 DSGVO: Name und Kontaktdaten); damit ist auch die frühere Frage erledigt, ob dort der
+   Wohnort genügt.
 3. **E-Mail-Adresse**, die du liest (auch für Anfragen nach der DSGVO). Tipp: eine eigene Adresse nur für FoodTracker.
-4. Nur Variante B: **zweiter Kontaktweg** – laut WKO „mindestens zwei, z. B. E-Mail plus Telefon oder Web-Formular“.
-   Ein Formular braucht einen Server, ohne Server bleibt also nur die Telefonnummer.
-5. Nur Variante B und nur, falls vorhanden: Gewerbe, Gewerbebehörde, Mitgliedschaft bei der Wirtschaftskammer,
-   UID-Nummer, Firmenbuch.
+4. **Zweiter Kontaktweg** – laut WKO „mindestens zwei, z. B. E-Mail plus Telefon oder Web-Formular“. Ein Formular
+   braucht einen Server, ohne Server bleibt also die Telefonnummer (eine reine Nummer erscheint als „Telefon: …“).
+5. Nur falls vorhanden (heute nicht): Gewerbe, Gewerbebehörde, Mitgliedschaft bei der Wirtschaftskammer,
+   UID-Nummer, Firmenbuch – dann in `texte.ts` und `angaben.ts` ergänzen (Vorlage in `impressum.md`).
 6. Das **Datum** („Stand“) in beiden Texten.
 
 ## Deine Entscheidungen
 
-1. **Variante A oder B im Impressum.** Für jede Website gilt die Offenlegung nach § 25 Mediengesetz (laut USP ist
-   „jegliche Website“ ein periodisches elektronisches Medium); für eine kleine Website, die nur die App vorstellt,
-   reichen Name, Wohnort und Gegenstand (§ 25 Abs. 5 MedienG) – das ist Variante A. Die vollen Angaben nach § 5
-   E-Commerce-Gesetz (Variante B) braucht ein „Diensteanbieter“; ob das schon für eine kostenlose Testversion ohne
-   Werbung gilt, konnte ich nicht sicher klären (das ECG meint Dienste, die „in der Regel gegen Entgelt“ erbracht
-   werden). **Spätestens mit Premium, Werbung oder Spenden gilt Variante B.** Variante B macht deine Wohnadresse
-   öffentlich.
-2. **Rezeptfotos.** Die Fotos kommen heute direkt von den Servern von Wikimedia Commons und Flickr (beide USA). Dabei
-   erfahren diese Dienste die IP-Adresse – ohne dass jemand gefragt wurde. Möglichkeiten:
-   - (a) **Fotos selbst ausliefern** (in die App bzw. Web-Version packen; die freien Lizenzen erlauben das mit
-     Namensnennung). Dann entfällt Abschnitt 4 der Datenschutzerklärung ganz. Meine Empfehlung; kostet nichts, macht
-     die App aber größer.
-   - (b) Fotos erst nach einem Tipp laden („Fotos anzeigen“, merkt sich die Wahl).
-   - (c) So lassen und in der Datenschutzerklärung erklären (Entwurf, Abschnitt 4). Rechtlich die unsicherste
-     Variante.
-3. **Mindestalter.** In Österreich können Kinder ab 14 selbst in Online-Dienste einwilligen (§ 4 Abs. 4 DSG laut
-   Bird & Bird); für sensible Daten (Gesundheit, Religion) verlangt die herrschende Meinung auch über 14 die
-   Zustimmung der Eltern. Ohne Server bekommst du keine Daten, mit Server schon (Teil B). Vorschlag: „ab 16“ oder
-   „ab 18“ für Konto und KI-Funktionen.
+1. ✅ **Impressum: Variante B** (entschieden am 24.11.2026). Für jede Website gilt die Offenlegung nach § 25
+   Mediengesetz (laut USP ist „jegliche Website“ ein periodisches elektronisches Medium); für eine kleine Website, die
+   nur die App vorstellt, hätten Name, Wohnort und Gegenstand gereicht (§ 25 Abs. 5 MedienG, Variante A). Variante B
+   ergänzt die vollen Angaben nach § 5 E-Commerce-Gesetz – nötig spätestens mit Premium, Werbung oder Spenden und
+   damit schon jetzt auf der sicheren Seite. Sie macht deine Wohnadresse öffentlich.
+2. ✅ **Rezeptfotos: (a) selbst ausliefern** (entschieden am 24.11.2026). Die Fotos kamen direkt von den Servern von
+   Wikimedia Commons und Flickr (beide USA), die dabei die IP-Adresse erfahren. Künftig liefert FoodTracker sie selbst
+   aus (verkleinert, mit Urheber:in, Lizenz und Quelle unter jedem Foto; die freien Lizenzen erlauben das mit
+   Namensnennung). Sobald alle Fotos umgezogen sind, entfällt Abschnitt 4 der Datenschutzerklärung; bis dahin gilt er
+   für die restlichen (Fortschritt in `BACKLOG.md`, Vorrang „Rezeptfotos selbst ausliefern“). Nicht gewählt: (b) erst
+   nach einem Tipp laden, (c) so lassen.
+3. **Mindestalter – noch offen** (Stand 24.11.2026; deine erste Einschätzung: keins nötig). In Österreich können
+   Kinder ab 14 selbst in Online-Dienste einwilligen (§ 4 Abs. 4 DSG laut Bird & Bird); für sensible Daten
+   (Gesundheit, Religion) verlangt die herrschende Meinung auch über 14 die Zustimmung der Eltern. Ohne Server bekommst
+   du keine Daten, mit Server schon (Teil B: Konto, KI-Funktionen, Sicherung der Historie). Bis zur Antwort steht in
+   Teil B ein Platzhalter; ohne Server zeigt die App den Abschnitt nicht.
 4. **Später, mit Server:** Teil B der Datenschutzerklärung ergänzen (Hoster, Vertragspartner bei Anthropic,
    Lieferdienst, Speicherfristen) und vor dem ersten Senden sensibler Angaben eine ausdrückliche Einwilligung
    einholen (Art. 9 DSGVO). Konto löschen fehlt noch in App und Server (Recht auf Löschung, Art. 17 DSGVO).
@@ -76,8 +74,8 @@ Alles in doppelten eckigen Klammern muss vor dem Veröffentlichen ausgefüllt od
 - **App:** Profil → „§ Impressum & Datenschutz“. Die WKO-Regeln gelten laut WKO „auch für Apps“.
 - **App Stores:** verlangen später einen Link zur Datenschutzerklärung (Backlog-Punkt 10).
 
-**Wichtig vor dem Mergen:** Nach dem Mergen geht die Web-Version auf GitHub Pages online. Dann sollte mindestens
-Variante A ausgefüllt und verlinkt sein – laut USP drohen bei fehlender Offenlegung bis zu 20.000 Euro
+**Wichtig vor dem Mergen:** Nach dem Mergen geht die Web-Version auf GitHub Pages online. Dann muss das Impressum
+(Variante B) ausgefüllt und verlinkt sein – laut USP drohen bei fehlender Offenlegung bis zu 20.000 Euro
 (Verwaltungsübertretung).
 
 ## Was ich bewusst weggelassen habe

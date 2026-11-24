@@ -14,18 +14,17 @@ Stand: [[ANGABE: Datum]]
   eigene Rezepte und Fotos – bleibt auf deinem Gerät. Ich bekomme diese Daten nicht.
 - Keine Werbung, keine Analyse- oder Tracking-Werkzeuge, keine Cookies.
 - Beim Aufruf der Web-Version und beim Laden der Rezeptfotos erfahren die Server von GitHub, Wikimedia und Flickr
-  technisch bedingt deine IP-Adresse (Abschnitte 3 und 4). [[ENTSCHEIDUNG: Werden die Fotos selbst ausgeliefert
-  (README, Entscheidung 2), hier nur noch GitHub nennen und Abschnitt 4 löschen.]]
+  technisch bedingt deine IP-Adresse (Abschnitte 3 und 4). [[PRÜFEN: Sobald alle Fotos selbst ausgeliefert werden
+  (README, Entscheidung 2, gewählt am 24.11.2026), hier nur noch GitHub nennen und Abschnitt 4 löschen.]]
 
 ## 1. Verantwortlich
 
 [[ANGABE: Vor- und Nachname]]  
-[[ANGABE: Wohnort wie im Impressum – bei Variante B die volle Anschrift]]  
+[[ANGABE: volle Anschrift wie im Impressum (Variante B): Straße, Hausnummer mit Stiege und Tür, PLZ, Ort]]  
+Österreich  
 E-Mail: [[ANGABE: E-Mail-Adresse]]
 
 Fragen zum Datenschutz und Anfragen zu deinen Rechten (Abschnitt 6) bitte an diese E-Mail-Adresse.
-[[PRÜFEN: Art. 13 DSGVO verlangt Name und „Kontaktdaten“ – ob neben der E-Mail-Adresse der Ort genügt, siehe
-README, „Was du ausfüllen musst“, Punkt 2.]]
 [[PRÜFEN: Ein Datenschutzbeauftragter ist nicht bestellt. Pflicht wird er nach Art. 37 DSGVO erst, wenn die
 Kerntätigkeit in der umfangreichen Verarbeitung z. B. von Gesundheitsdaten besteht – mit Server (Teil B) neu
 prüfen.]]
@@ -96,11 +95,12 @@ Web-Version, von der aus das Foto geladen wird.
 Beide sitzen in den USA. [[PRÜFEN: Grundlage der Übermittlung – z. B. ob die Anbieter nach dem EU-U.S. Data Privacy
 Framework zertifiziert sind.]]
 
-[[ENTSCHEIDUNG: Rechtsgrundlage, je nach Entscheidung 2 im README: (b) Fotos erst nach einem Tipp auf „Fotos
-anzeigen“ → „Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO); du kannst sie jederzeit in
-FoodTracker widerrufen.“ – (c) So lassen → „Rechtsgrundlage ist mein berechtigtes Interesse an einer
-ansprechenden Darstellung der Rezepte (Art. 6 Abs. 1 lit. f DSGVO).“ (rechtlich unsicher) – (a) selbst ausliefern
-→ Abschnitt löschen.]]
+Rechtsgrundlage ist mein berechtigtes Interesse an einer ansprechenden Darstellung der Rezepte (Art. 6 Abs. 1
+lit. f DSGVO).
+
+[[PRÜFEN: Entschieden am 24.11.2026: (a) Fotos selbst ausliefern (README, Entscheidung 2). Bis alle Fotos aus dem
+eigenen Projekt kommen, gilt dieser Abschnitt nur noch für die restlichen; danach ganz löschen (in der App:
+`app/src/legal/texte.ts`).]]
 
 Urheber:in und Lizenz stehen unter jedem Foto; ein Tipp darauf öffnet die Originalseite (dann gilt dort die
 Datenschutzerklärung des jeweiligen Dienstes).
@@ -240,9 +240,9 @@ E-Mail dsb@dsb.gv.at, https://www.dsb.gv.at
 
 ## 7. Mindestalter
 
-[[ENTSCHEIDUNG: z. B. „FoodTracker richtet sich an Personen ab 16 Jahren.“ – In Österreich können Kinder ab 14 selbst
-in Online-Dienste einwilligen (§ 4 Abs. 4 DSG); für Gesundheitsdaten verlangt die herrschende Meinung auch über 14
-die Zustimmung der Eltern. Wichtig vor allem für Teil B.]]
+[[ENTSCHEIDUNG: noch offen (Stand 24.11.2026; Benjamins erste Einschätzung: kein Mindestalter nötig). In Österreich
+können Kinder ab 14 selbst in Online-Dienste einwilligen (§ 4 Abs. 4 DSG); für Gesundheitsdaten verlangt die
+herrschende Meinung auch über 14 die Zustimmung der Eltern. Wichtig vor allem für Teil B (Konto, KI-Funktionen).]]
 
 ## 8. Änderungen
 
