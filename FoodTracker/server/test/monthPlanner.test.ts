@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RECIPES, ingredientById } from "../src/data/catalog.js";
 import { MONTH_DAYS, planMonth, weekOfDay } from "../src/planner/monthPlanner.js";
-import { matchesPreferences } from "../src/planner/zeroWastePlanner.js";
+import { matchesPreferences, recipeDiet } from "../src/planner/zeroWastePlanner.js";
 import type { PlanRequest } from "../src/types.js";
 
 const request: Omit<PlanRequest, "days"> = {
@@ -102,7 +102,28 @@ describe("Katalog-Medien", () => {
       }
       for (const video of r.media?.videos ?? []) expect(video.url, r.id).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/);
     }
-    expect(RECIPES.filter((r) => r.media?.image).length).toBeGreaterThanOrEqual(180);
+    // 24.11.2026: Fotos mit Fleisch oder Fisch bei vegetarischen Rezepten entfernt (siehe recipeImages.ts), jetzt 177.
+    expect(RECIPES.filter((r) => r.media?.image).length).toBeGreaterThanOrEqual(175);
     expect(RECIPES.filter((r) => r.media?.videos?.length).length).toBeGreaterThanOrEqual(180);
+  });
+
+  it("verlinkt bei vegetarischen und veganen Rezepten keine Videos mit Fleisch oder Fisch im Titel", () => {
+    // Auch zusammengesetzte Wörter („Zitronenhähnchen“, „Hackfleich“), aber nicht „ohne Hack“ oder „Palatschinken“.
+    const meatOrFish =
+      /hähnchen|hühnchen|\bhuhn\b|chicken|garnele|shrimp|prawn|hackfleis?ch|(?<!ohne )\bhack\b|\bspeck\b|(?<!palat)schinken|wurst|würstchen|lachs|thunfisch|\bfisch\b|\bbeef\b|\bpork\b|bacon|\bfish\b|salmon|\btuna\b/i;
+    let checked = 0;
+    for (const r of RECIPES) {
+      const diet = recipeDiet(r, ingredientById);
+      if (diet !== "vegetarisch" && diet !== "vegan") continue;
+      for (const video of r.media?.videos ?? []) {
+        expect(video.title ?? "", r.id).not.toMatch(meatOrFish);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+    // Gegenprobe: Die früher verlinkten Titel wären aufgefallen.
+    for (const title of ["Zitronenhähnchen auf Erbsen-Risotto", "Gefüllte Zucchini - mit Hackfleich Paprika und Feta", "Chicken Biryani"]) {
+      expect(title).toMatch(meatOrFish);
+    }
   });
 });

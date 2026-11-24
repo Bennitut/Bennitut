@@ -3,6 +3,10 @@
  * Die App verlinkt die Videos nur; sie gehören ihren Kanälen. Rezeptfotos kommen aus
  * frei lizenzierten Quellen (recipeImages.ts), nicht aus den Videos.
  * Ausgewählt und auf Verfügbarkeit geprüft im Oktober 2026.
+ * Vegetarische und vegane Rezepte verlinken nur Videos, deren Titel kein Fleisch und keinen Fisch nennt – am 24.11.2026
+ * für alle geprüft. Ersetzt wurden sechs Titel mit Hähnchen, Garnelen oder Hackfleisch (z. B. „Enchiladas mit Huhn und
+ * Bohnenmus“) und zwei, die meist mit Fleisch gekocht werden (Erbsensuppe „nach Bundeswehr Art“, „authentisches“ Mapo
+ * Tofu) – jeweils durch ein Video, dessen Titel ausdrücklich „vegan“ oder „vegetarisch“ sagt.
  */
 export interface YoutubeVideo {
   youtubeId: string;
@@ -28,7 +32,7 @@ export const RECIPE_VIDEOS: Record<string, YoutubeVideo> = {
   chili_con_carne: { youtubeId: "cDY462f7F2I", title: "Schnelles Chili con Carne Rezept | Einfach, Lecker & Perfekt für den Feierabend @BerndZehner", channel: "Hoffmann Germany" },
   chili_sin_carne: { youtubeId: "0mAbOZJdCI8", title: "Veganes Chili sin Carne & selbstgemachte Guacamole | Tex-Mex ohne Hack mit Tortillas", channel: "Canans Rezepte" },
   couscous_salat: { youtubeId: "Mphzn89dDms", title: "Couscous Salat mit Gemüse & Feta (Rezept) || Couscous Salad with Veggies & Feta || [ENG SUBS]", channel: "ichkocheheute" },
-  erbsensuppe: { youtubeId: "p-yh3NJDz8o", title: "Erbsensuppe nach Bundeswehr Art - Rezept", channel: "Annas Food Stories" },
+  erbsensuppe: { youtubeId: "BD9GVFSGCks", title: "Erbsensuppe - Schnell und Einfach [Rezept] - Vegan", channel: "Zentrum der Gesundheit" },
   flammkuchen: { youtubeId: "hmRZr8PBhME", title: "Einfacher Flammkuchen in Minuten mit Speck und Zwiebeln", channel: "Nobbi's Kochstunde" },
   frikadellen_rotkohl: { youtubeId: "OI_pUjzkvs4", title: "Frikadellen mit Rotkohl und Salzkartoffeln #kochen #karinaskochecke", channel: "Karinas Kochecke" },
   garnelen_pasta: { youtubeId: "uQ95wsl1jrA", title: "Spaghetti mit Tomaten Sahne Sauce & Garnelen || Pasta with Tomato Cream Sauce & Prawns || [ENG SUBS]", channel: "ichkocheheute" },
@@ -142,7 +146,7 @@ export const RECIPE_VIDEOS: Record<string, YoutubeVideo> = {
   m_strammer_max: { youtubeId: "OzMAoNWPog0", title: "Original Strammer Max: Deftiges Bratbrot, saftiger Schinken & flüssiges Spiegelei", channel: "Beffs Food Garage" },
   m_szegediner_gulasch: { youtubeId: "OTvd5j2x24E", title: "Rezept Kartoffelgulasch nach Szegediner Art mit Spreewaldgurken - by Sternekoch Max Strohe", channel: "Vivantes" },
   m_thunfisch_broetchen: { youtubeId: "IffdyqcMb74", title: "Leckerer Thunfisch-Aufstrich: Einfaches Rezept zum Nachmachen!", channel: "Karinas Kochecke" },
-  v_aglio_olio_brokkoli: { youtubeId: "FyclTRT0WRE", title: "Spaghetti aglio e olio mit Garnelen - eine Geschmacksexplosion 💥🤤", channel: "Gennaros einfache Küche" },
+  v_aglio_olio_brokkoli: { youtubeId: "LtPErNS8SNc", title: "Brokkoli Spaghetti Rezept vegan - Der Bio Koch #93", channel: "Der Bio Koch" },
   v_bananenbrot: { youtubeId: "xubR3BvpWYI", title: "Einfaches Veganes Bananenbrot (mit Walnüssen und Schokoraspeln)", channel: "BlobTV -" },
   v_blaubeer_pancakes: { youtubeId: "Yhb8FzYVR1o", title: "Thermomix - Vegane Blaubeer-Pancakes / Pfannkuchen - Glutenfrei", channel: "Angelita" },
   v_bohnenburger: { youtubeId: "YF9xn6qUeWo", title: "Gaumen Kino: Veggie Burger mit schwarzen Bohnen", channel: "SPAR Handels AG Schweiz" },
@@ -150,11 +154,11 @@ export const RECIPE_VIDEOS: Record<string, YoutubeVideo> = {
   v_congee_tofu: { youtubeId: "1BrLMbyG2mo", title: "REISCONGEE Zubereitung nach TCM - bekömmlich, nährend und aufbauend!", channel: "TCM Ernährung mit Anna Reschreiter von annatsu" },
   v_enchiladas_suesskartoffel: { youtubeId: "oy1_h236zh8", title: "Enchiladas aus schwarzen Bohnen und Süßkartoffeln-ein herzhaftes, nahrhaftes Gericht, perfekt f...", channel: "D1tv" },
   v_englisches_fruehstueck: { youtubeId: "hzrRKI1PZ1E", title: "Englisches Frühstück voller Geschmack (zu 100 % vegan!)", channel: "BOSH!" },
-  v_erbsen_risotto: { youtubeId: "kAM8fX1ZmLE", title: "Zitronenhähnchen auf Erbsen-Risotto", channel: "PuderzuckerZauberland" },
+  v_erbsen_risotto: { youtubeId: "OGHA9Y_eMyo", title: "Vegan Mushroom and Pea Risotto", channel: "Vegan Cocotte" },
   v_fasolada: { youtubeId: "P7pI7jVWkOM", title: "Griechische Bohnensuppe (Fasolada) - Suppenwoche Rezepte", channel: "Beas Rezepte und Ideen" },
   v_fruehstuecks_burrito: { youtubeId: "P1q4QMdbqCY", title: "der BESTE VEGANE FRÜHSTÜCKS-BURRITO! Wie Corner Cottage in Burbank, nur BESSER!", channel: "Thee Burger Dude" },
   v_gefuellte_auberginen: { youtubeId: "7ppMo_4D29k", title: "Türkische gefüllte Auberginen mit Bulgur und Kichererbsen - Vegan", channel: "Bianca Zapatka - Vegane Rezepte" },
-  v_gemuese_biryani: { youtubeId: "f84fH5yEVoI", title: "Chicken Biryani // Mit Cashews & Rosinen // #yumtamtam", channel: "yumtamtam" },
+  v_gemuese_biryani: { youtubeId: "h7cMPGrdKgY", title: "Homemade Vegan Biryani Recipe!", channel: "BOSH!" },
   v_gemuese_tajine: { youtubeId: "8_ZCUESUwDA", title: "Gemüse | Tajine | Couscous | Lidl Kochen", channel: "Lidl" },
   v_harira: { youtubeId: "uxIldq3wK3E", title: "Harira: Linsensuppe mit Kichererbsen, frischen Kräutern & Tomaten", channel: "Einfach nur Marcel" },
   v_kartoffelgulasch: { youtubeId: "vGTlT5AEtFA", title: "Veganes Kartoffelgulasch mit Räuchertofu - Einfach und Gesund - Gulasch Vegan! | Vegane Rezepte", channel: "Unsere Vegane Küche" },
@@ -162,7 +166,7 @@ export const RECIPE_VIDEOS: Record<string, YoutubeVideo> = {
   v_kuerbis_curry_tofu: { youtubeId: "w0JcrL43-k8", title: "KÜRBIS CURRY mit Tofu: EINFACHES Rezept für mehr Leute. VEGAN. Gesund.", channel: "YangYangs Küche" },
   v_linsen_lasagne: { youtubeId: "NZqsZrYt_Bs", title: "Gemüselasagne - einfache Zubereitung - pflanzliches Eiweiß aus Linsen - so schmecken Linsen jedem 😋", channel: "All You Feed | leckere Rezepte" },
   v_linsen_shepherds_pie: { youtubeId: "PXrdSJPYL8c", title: "Vegan Shepherds Pie: Rezept mit Linsenbolo", channel: "Skills4millennials" },
-  v_mapo_tofu: { youtubeId: "j-yOmsW0fFE", title: "REZEPT: Mapo Tofu | Szechuan Küche | authentisch chinesisch kochen", channel: "yamyamfoods" },
+  v_mapo_tofu: { youtubeId: "Qx3ug1FZzCw", title: "Sichuan Native Makes Authentic Mapo Tofu (100% Vegan)", channel: "Lionel Zeng" },
   v_masala_oats: { youtubeId: "QqKavWH1FQs", title: "Gesunde Haferflocken mit Gemüse - Frühstück auf indische Art", channel: "Lucky Recipes" },
   v_mujaddara: { youtubeId: "LSLSugEhmGo", title: "1000 Year Old Middle Eastern Comfort Food - Mujaddara", channel: "Hungry Man Kitchen" },
   v_nasi_goreng_tempeh: { youtubeId: "QSy_5tVBhKU", title: "Gebratener Reis für Vegetarier | Nasi Goreng Tempeh | Wie man Tempeh kocht |", channel: "Fleurdwi Cooking" },
@@ -182,9 +186,9 @@ export const RECIPE_VIDEOS: Record<string, YoutubeVideo> = {
   vg_eier_curry: { youtubeId: "lI01NBrS1r8", title: "Ich koche REIS CURRY mit EIERN wenn ich nicht so viel Zeit habe,es schmeckt so köstlich", channel: "Ra_dia Khan" },
   vg_eiermuffins: { youtubeId: "uBw7ExfwksM", title: "Spinat-Feta-Käse-Eier-Muffins", channel: "Bubli's World Cuisine" },
   vg_eiernockerl: { youtubeId: "oi3YvFZsHdY", title: "leckere Rezepte OÖ 🇦🇹 Omas Eiernockerl Rezept/ Hauptspeise mit Salat/Nockerlteig Rezept", channel: "leckereRezepteOÖ " },
-  vg_enchiladas: { youtubeId: "Ibp9B3_JZgQ", title: "Kerstins heiße Küche - Enchiladas mit Huhn und Bohnenmus (Rezept)", channel: "Kerstins heiße Küche" },
+  vg_enchiladas: { youtubeId: "CyyjGotcEBE", title: "Vegetarische Enchiladas mit schwarzen Bohnen | Jamie Oliver auf Deutsch", channel: "Jamie Oliver | Auf Deutsch" },
   vg_fajitas: { youtubeId: "dZU34ofhwA0", title: "Gemüse-Fajitas sind ein farbenfrohes, nahrhaftes und vielseitiges vegetarisches Mittagessen", channel: "Kochen mit K Carrie" },
-  vg_gefuellte_zucchini: { youtubeId: "SAnD9YO2bSQ", title: "Gefüllte Zucchini - mit Hackfleich Paprika und Feta - Rezept Low Carb", channel: "Pidi cooks" },
+  vg_gefuellte_zucchini: { youtubeId: "V7PprTX46Ag", title: "Vegetarisch gefüllte Zucchini mit Feta", channel: "Heisse Himbeeren" },
   vg_gnocchi_sorrentina: { youtubeId: "bbay082qGZc", title: "GEBACKENE GNOCCHI MIT TOMATO UND MOZZARELLA (Gnocchi Alla Sorrentina): italienisches Rezept", channel: "GialloZafferano" },
   vg_halloumi_bulgur: { youtubeId: "5T7Dy2rLubA", title: "Veggie Bulgur Pfanne mit Paprika & Halloumi (Rezept) || Bulgur Stir Fry with Paprika & Halloumi", channel: "ichkocheheute" },
   vg_huevos_rancheros: { youtubeId: "9n4h1fv-VBw", title: "Huevos Rancheros🇲🇽| Traditional Mexican Breakfast", channel: "Janet’s Kitchen" },
@@ -198,7 +202,7 @@ export const RECIPE_VIDEOS: Record<string, YoutubeVideo> = {
   vg_pasta_alla_norma: { youtubeId: "9Dokt_ahygk", title: "Schnelles Pasta alla Norma-Rezept von Steffen Henssler", channel: "Hensslers Schnelle Nummer" },
   vg_quarkkeulchen: { youtubeId: "zynpXuVQFiU", title: "Quarkkeulchen // Mit winterlichem Apfelmus // #yumtamtam", channel: "yumtamtam" },
   vg_ricotta_toast: { youtubeId: "BmIkkBUzPYA", title: "Rezept Ricotta-Toast mit heißer Birne und Honig", channel: "Biofarma. Tu herbolario y parafarmacia online." },
-  vg_risotto_primavera: { youtubeId: "6CnHqnKwOc8", title: "Zucchini - Erbsen -  Hähnchen - Risotto", channel: "Anna Simona" },
+  vg_risotto_primavera: { youtubeId: "wBMBpkbss0I", title: "Vegetarisches Gemüserisotto || Vegetable Risotto Rice (Recipe) || [ENG SUBS]", channel: "ichkocheheute" },
   vg_schupfnudeln_sauerkraut: { youtubeId: "UleAq1Cn828", title: "Schupfnudeln mit Sauerkraut - saftig und knusprig zugleich", channel: "Andi kocht" },
   vg_senfeier: { youtubeId: "kgjGHDg08Aw", title: "Senfeier mit Kartoffeln schnell selbst gemacht", channel: "Jasmin‘s Einfache Rezepte" },
   vg_spinatknoedel: { youtubeId: "3ZE4XXYz7AM", title: "Südtiroler Spinatknödel – Rezept mit Parmesan & brauner Butter 🥬🧈 | REWE Deine Küche", channel: "REWE Deine Küche" },

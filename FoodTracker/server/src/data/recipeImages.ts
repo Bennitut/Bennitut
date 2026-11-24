@@ -5,9 +5,14 @@ import type { RecipeMedia } from "../types.js";
  * CC BY, CC BY-SA). Gefunden über Openverse (Wikimedia Commons, Flickr), einzeln geprüft.
  * Urheber und Lizenz werden in der App angezeigt; "source" verlinkt die Originalseite.
  * Die Fotos werden unverändert angezeigt. Rezepte ohne passendes Foto zeigen einen Platzhalter.
- * Vegetarische und vegane Rezepte bekommen nur Fotos, deren Titel an der Quelle (Flickr-Titel bzw. Dateiname bei
- * Wikimedia) kein Fleisch und keinen Fisch nennt – am 24.11.2026 für alle geprüft; entfernt wurden u. a. „ribeye and
- * baked potato“ bei den Ofenkartoffeln und „Chicken and Pumpkin Risotto“ beim Kürbisrisotto.
+ * Vegetarische und vegane Rezepte bekommen nur Fotos, deren Angaben an der Quelle (Titel, Beschreibung und Schlagwörter
+ * bei Flickr bzw. Dateiname, Beschreibung und Kategorien bei Wikimedia) kein Fleisch und keinen Fisch im gezeigten Gericht
+ * nennen – am 24.11.2026 für alle geprüft. Entfernt wurden u. a. „ribeye and baked potato“ bei den Ofenkartoffeln,
+ * „Chicken and Pumpkin Risotto“ beim Kürbisrisotto, Speck (Schlagwort „bacon“) bei der Kartoffel-Lauch-Suppe, ein
+ * Schinkenknochen bei der Erbsensuppe und Fischsauce bei der Kürbis-Kokos-Suppe (laut Beschreibung).
+ * Ersetzt wird nur durch ein Foto, dessen Quelle ausdrücklich die vegetarische Variante nennt („Vegan mapo tofu“, „Corn
+ * and bean enchiladas“, „Red Lentils“) und weder Fleisch noch Fisch; sonst Platzhalter. Fotos, die es an der Quelle
+ * nicht mehr gibt, fliegen ebenfalls raus (Flickr: „no longer exists“).
  */
 export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = {
   aelplermagronen: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/%C3%84lplermagronen_2021.jpeg/500px-%C3%84lplermagronen_2021.jpeg", credit: "Adrian Michael · CC BY-SA 4.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=108520537" },
@@ -19,7 +24,6 @@ export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = 
   chili_con_carne: { uri: "https://live.staticflickr.com/8164/7556966148_a1665bee3b_z.jpg", credit: "cyclonebill · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/23178876@N03/7556966148" },
   chili_sin_carne: { uri: "https://live.staticflickr.com/7003/6734016371_5ab91dac73_z.jpg", credit: "EBKauai · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/13470115@N08/6734016371" },
   couscous_salat: { uri: "https://live.staticflickr.com/6137/5955307155_dd3ac30419_z.jpg", credit: "Rooey202 · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/50284194@N00/5955307155" },
-  erbsensuppe: { uri: "https://live.staticflickr.com/5529/11579080605_7fa94d93c8_z.jpg", credit: "cogdogblog · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/37996646802@N01/11579080605" },
   flammkuchen: { uri: "https://live.staticflickr.com/198/514471722_d8fa6caa99_z.jpg", credit: "lulu cooks · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/51914917@N00/514471722" },
   frikadellen_rotkohl: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Frikadeller.jpg/500px-Frikadeller.jpg", credit: "This image was taken by Kenneth Jorgensen (gallery).Please attribute this image  · CC BY-SA 3.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=1670921" },
   garnelen_pasta: { uri: "https://live.staticflickr.com/325/18893300233_687920c825_z.jpg", credit: "Prayitno / Thank you for (12 millions +) view · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/34128007@N04/18893300233" },
@@ -34,8 +38,6 @@ export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = 
   kabeljau_ofen: { uri: "https://live.staticflickr.com/2232/2262396498_7ac7ceb61c_z.jpg", credit: "methTICALman · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/46614245@N00/2262396498" },
   kaesespaetzle: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/2015_0718_K%C3%A4sesp%C3%A4tzle_S%C3%B6lden.jpg/500px-2015_0718_K%C3%A4sesp%C3%A4tzle_S%C3%B6lden.jpg", credit: "Takeaway · CC BY-SA 4.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=42341726" },
   kaiserschmarrn: { uri: "https://live.staticflickr.com/2162/2223774449_a1ed533259_z.jpg", credit: "Seph Swain · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/23149749@N08/2223774449" },
-  kartoffel_frittata: { uri: "https://live.staticflickr.com/4124/5182567699_14a9edcda5_z.jpg", credit: "jeffreyw · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/7927684@N03/5182567699" },
-  kartoffel_lauch_suppe: { uri: "https://live.staticflickr.com/2619/5849815506_01b3b49ae3_z.jpg", credit: "jeffreyw · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/7927684@N03/5849815506" },
   kartoffelgratin: { uri: "https://live.staticflickr.com/41/74902457_f160600f0e_z.jpg", credit: "Bruno Girin · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/16405999@N00/74902457" },
   kartoffelpuffer: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Potato_pancakes.jpg/500px-Potato_pancakes.jpg", credit: "Photo made by Daniel Spils and uploaded to flickr.com · CC BY-SA 2.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=853277" },
   kartoffelsalat_schwaebisch: { uri: "https://live.staticflickr.com/7227/6997025911_1190d6e014_z.jpg", credit: "Cooking etc. · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/75467868@N07/6997025911" },
@@ -43,11 +45,10 @@ export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = 
   kichererbsen_curry: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Chana_masala.jpg/500px-Chana_masala.jpg", credit: "Simon Law (sfllaw) from Montréal, QC, Canada · CC BY-SA 2.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=1235151" },
   kokossuppe_haehnchen: { uri: "https://live.staticflickr.com/4038/4692424284_ae53507dd3_z.jpg", credit: "Edsel L · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/27119975@N00/4692424284" },
   krautfleckerl: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Krautfleckerl.jpg/500px-Krautfleckerl.jpg", credit: "Kobako · CC BY-SA 2.5 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=738049" },
-  kuerbissuppe: { uri: "https://live.staticflickr.com/106/313561882_5830e604fe_z.jpg", credit: "stu_spivack · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/35034346243@N01/313561882" },
   lachs_spinatreis: { uri: "https://live.staticflickr.com/2345/2179131969_2b5622f2da_z.jpg", credit: "Charles P. · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/7210687@N08/2179131969" },
   lachs_teriyaki: { uri: "https://live.staticflickr.com/3146/2993613849_1873612de4_z.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/2993613849" },
   lasagne: { uri: "https://live.staticflickr.com/4067/4702577609_a136820e9e_z.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/4702577609" },
-  linsen_bolognese: { uri: "https://live.staticflickr.com/3225/3010491574_5d53864e87_z.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/3010491574" },
+  linsen_bolognese: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/Pasta%2C_Tomato_Sauce%2C_Red_Lentils_%26_Sprouts_%284368525956%29.jpg/500px-Pasta%2C_Tomato_Sauce%2C_Red_Lentils_%26_Sprouts_%284368525956%29.jpg", credit: "Katrin Gilger · CC BY-SA 2.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=89958555" },
   linsen_dal: { uri: "https://live.staticflickr.com/7030/6833121275_f2fac36264_z.jpg", credit: "Tom Ipri · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/34989799@N00/6833121275" },
   linsen_spaetzle: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Linsen_Spaetzle_2.jpg/500px-Linsen_Spaetzle_2.jpg", credit: "K. Jähne, cooking by B. Gross, Merops image editing · CC BY-SA 3.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=1207020" },
   linseneintopf: { uri: "https://live.staticflickr.com/50/152446075_72c2a9a3d0.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/152446075" },
@@ -90,7 +91,6 @@ export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = 
   omelett_gemuese: { uri: "https://live.staticflickr.com/3923/15109938101_d9f9949b6f_z.jpg", credit: "ray_explores · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/66801522@N00/15109938101" },
   overnight_oats: { uri: "https://live.staticflickr.com/3692/10152805073_11dcb285c7_z.jpg", credit: "simpleprovisions · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/80665970@N03/10152805073" },
   pad_thai: { uri: "https://live.staticflickr.com/2365/2387448684_912969a41b_z.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/2387448684" },
-  pancakes: { uri: "https://live.staticflickr.com/2056/13148136343_b9c3ba241c.jpg", credit: "dollen · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/39804614253@N01/13148136343" },
   pesto_nudeln: { uri: "https://live.staticflickr.com/8320/7891158180_fdb84296ed_z.jpg", credit: "tomatoes and friends · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/49845772@N03/7891158180" },
   pfannkuchen: { uri: "https://live.staticflickr.com/5640/21224673115_12e16c1a8a_z.jpg", credit: "Sean MacEntee · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/18090920@N07/21224673115" },
   pilzrisotto: { uri: "https://live.staticflickr.com/7157/6703097183_e537063c3d_z.jpg", credit: "SaucyGlo · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/67238971@N04/6703097183" },
@@ -113,7 +113,6 @@ export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = 
   suesskartoffel_hash: { uri: "https://live.staticflickr.com/3341/3268344196_f18fbf83d3_z.jpg", credit: "thebittenword.com · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/22198928@N00/3268344196" },
   tacos_hack: { uri: "https://live.staticflickr.com/5517/12525671195_2f47b4811c_z.jpg", credit: "jeffreyw · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/7927684@N03/12525671195" },
   thunfisch_salat: { uri: "https://live.staticflickr.com/23/29156794_7d4174f8a7.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/29156794" },
-  tofu_gemuese: { uri: "https://live.staticflickr.com/70/216875127_8ba935cbc6_z.jpg", credit: "Augapfel · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/47038415@N00/216875127" },
   tofu_scramble: { uri: "https://live.staticflickr.com/2038/2451696679_580e0cdcb4_z.jpg", credit: "rusvaplauke · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/7440954@N05/2451696679" },
   v_aglio_olio_brokkoli: { uri: "https://live.staticflickr.com/5540/11422999135_fcd32615a8_z.jpg", credit: "Vassilis Online · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/42741557@N05/11422999135" },
   v_bananenbrot: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/Banana_bread_loaf_on_a_plate.jpg/500px-Banana_bread_loaf_on_a_plate.jpg", credit: "Orangetopic · CC BY 2.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=10389369" },
@@ -128,9 +127,8 @@ export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = 
   v_kartoffelgulasch: { uri: "https://live.staticflickr.com/7087/7128865539_7055090649_z.jpg", credit: "Katrin Gilger · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/26242865@N04/7128865539" },
   v_krautwickel_linsen: { uri: "https://live.staticflickr.com/107/301157207_71f93ad65a_z.jpg", credit: "codersquid · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/45421351@N00/301157207" },
   v_linsen_shepherds_pie: { uri: "https://live.staticflickr.com/8198/8227698373_0598d6de4f_z.jpg", credit: "SodanieChea · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/41942551@N02/8227698373" },
-  v_mapo_tofu: { uri: "https://live.staticflickr.com/2106/2268560276_ef078caa43_z.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/2268560276" },
+  v_mapo_tofu: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Vendels_f%C3%B6rlags_planeringshelg_2%E2%80%934_maj_2025_14.jpg/500px-Vendels_f%C3%B6rlags_planeringshelg_2%E2%80%934_maj_2025_14.jpg", credit: "Johan Jönsson (Julle) · CC BY-SA 4.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=164690201" },
   v_masala_oats: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Masala_Oats_by_Dr._Raju_Kasambe_DSCN7840_%288%29.jpg/500px-Masala_Oats_by_Dr._Raju_Kasambe_DSCN7840_%288%29.jpg", credit: "Dr. Raju Kasambe · CC BY-SA 4.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=93269951" },
-  v_nasi_goreng_tempeh: { uri: "https://live.staticflickr.com/2449/3776509083_030679c5b0_z.jpg", credit: "avlxyz · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/10559879@N00/3776509083" },
   v_palak_tofu: { uri: "https://live.staticflickr.com/2188/1517531815_d2551acc04_z.jpg", credit: "rovingI · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/70522326@N00/1517531815" },
   v_pasta_e_fagioli: { uri: "https://live.staticflickr.com/3591/3555836981_4d1f9fa3e0_z.jpg", credit: "WordRidden · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/97844767@N00/3555836981" },
   v_polenta_auberginen: { uri: "https://live.staticflickr.com/3246/2452525166_5dc40293a5_z.jpg", credit: "rusvaplauke · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/7440954@N05/2452525166" },
@@ -143,7 +141,7 @@ export const RECIPE_IMAGES: Record<string, NonNullable<RecipeMedia["image"]>> = 
   vg_cilbir: { uri: "https://live.staticflickr.com/65535/48551201396_e96685ecfc_z.jpg", credit: "oinonio · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/98063230@N00/48551201396" },
   vg_eier_curry: { uri: "https://live.staticflickr.com/6134/5931058622_23be744086_z.jpg", credit: "Rameshng · CC BY-SA 2.0 · Flickr", source: "https://www.flickr.com/photos/39107352@N08/5931058622" },
   vg_eiernockerl: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Eiernockerl_%2820200131_143807%29.jpg/500px-Eiernockerl_%2820200131_143807%29.jpg", credit: "Simon Legner (simon04) · CC BY-SA 4.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=86714873" },
-  vg_enchiladas: { uri: "https://live.staticflickr.com/8220/8288257031_edce5f4418_z.jpg", credit: "jeffreyw · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/7927684@N03/8288257031" },
+  vg_enchiladas: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Corn_and_bean_enchiladas_for_dinner._I%27m_sure_they_won%27t_stay_this_pretty_when_I_serve_them...._-mycookingadventures_-vegcookingadventures_%2838527709944%29.jpg/500px-Corn_and_bean_enchiladas_for_dinner._I%27m_sure_they_won%27t_stay_this_pretty_when_I_serve_them...._-mycookingadventures_-vegcookingadventures_%2838527709944%29.jpg", credit: "transcendancing · CC BY-SA 2.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=110390116" },
   vg_gnocchi_sorrentina: { uri: "https://live.staticflickr.com/5222/5559236990_ef2333326e_z.jpg", credit: "1la · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/81974988@N00/5559236990" },
   vg_halloumi_bulgur: { uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Grilled_Halloumi.jpg/500px-Grilled_Halloumi.jpg", credit: "Hmioannou · CC BY 3.0 · Wikimedia", source: "https://commons.wikimedia.org/w/index.php?curid=12727589" },
   vg_huevos_rancheros: { uri: "https://live.staticflickr.com/5284/5317589202_3d6ed1ca20_z.jpg", credit: "London Chow · CC BY 2.0 · Flickr", source: "https://www.flickr.com/photos/53013126@N07/5317589202" },
