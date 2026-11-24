@@ -1,0 +1,33 @@
+import type { YoutubeVideo } from "../recipeVideos.js";
+
+/** Englischsprachige Kochvideos (English) zu den Katalogrezepten, Schlüssel ist die Rezept-ID (siehe recipeVideos.ts). */
+export const VIDEOS_EN: Record<string, YoutubeVideo> = {
+  burrito_bowl: { youtubeId: "MTMQJwE4l0M", title: "The $3 Healthy Burrito Bowl", channel: "Joshua Weissman" },
+  nudeln_tomate: { youtubeId: "OVvssyXW01Y", title: "Zucchini Tomato Spaghetti| Easiest Zucchini Sauce Pasta| Light & Healthy", channel: "Rinki Mukerjee" },
+  tofu_scramble: { youtubeId: "SkT2jvklpnM", title: "How to Make the BEST Tofu Scramble 🍳 (8 years of testing)", channel: "Steamy Vegan" },
+  m_haehnchen_cacciatore: { youtubeId: "scjQjsqOSQ0", title: "Chicken Cacciatore with Creamy Polenta", channel: "Good Chef Bad Chef" },
+  v_enchiladas_suesskartoffel: { youtubeId: "oy1_h236zh8", title: "Black Bean and Sweet Potato Enchiladas—A hearty, nutritious dish perfect for any occasion.", channel: "D1tv" },
+  v_englisches_fruehstueck: { youtubeId: "hzrRKI1PZ1E", title: "Full Flavour English Breakfast (That's 100% Vegan!)", channel: "BOSH!" },
+  v_erbsen_risotto: { youtubeId: "OGHA9Y_eMyo", title: "Vegan Mushroom and Pea Risotto", channel: "Vegan Cocotte" },
+  v_fruehstuecks_burrito: { youtubeId: "P1q4QMdbqCY", title: "the BEST VEGAN BREAKFAST BURRITO! Like Corner Cottage in Burbank, but BETTER!", channel: "Thee Burger Dude" },
+  v_gemuese_biryani: { youtubeId: "h7cMPGrdKgY", title: "Homemade Vegan Biryani Recipe!", channel: "BOSH!" },
+  v_mapo_tofu: { youtubeId: "Qx3ug1FZzCw", title: "Sichuan Native Makes Authentic Mapo Tofu (100% Vegan)", channel: "Lionel Zeng" },
+  v_mujaddara: { youtubeId: "LSLSugEhmGo", title: "1000 Year Old Middle Eastern Comfort Food - Mujaddara", channel: "Hungry Man Kitchen" },
+  v_nasi_goreng_tempeh: { youtubeId: "QSy_5tVBhKU", title: "Fried rice for vegetarian | Nasi goreng tempeh | How to cook tempeh | superfast nasi goreng", channel: "Fleurdwi Cooking" },
+  v_palak_tofu: { youtubeId: "q6Xu4zto-E0", title: "DELICIOUS Saag Tofu Recipe | Similar to Palak Paneer!", channel: "Yeung Man Cooking" },
+  v_pasta_e_fagioli: { youtubeId: "QSVo-Y7casU", title: "Jacques Pépin's Secret to Tasty Pasta Fagioli Recipe | Cooking at Home | KQED", channel: "KQED" },
+  v_tofu_fajitas: { youtubeId: "fLgStcgbApI", title: "Easy Vegan Tofu Fajitas | Sheet Pan Weeknight Dinner", channel: "Toni Okamoto" },
+  vg_breakfast_burrito: { youtubeId: "M2gsvHk4xNk", title: "Freezable Egg and Black Bean Breakfast Burritos with Potatoes and Cheese | EatSimpleFood.com", channel: "Eat Simple Food" },
+  vg_cilbir: { youtubeId: "grVNJXcpLVU", title: "Any Breakfast Lover NEEDS to Know How to Make This", channel: "Chef Billy Parisi" },
+  vg_eiermuffins: { youtubeId: "uBw7ExfwksM", title: "Spinach feta cheese egg muffins", channel: "Bubli's World Cuisine" },
+  vg_huevos_rancheros: { youtubeId: "9n4h1fv-VBw", title: "Huevos Rancheros🇲🇽| Traditional Mexican Breakfast", channel: "Janet’s Kitchen" },
+  vg_palak_halloumi: { youtubeId: "cxdr2wI2Ktc", title: "Indian Palak Paneer with Halloumi!Simple, easy & healthy 🇮🇳😃بالاك بانير مع حلومي،كتير سهلة و صحية", channel: "eat more by iyad" },
+  vg_zucchini_carbonara: { youtubeId: "4E5AY3g7M2o", title: "Zucchini Carbonara - Quick & creamy like the original but... VEGETARIAN!", channel: "Italian Food Harmony" },
+  w_arroz_con_pollo: { youtubeId: "_wNBr4LwOBk", title: "The FAMOUS Spanish Chicken and Rice | Authentic Arroz con Pollo Recipe", channel: "Spain on a Fork" },
+  w_congee_haehnchen: { youtubeId: "GG0M_hTgWE8", title: "Chicken Congee", channel: "Asian Mom Cooking" },
+  w_fischtacos: { youtubeId: "jUKsTom2z7A", title: "Baja-Style Fish Tacos With Crunchy Slaw And Tangy Lime Crema", channel: "Original Recipes by Mashed" },
+  w_kabsa_haehnchen: { youtubeId: "5qi2gzch3I4", title: "How to Make the Best Arabian Chicken and Rice Kabsa Recipe! Delicious 😋", channel: "هدوء الطبخ Peaceful Cooking" },
+  w_kerala_fischcurry: { youtubeId: "f7qGmEpgQkM", title: "Kerala Fish Curry with coconut Milk | Simple recipe | 25 mins", channel: "Mikes Gourmet Kitchen" },
+  w_picadillo: { youtubeId: "MA680307xHI", title: "Picadillo Cuban Style | Ground Beef Recipes | My Secret Cuisine", channel: "My Secret Cuisine" },
+  w_tajine_haehnchen: { youtubeId: "nzkWBCGUlmk", title: "Moroccan Lemon Chicken Tagine - Ultimate North African Stew", channel: "Pants Down Aprons On" },
+};

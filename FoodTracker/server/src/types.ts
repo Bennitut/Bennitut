@@ -87,6 +87,11 @@ export interface RecipeVideo {
   url: string;
   title?: string;
   author?: string;
+  /**
+   * Sprache des Videos ("de", "en", "fr", "it", "es"); haben die Katalogvideos (recipeVideos.ts). Die App zeigt sie nur
+   * in dieser Sprache. Ohne Angabe (Originalbeitrag eines Imports, selbst eingetragene Links) erscheint das Video immer.
+   */
+  language?: string;
 }
 
 export interface RecipeMedia {

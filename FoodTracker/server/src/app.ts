@@ -61,6 +61,8 @@ export const RecipeBody = z.object({
             url: z.string().url().max(2000),
             title: z.string().max(300).optional(),
             author: z.string().max(200).optional(),
+            // Sprache der Katalogvideos (z. B. in Kopien), damit die App sie nur in dieser Sprache zeigt.
+            language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/).optional(),
           }),
         )
         .max(10)

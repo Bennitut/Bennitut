@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RECIPES, ingredientById } from "../src/data/catalog.js";
+import { RECIPE_VIDEOS, VIDEO_LANGUAGES } from "../src/data/recipeVideos.js";
 import { MONTH_DAYS, planMonth, weekOfDay } from "../src/planner/monthPlanner.js";
 import { matchesPreferences, recipeDiet } from "../src/planner/zeroWastePlanner.js";
 import type { PlanRequest } from "../src/types.js";
@@ -107,23 +108,77 @@ describe("Katalog-Medien", () => {
     expect(RECIPES.filter((r) => r.media?.videos?.length).length).toBeGreaterThanOrEqual(180);
   });
 
-  it("verlinkt bei vegetarischen und veganen Rezepten keine Videos mit Fleisch oder Fisch im Titel", () => {
-    // Auch zusammengesetzte Wörter („Zitronenhähnchen“, „Hackfleich“), aber nicht „ohne Hack“ oder „Palatschinken“.
-    const meatOrFish =
-      /hähnchen|hühnchen|\bhuhn\b|chicken|garnele|shrimp|prawn|hackfleis?ch|(?<!ohne )\bhack\b|\bspeck\b|(?<!palat)schinken|wurst|würstchen|lachs|thunfisch|\bfisch\b|\bbeef\b|\bpork\b|bacon|\bfish\b|salmon|\btuna\b/i;
+  it("verlinkt bei vegetarischen und veganen Rezepten keine Videos mit Fleisch oder Fisch im Titel (fünf Sprachen)", () => {
+    // Auch zusammengesetzte Wörter („Zitronenhähnchen“, „Hackfleich“), aber nicht „ohne Hack“, „Palatschinken“,
+    // „Chili sin carne“, „sans viande“, „meat-free“ oder „lamb's lettuce“ (Feldsalat).
+    const meatOrFish = new RegExp(
+      [
+        // Deutsch
+        "hähnchen|hühnchen|\\bhuhn\\b|hühner|hendl|garnele|krabben|hackfleis?ch|(?<!ohne )\\bhack\\b|\\bspeck\\b|(?<!palat)schinken|wurst|würstchen|lachs|thunfisch|\\bfisch|rindfleisch|rinder|schweine?fleisch|\\bkalb|\\blamm|\\bpute|meeresfrüchte|sardellen",
+        // Englisch
+        "chicken|shrimp|prawn|\\bbeef\\b|\\bpork\\b|bacon|\\bham\\b|sausage|\\bfish\\b|salmon|\\btuna\\b|anchov|seafood|\\bcrab\\b|\\bduck\\b|\\blamb\\b(?!'s lettuce)|(?<!(no|without|vegan|fake|plant-based) )\\bmeat\\b(?![- ]?(free|less|substitute|alternative))",
+        // Französisch
+        "poulet|\\bporc\\b|b(œ|oe)uf|\\bveau\\b|agneau|jambon|lardons?|saucisse|poisson|saumon|\\bthon\\b|crevette|fruits de mer|canard|(?<!sans )viande",
+        // Italienisch (pollo und carne auch Spanisch)
+        "pollo|manzo|maiale|vitello|agnello|prosciutto|pancetta|guanciale|salsiccia|\\bpesce|salmone|tonno|gamber|acciugh|frutti di mare|(?<!(senza|sin|sans) )\\bcarne\\b",
+        // Spanisch
+        "cerdo|ternera|jam(ó|o)n|tocino|chorizo|pescado|salm(ó|o)n|at(ú|u)n|camarones|gambas|langostino|mariscos|anchoa",
+      ].join("|"),
+      "i",
+    );
     let checked = 0;
     for (const r of RECIPES) {
       const diet = recipeDiet(r, ingredientById);
       if (diet !== "vegetarisch" && diet !== "vegan") continue;
       for (const video of r.media?.videos ?? []) {
-        expect(video.title ?? "", r.id).not.toMatch(meatOrFish);
+        expect(video.title ?? "", `${r.id} (${video.language})`).not.toMatch(meatOrFish);
         checked++;
       }
     }
     expect(checked).toBeGreaterThan(100);
-    // Gegenprobe: Die früher verlinkten Titel wären aufgefallen.
-    for (const title of ["Zitronenhähnchen auf Erbsen-Risotto", "Gefüllte Zucchini - mit Hackfleich Paprika und Feta", "Chicken Biryani"]) {
+    // Gegenprobe: Die früher verlinkten Titel und typische Titel in den anderen Sprachen wären aufgefallen …
+    for (const title of [
+      "Zitronenhähnchen auf Erbsen-Risotto",
+      "Gefüllte Zucchini - mit Hackfleich Paprika und Feta",
+      "Chicken Biryani",
+      "Lentil soup with bacon",
+      "Classic meat lasagna",
+      "Poulet basquaise",
+      "Quiche lorraine aux lardons",
+      "Spaghetti alla carbonara con guanciale",
+      "Ragù di carne",
+      "Tacos de pescado",
+      "Lentejas con chorizo",
+    ]) {
       expect(title).toMatch(meatOrFish);
     }
+    // … diese hier nicht.
+    for (const title of ["Veganes Chili sin Carne", "Palatschinken mit Marmelade", "Lentil bolognese (meat-free)", "Lamb's lettuce salad", "Bolognaise sans viande", "Ragù senza carne"]) {
+      expect(title).not.toMatch(meatOrFish);
+    }
+  });
+
+  it("ordnet jedes Video genau einer der fünf Sprachen zu, höchstens eines je Sprache und Rezept", () => {
+    const recipeIds = new Set(RECIPES.map((r) => r.id));
+    const youtubeIds = new Set<string>();
+    for (const language of VIDEO_LANGUAGES) {
+      for (const [recipeId, video] of Object.entries(RECIPE_VIDEOS[language])) {
+        // Nur Rezepte aus dem Katalog (sonst ein Tippfehler in der Rezept-ID).
+        expect(recipeIds.has(recipeId), `${language}/${recipeId}`).toBe(true);
+        expect(video.youtubeId, `${language}/${recipeId}`).toMatch(/^[\w-]{11}$/);
+        expect(video.title.trim(), `${language}/${recipeId}`).not.toBe("");
+        expect(video.channel.trim(), `${language}/${recipeId}`).not.toBe("");
+        // Ein Video gehört zu einem Rezept und einer Sprache.
+        expect(youtubeIds.has(video.youtubeId), `${language}/${recipeId} doppelt`).toBe(false);
+        youtubeIds.add(video.youtubeId);
+      }
+    }
+    for (const r of RECIPES) {
+      const languages = (r.media?.videos ?? []).map((v) => v.language);
+      for (const language of languages) expect(VIDEO_LANGUAGES as readonly (string | undefined)[], r.id).toContain(language);
+      expect(new Set(languages).size, r.id).toBe(languages.length);
+    }
+    // Stand 24.11.2026: 193 deutsche Videos; die übrigen Sprachen kommen nach und nach dazu (siehe BACKLOG.md).
+    expect(Object.keys(RECIPE_VIDEOS.de).length).toBeGreaterThanOrEqual(190);
   });
 });
