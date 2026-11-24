@@ -12,7 +12,8 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Foto eines Kassenbons** | Claude liest jede Position (REWE, BILLA, Migros …), ordnet sie Zutaten zu und rechnet Mengen um → Vorrat. |
 | **Fragebogen** | Beim ersten Planen fragt die App nach Ernährungsweise (alles, pescetarisch, vegetarisch, vegan), religiösen Speiseregeln (halal, koscher), Unverträglichkeiten, Abneigungen, Ziel und Körperdaten (daraus der Kalorienbedarf), Personen, Mahlzeiten, Kochzeit, Lieblingsküchen, Budget und Abwechslung. |
 | **Monatsplan** | Plant immer 30 Tage in vier Wochenblöcken mit je eigener Einkaufsliste; Reste und Vorräte einer Woche gehen in die nächste. Der Plan richtet sich nach den Antworten aus dem Fragebogen. Optional schlägt Claude neue Rezepte nach Wunsch vor. |
-| **Profil (👤)** | Ernährungshistorie (7/30 Tage mit Kalorien pro Tag, Durchschnitt, Makros, häufigste Gerichte), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
+| **Profil (👤)** | Ernährungshistorie (7 Tage, 30 Tage, 1 Jahr oder alles – Kalorien pro Tag, Woche oder Monat, Durchschnitt pro erfasstem Tag, Makros, häufigste Gerichte, alle erfassten Tage zum Blättern), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
+| **Historie sichern** | Das Tagebuch wird nie automatisch gelöscht und liegt in einem eigenen Speicher (auch wenn Fotos den übrigen Speicher füllen; scheitert das Speichern, erscheint ein Hinweis). Mit Server wird es automatisch gesichert – mit Konto kommt es auf einem neuen Gerät oder nach dem Löschen der Browserdaten zurück. Ohne Server und Konto: Export als Tabelle (CSV) oder Sicherung (JSON) und Import ohne Duplikate. |
 | **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
 | **Konten & Rollen** | Anmeldung mit Apple oder Google (optional – die App funktioniert auch anonym). Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
@@ -45,7 +46,7 @@ FoodTracker/
 │   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
-│   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten)
+│   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten, Tagebuch und Historie)
 ├── docs/recht/   Entwürfe für Impressum und Datenschutzerklärung (Österreich) mit Platzhaltern für die eigenen Angaben
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 ├── reports/      Tagesberichte der Nachtschicht als PDF (make-report.cjs, Test: node --test reports/make-report.test.cjs)
@@ -56,6 +57,7 @@ FoodTracker/
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
+    ├── src/diary/        Sicherung der Ernährungshistorie (eine Datei pro Konto bzw. Gerät unter data/diary/)
     ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und Video-Link
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
 ```
@@ -174,10 +176,14 @@ aufruft (mit den Einkaufslisten ist jedes Gericht kochbar), Neuplanen und Tausch
 die Übersetzungen (gleiche Platzhalter in allen Sprachen, kein doppeltes Emoji in Kartentiteln), die Rezepttexte
 je Sprache (Fallback auf Englisch, wann „Übersetzen“ erscheint, mit KI verbesserte Texte), die langen Rezeptlisten
 („Entdecken“ und Tauschen zeigen zuerst 30 Rezepte, Sortierung nach Bewertung) und „Abgehaktes in den Vorrat“ (ganze
-Packungen, nichts doppelt – auch nicht, wenn danach eine Bestellung geliefert wird).
+Packungen, nichts doppelt – auch nicht, wenn danach eine Bestellung geliefert wird) sowie Tagebuch und Historie (Umzug
+aus dem alten Speicherort, nichts wird automatisch gelöscht, Löschmarken, Abgleich mit dem echten Server-Speicher,
+Auswertung bis „Alles“, CSV und Import ohne Duplikate).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
-abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal) und
-zuletzt, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen; er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
+abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal),
+prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen, und zuletzt die
+Ernährungshistorie (Umzug in den eigenen Speicher, „Alles“, Export, Import nach gelöschten Browserdaten, Hinweis bei
+vollem Speicher); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet
@@ -224,7 +230,8 @@ und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
 - Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → Anmelden
   die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
 
-Konten, Sitzungen und Admin-Änderungen an Rezepten liegen in `data/users.json` und `data/recipe-overrides.json`.
+Konten, Sitzungen und Admin-Änderungen an Rezepten liegen in `data/users.json` und `data/recipe-overrides.json`, die
+Sicherung der Ernährungshistorie in `data/diary/` (eine Datei pro Konto bzw. Geräte-ID, `DIARY_DIR`).
 
 ## Instagram und TikTok
 
@@ -264,7 +271,7 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 ## Nächste Schritte
 
 - Echten Lieferdienst-Partner anbinden
-- Nutzerkonten und Synchronisierung zwischen Geräten
+- Plan, Vorrat und eigene Rezepte zwischen Geräten abgleichen (das Tagebuch wird schon gesichert)
 - Zutatenkatalog an eine Produktdatenbank (z. B. Open Food Facts) anbinden, Barcode-Scan
 - „Teilen“-Menü von Instagram/TikTok direkt in die App (Share Extension)
 - Mehrere Lieferungen pro Plan für sehr verderbliche Zutaten (Fisch, Fleisch)

@@ -45,6 +45,10 @@ des Browsers („Local Storage“) für die Adresse der Web-Version:
 - eine zufällig erzeugte Geräte-Kennung (ohne Server wird sie nirgendwohin geschickt) und
 - in der Web-Version, ob du den Hinweis „Als App nutzen“ mit „Später“ ausgeblendet hast.
 
+Im Profil kannst du deine Ernährungshistorie als Datei speichern („Als Tabelle (CSV)“ oder „Als Sicherung (JSON)“)
+und eine solche Sicherung wieder importieren. Die Datei landet dort, wo du sie speicherst oder hin teilst – FoodTracker
+schickt sie nirgendwohin.
+
 Diese Daten verlassen dein Gerät nicht; ich habe keinen Zugriff darauf. Einige davon sind sensibel
 (Unverträglichkeiten und Körperdaten sind Gesundheitsdaten, Speiseregeln können auf deine Religion schließen lassen)
 – auch sie bleiben ausschließlich auf deinem Gerät.
@@ -193,6 +197,29 @@ und an einer Community ohne Missbrauch (Art. 6 Abs. 1 lit. f DSGVO). [[ANGABE: S
 
 [[ANGABE: Anbieter und was übermittelt wird (Einkaufsliste, Lieferadresse …). Heute gibt es nur einen
 Demo-Lieferdienst ohne echte Lieferung.]]
+
+### B6. Sicherung der Ernährungshistorie
+
+Sobald FoodTracker einen Server erreicht, sichert es dein Tagebuch dort automatisch: Tag und Uhrzeit, Name des
+Gerichts, Kalorien, Eiweiß, Kohlenhydrate und Fett, woher der Eintrag stammt (Foto, Plan, von Hand) und wann er
+zuletzt geändert wurde. Bist du angemeldet, gehört die Sicherung zu deinem Konto – so kommt deine Historie auf einem
+neuen Gerät oder nach dem Löschen der Browserdaten zurück –, sonst zur zufälligen Geräte-Kennung aus Abschnitt 2.
+Löschst du einen Eintrag, löscht FoodTracker ihn auch auf dem Server; dort bleibt nur eine Löschmarke (Kennung des
+Eintrags und Zeitpunkt, ohne Inhalt), damit er von deinen anderen Geräten nicht zurückkommt.
+
+[[PRÜFEN: Was und wie viel jemand isst, kann Rückschlüsse auf die Gesundheit zulassen (etwa bei einer Diät oder
+Erkrankung) und dann als Gesundheitsdatum nach Art. 9 DSGVO gelten. Sicherer Weg: die Sicherung erst nach einer
+ausdrücklichen Einwilligung starten (gemeinsam mit der Einwilligung für die KI-Funktionen, B3) und im Profil
+abschaltbar machen. Heute startet sie ohne Nachfrage, sobald ein Server erreichbar ist – für den Test auf dem eigenen
+Laptop unkritisch, vor einem Server für andere klären.]]
+
+Rechtsgrundlage: [[ENTSCHEIDUNG: Bereitstellung der gewünschten Sicherung (Art. 6 Abs. 1 lit. b DSGVO) oder – wenn
+die Einträge als Gesundheitsdaten gelten – deine ausdrückliche Einwilligung (Art. 6 Abs. 1 lit. a und Art. 9 Abs. 2
+lit. a DSGVO), siehe oben.]] Speicherdauer: [[ANGABE: z. B. bis du dein Konto löschst bzw. bis … nach der letzten
+Nutzung einer Geräte-Kennung – „Konto löschen“ fehlt noch, siehe B2.]]
+
+Unabhängig vom Server kannst du deine Historie im Profil jederzeit als Datei speichern und wieder importieren
+(Abschnitt 2).
 
 ---
 
