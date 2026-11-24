@@ -92,9 +92,10 @@ läuft und auf jedem Webspace liegen kann (Direktlinks wie `/plan` brauchen eine
 Daten bleiben im Browser (localStorage). „Foto aufnehmen“ öffnet im Handy-Browser die Kamera, am PC einen
 Dateidialog; Einzelbilder aus Videos und die Apple-Anmeldung gibt es nur in der App. Ohne fest eingetragenen
 Server (`EXPO_PUBLIC_API_URL` beim Export) fragt die Web-Version keinen Server an; Foto-/Bon-Erkennung, Import,
-Community und Bestellungen zeigen dann „🚧 Bald verfügbar“ statt einer Fehlermeldung (die übrigen folgen, siehe
-`BACKLOG.md`, Punkt 5). Lokal ansehen: `npm run web:export`, dann `npx expo serve` (liefert `dist/` aus; bei `/`
-anfangen, Direktlinks geben dort 404).
+Übersetzen, Community, Bestellungen, Bewertungen, „Problem melden“, „Text mit KI verbessern“ und die Anmeldung zeigen
+dann „🚧 Bald verfügbar“ statt einer Fehlermeldung, eigene Fotos bleiben privat, das Feld für KI-Wünsche im Plan ist
+ausgeblendet. Lokal ansehen: `npm run web:export`, dann `npx expo serve` (liefert `dist/` aus; bei `/` anfangen,
+Direktlinks geben dort 404).
 
 **Online (GitHub Pages):** https://bennitut.github.io/Bennitut/ – der Workflow `.github/workflows/foodtracker-pages.yml`
 baut und veröffentlicht die Web-Version bei jedem Push auf `feature/food-tracker-app`, der die App ändert.
@@ -129,7 +130,8 @@ je Sprache (Fallback auf Englisch, wann „Übersetzen“ erscheint, mit KI verb
 („Entdecken“ und Tauschen zeigen zuerst 30 Rezepte, Sortierung nach Bewertung) und „Abgehaktes in den Vorrat“ (ganze
 Packungen, nichts doppelt – auch nicht, wenn danach eine Bestellung geliefert wird).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
-abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
+abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal) und
+zuletzt, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen; er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet

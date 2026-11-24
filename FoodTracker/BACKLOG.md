@@ -19,9 +19,10 @@ aufgehoben, neue Funktionen sind wieder erlaubt und kommen in den offenen PR #2.
 vier unklaren Fotos ersetzt bzw. entfernt, Schlagwörter und Beschreibungen aller Fotos sowie die Videotitel vegetarischer
 und veganer Rezepte geprüft, danach der Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog.
 (3) Vorrat: Variante (b), ein Knopf „Abgehaktes in den Vorrat“ unter der Einkaufsliste – erledigt (Vorrang unten).
-Promo-Clips neu aufgenommen (Clip 2 zeigt jetzt auch den Vorrat), Punkt 5, Teil 2 begonnen (Bestellungen, Community).
-Als Nächstes: am 25.11. der Tagesbericht für den 24.11., dann der Rest von Punkt 5, Teil 2 (Anmeldung, Übersetzen,
-KI-Wünsche, Fotos/Bewertungen, „Text mit KI verbessern“, „Problem melden“), danach Punkt 7 (Rechtstexte).
+Promo-Clips neu aufgenommen (Clip 2 zeigt jetzt auch den Vorrat), Punkt 5 erledigt (Teil 2: Bestellungen, Community;
+Teil 3: Rezept, Übersetzen, KI-Wünsche, Anmeldung), danach Clips 1 und 3 noch einmal aufgenommen.
+Als Nächstes: am 25.11. der Tagesbericht für den 24.11., dann Punkt 7 (Rechtstexte), danach 8–10. Offen im PR:
+ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 7 drankommen soll – ohne Antwort weiter mit Punkt 7.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -87,11 +88,12 @@ veröffentlichen, nur vorbereiten; einschalten und mergen macht Benjamin.
   - 23.11.2026: drei Clips (20/16/18 s, je unter 1 MB) mit `make-clips.cjs` (Playwright-Screencast + ffmpeg, reproduzierbar), `clips.md` mit Beitragstexten und Tester-Anleitung (Link noch Platzhalter, bis das Hosting entschieden ist), `bildnachweise.md` für die Rezeptfotos.
 - [x] **4. PWA:** Web-Manifest, Name, Icons, Theme-Farbe und ein Hinweis „Zum Home-Bildschirm hinzufügen“.
   - 23.11.2026: `public/manifest.json`, eigenes Symbol (Schüssel mit Blättern, `assets/icon-web.svg`) in allen Größen, Theme-Farbe, `lang="de"`; Chromium meldet die Web-App als installierbar. Hinweis „Als App nutzen“ unter „Heute“, sobald es einen Plan gibt (iPhone: Teilen → Zum Home-Bildschirm, Chrome/Android mit „Installieren“-Knopf), „Später“ blendet ihn dauerhaft aus.
-- [ ] **5. Offline-Modus als Standard:** Ohne Server-URL die Server-Funktionen (Foto- und Bon-Erkennung,
+- [x] **5. Offline-Modus als Standard:** Ohne Server-URL die Server-Funktionen (Foto- und Bon-Erkennung,
   Import, Übersetzen, Community, Bestellungen) freundlich als „bald verfügbar“ kennzeichnen statt Fehler
   zu zeigen.
   - 23.11.2026, Teil 1: `HAS_SERVER` in `lib/api.ts` und Karte `components/ComingSoon.tsx` („🚧 Bald verfügbar“, fünf Sprachen); Erfassen (Foto/Kassenbon) und Rezept-Import nutzen sie. Offen: Übersetzen, Community (Entdecken, Teilen), Bestellungen, KI-Wünsche im Plan, Anmeldung, Fotos/Bewertungen und „Text mit KI verbessern“.
   - 24.11.2026, Teil 2: Bestellungen und Community – „Liefern lassen“ (vorher rot „Keine Verbindung zum Server.“), „Aus der Community“ unter „Entdecken“ (vorher „… konnten nicht geladen werden.“) und „In der Community teilen“ bei eigenen Rezepten zeigen ohne Server den Hinweis `ComingSoonNote` (Abzeichen „🚧 Bald verfügbar“ und ein Satz, was bis dahin geht) und fragen den Server nicht mehr an; Web-Rauchtest prüft beides. Offen: Anmeldung (Profil, Anmelden, Nutzerverzeichnis), Übersetzen, KI-Wünsche im Plan, Fotos/Bewertungen, „Text mit KI verbessern“ und „Problem melden“.
+  - 24.11.2026, Teil 3: Rest erledigt, damit ist Punkt 5 fertig. Rezept: Sterne ohne Server ausgeblendet, statt „Text mit KI verbessern“ und „Problem melden“ ein gesammelter Hinweis mit dem Tipp „Favorit“; „🌐 Übersetzen“ (Französisch, Italienisch, Spanisch) als Hinweis; eigene Fotos bleiben privat (Hinweis statt „Öffentlich/Nur ich“, kein „Öffentlich machen“). Plan: Feld für KI-Wünsche ausgeblendet, keine Anfrage. Profil, `/login` und Nutzerverzeichnis: „Bald verfügbar“. Web-Rauchtest prüft alles (Übersetzen auf Französisch), neuer Test für den Favorit-Hinweis (112 Tests); Clips 1 und 3 neu aufgenommen (ohne Wunschfeld und Sterne).
 - [x] **6. Tests für die App-Logik** in `app/src/lib` (Planer, Vorrat, Nährwerte, Datumslogik) mit einem
   leichtgewichtigen Test-Runner ohne native Module.
   - 24.11.2026: `npm test` in `app/` (Node-Test-Runner + `tsx`, Teil von `npm run check`, rund 4 s): 79 Tests für Datum (fünf Zeitzonen, Zeitumstellung), Vorrat, Nährwerte/Kalorienbedarf, Planer wie in der App ohne Server (mit den Einkaufslisten ist jedes Gericht kochbar) und Übersetzungen. Zwei Fehler im Vorrat gefunden und behoben: leere Posten nach dem Runden und eine um einen Tag zu lange Haltbarkeit nach der Umstellung auf Sommerzeit.
@@ -165,6 +167,14 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   entfernten Fotos). Clip 2 zeigt jetzt auch „Gekauft? Ein Tipp – ab in den Vorrat“ (Knopf, Vorrat mit Haltbarkeit,
   „🧺 im Vorrat“ in der Liste) und ist 23 s lang; „Liefern lassen“ zeigt dabei „Bald verfügbar“. `bildnachweise.md`
   ohne Frittata, Kürbisrisotto und Nasi Goreng, `clips.md` mit neuen Texten zu Clip 2.
+- **Löschen geht in der Web-Version nicht:** `Alert.alert` ist in react-native-web eine leere Funktion. „Löschen“ bei
+  eigenen Rezepten und eigenen Fotos zeigt im Browser deshalb keine Abfrage und löscht nichts (ebenso die Abfragen im
+  Admin-Bereich, der ohne Server aber nicht erreichbar ist). Vorschlag: eine kleine Funktion `confirm()` in `lib/`, die
+  im Browser `window.confirm` nimmt und in der App `Alert.alert`; im Web-Rauchtest ein eigenes Rezept anlegen und
+  löschen. Klein und für Tester spürbar – im PR gefragt, ob es vor Punkt 7 drankommen soll. (24.11.2026)
+- **Anzeigename im Profil ohne Server ohne Wirkung:** Unter „Über dich“ steht „Wird angezeigt, wenn du Rezepte in der
+  Community teilst.“ – der Name wird nur fürs Teilen und für öffentliche Fotos genutzt, beides gibt es ohne Server
+  nicht. Ohne Server ausblenden oder den Hinweis anpassen. (24.11.2026)
 - **„Bald verfügbar“ gibt es nur ohne Server-Adresse:** In Expo Go und mit `npx expo start` + Taste `w` kennt die App
   immer eine (der Rechner, Port 3000) und meldet ohne laufenden Server weiter „Keine Verbindung zum Server.“ – gewollt,
   beim Entwickeln soll ein fehlender Server auffallen. Den Offline-Modus der Web-Version sieht man lokal mit
