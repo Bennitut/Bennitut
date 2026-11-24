@@ -14,19 +14,22 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 24.11.2026 (abends):** Benjamins Entscheidungen vom 24.11.2026 sind umgesetzt: (1) PR-Grenze aufgehoben, neue
-Funktionen kommen in den offenen PR #2; (2) Rezeptfotos zuerst – unklare Fotos ersetzt bzw. entfernt, Schlagwörter,
+**Stand 24.11.2026 (spät abends):** Benjamins Entscheidungen vom 24.11.2026 sind umgesetzt: (1) PR-Grenze aufgehoben,
+neue Funktionen kommen in den offenen PR #2; (2) Rezeptfotos zuerst – unklare Fotos ersetzt bzw. entfernt, Schlagwörter,
 Beschreibungen und Videotitel vegetarischer und veganer Rezepte geprüft, Platzhalter für Rezepte ohne Foto; (3) Vorrat
 Variante (b), Knopf „Abgehaktes in den Vorrat“. Ebenfalls erledigt: Punkt 5 (Offline-Modus), Punkt 7 (Entwürfe in
-`docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet drei Dinge, im PR gefragt) und Expo SDK 58 (Vorrang
-unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten und sind erledigt: 8.1 (Server
-zum Testen auf dem Laptop mit Ollama und `start-test.cmd`), 8.2 (Ernährungshistorie dauerhaft speichern) und 8.3
-(Videos in der gewählten Sprache; das Suchen weiterer Videos läuft als Daueraufgabe, pro Lauf etwa 40 Rezepte nach der
-obersten Aufgabe). Der Vorrang „Impressum & Datenschutz in App und Web-Version“ ist ebenfalls erledigt (24.11.2026,
-abends) – Benjamin trägt seine Angaben in `app/src/legal/angaben.ts` ein, vorher baut der Pages-Workflow nicht.
-Reihenfolge ab jetzt: Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
-vorher den für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll –
-ohne Antwort weiter mit Punkt 8.
+`docs/recht/`), Expo SDK 58, Benjamins Wünsche 8.1–8.3 (Server zum Testen mit Ollama und `start-test.cmd`,
+Ernährungshistorie, Videos in der gewählten Sprache – das Suchen weiterer Videos läuft als Daueraufgabe) und
+„Impressum & Datenschutz in App und Web-Version“ (alle als Vorrang unten).
+**Benjamins Antworten vom 24.11.2026 (gegen 23 Uhr, im Chat):** (1) Impressum **Variante B** – umgestellt (Vorrang
+unten, erledigt 24.11.2026); der Name steht in `app/src/legal/angaben.ts`, Anschrift, E-Mail und zweiten Kontaktweg
+fragt Claude im Chat ab – sobald sie in den Anweisungen der Nachtschicht stehen, dort eintragen und „Stand“ auf das
+Datum setzen, bis dahin Platzhalter. (2) Rezeptfotos **Variante (a), selbst ausliefern** – Vorrang unten, als Nächstes.
+(3) Mindestalter für Konto und KI-Funktionen: noch offen, Claude klärt es im Chat (Benjamins erste Einschätzung: keins
+nötig). (4) „Löschen geht in der Web-Version nicht“: nicht dringend, nicht vor Punkt 8 (bleibt unter „Ideen und
+Erkenntnisse“). (5) `start-test.cmd` holt den neuesten Stand selbst (erledigt, unter „Ideen und Erkenntnisse“).
+Reihenfolge ab jetzt: Vorrang „Rezeptfotos selbst ausliefern“, dann Punkte 8–10. Der Tagesbericht bleibt wie gewohnt:
+Der erste Lauf am 25.11. (Japan-Zeit) macht vorher den für den 24.11.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -55,6 +58,39 @@ Fortschritt (Rezepte mit Video, von 236): **de: 193** · **en: 108** · **es: 1*
   Bergkäsebrot mit Apfel (Treffer zeigen gegrillte Cheddar-Sandwiches). Nahe Varianten genommen, wo das Gericht im
   Kern dasselbe ist: Kartoffeln mit Quark und Leinöl (statt Ofenkartoffeln mit Kräuterquark), Rösti mit Lauch und
   Gruyère, Frikadellen ohne Rotkohl, ungarische gefüllte Paprika, Burrito statt Wrap. Weiter mit `griechischer_salat`.
+
+## Vorrang: Rezeptfotos selbst ausliefern (9.2, Benjamins Entscheidung vom 24.11.2026, Variante a)
+
+Die frei lizenzierten Fotos aus `server/src/data/recipeImages.ts` einmalig herunterladen, verkleinern (etwa 800 px
+breit, JPEG oder WebP; Gesamtgröße messen, Ziel höchstens etwa 15 MB) und aus dem eigenen Projekt ausliefern, so dass
+App und Web-Version keine Anfragen mehr an Wikimedia oder Flickr schicken. Benjamin lädt dafür nichts selbst hoch.
+Bildnachweise (Urheber:in, Lizenz, Quelle) bleiben sichtbar. Löst nebenbei „Fotos verschwinden an der Quelle“ (unten).
+Stand 24.11.2026: 177 Fotos, davon 44 von Wikimedia Commons (`upload.wikimedia.org`, aus der Cloud ladbar, drosselt
+schnelle Abfragen mit HTTP 429) und 133 von Flickr (`live.staticflickr.com`, aus der Cloud gesperrt). Die Vorlagen sind
+heute höchstens 500 px (Wikimedia-Vorschaubilder) bzw. 640 px (Flickr-Größe „z“) groß – für etwa 800 px größere
+Fassungen der Quelle nehmen (Flickr „c“ = 800 px, Wikimedia-Vorschaubild in einer Standardbreite).
+
+- [ ] Skript zum Herunterladen und Verkleinern (nur fehlende Fotos, Pausen gegen HTTP 429), Ablage im Projekt, z. B.
+  `app/assets/recipes/<rezept-id>.jpg`; Gesamtgröße messen.
+- [ ] Flickr-Fotos: zuerst ein GitHub-Actions-Workflow, der sie herunterlädt, verkleinert und in `claude/nightly`
+  committet (nur dieser Branch); geht das nicht, ein Skript für Benjamins Laptop zum Doppelklicken – dann Benjamin wie
+  in Abschnitt 5a der Anweisungen fragen. Fotos, die sich noch nicht herunterladen ließen, bleiben bis dahin wie bisher.
+- [ ] App und Web-Version zeigen die eigenen Dateien (in Expo Go und im Web-Export prüfen, dass keine Anfrage mehr an
+  Wikimedia oder Flickr geht – der Web-Rauchtest kann das zählen); Bildnachweis unter dem Foto und Link zur Quelle
+  bleiben.
+- [ ] Danach Abschnitt 4 der Datenschutzerklärung (Rezeptfotos) und „Kurz gesagt“ in `app/src/legal/texte.ts` und
+  `docs/recht/datenschutz.md` anpassen bzw. streichen, Bildnachweis im Impressum und `docs/recht/README.md` nachziehen.
+
+## ✅ Vorrang: Impressum Variante B (9.1, Benjamins Entscheidung vom 24.11.2026) – erledigt 24.11.2026
+
+24.11.2026: Impressum mit den Angaben nach § 5 E-Commerce-Gesetz und der Offenlegung nach § 25 Mediengesetz
+(„Medieninhaber und Diensteanbieter“, volle Anschrift mit „Österreich“, E-Mail, zweiter Kontaktweg, Gegenstand,
+Bildnachweis); `angaben.ts` mit den Feldern Straße, Hausnummer mit Stiege und Tür, PLZ, Ort und zweiter Kontaktweg
+(eine reine Telefonnummer erscheint als „Telefon: …“, `contactLine` in `lib/legal.ts`). Die Datenschutzerklärung nennt
+unter „1. Verantwortlich“ dieselbe volle Anschrift – damit ist die Frage, ob dort der Wohnort genügt, erledigt.
+Mindestalter-Platzhalter „noch offen“. `docs/recht/` auf Variante B (Variante A nur noch zum Vergleich). 3 neue Tests
+(159). Benjamins Name ist eingetragen; Anschrift, E-Mail, zweiter Kontaktweg und „Stand“ fehlen noch (Claude fragt im
+Chat), bis dahin „Entwurf“ und kein Pages-Build.
 
 ## ✅ Vorrang: Expo SDK 58 für Expo Go auf iPhone und Android (Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
 
@@ -310,6 +346,13 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   entfernten Fotos). Clip 2 zeigt jetzt auch „Gekauft? Ein Tipp – ab in den Vorrat“ (Knopf, Vorrat mit Haltbarkeit,
   „🧺 im Vorrat“ in der Liste) und ist 23 s lang; „Liefern lassen“ zeigt dabei „Bald verfügbar“. `bildnachweise.md`
   ohne Frittata, Kürbisrisotto und Nasi Goreng, `clips.md` mit neuen Texten zu Clip 2.
+- ✅ **`start-test.cmd` holt den neuesten Stand selbst:** erledigt 24.11.2026 (Commit ac6a7b2 von Claude aus dem
+  Chat, Benjamins Wunsch): `git pull --ff-only` in einem Klammerblock, danach startet die Datei frisch mit
+  `--ohne-pull`; scheitert der Pull an Änderungen von `npm install` an `package-lock.json`, werden nur diese verworfen
+  und es wird noch einmal versucht. Nicht zurückbauen und den Schalter `--ohne-pull` genau so schreiben – Benjamins
+  Desktop-Verknüpfung erkennt daran, dass die Datei schon selbst aktualisiert. Wer Batch-Dateien ändert: `git pull` kann
+  die laufende Datei ersetzen, deshalb gehört alles, was danach noch laufen muss, in den Klammerblock. Zum Testen reicht
+  jetzt ein Doppelklick auf `start-test.cmd` (oder eine Verknüpfung darauf), kein `git pull` von Hand. (24.11.2026)
 - **Ollama mit echtem Modell nicht geprüft:** In der Cloud-Sitzung läuft kein Ollama mit `gemma4:e4b` (9,4 GB, braucht
   eine Grafikkarte). Anfrage und Antwort folgen der Ollama-Doku (`/api/chat`, `format` als JSON-Schema, `think: false`)
   und sind mit nachgebautem `fetch` und einem nachgebauten Ollama-Server getestet. Offen: wie gut `gemma4:e4b` die
@@ -331,13 +374,13 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   eigenen Rezepten und eigenen Fotos zeigt im Browser deshalb keine Abfrage und löscht nichts (ebenso die Abfragen im
   Admin-Bereich, der ohne Server aber nicht erreichbar ist). Vorschlag: eine kleine Funktion `confirm()` in `lib/`, die
   im Browser `window.confirm` nimmt und in der App `Alert.alert`; im Web-Rauchtest ein eigenes Rezept anlegen und
-  löschen. Klein und für Tester spürbar – im PR gefragt, ob es vor Punkt 7 drankommen soll. (24.11.2026)
+  löschen. Klein und für Tester spürbar. Benjamin am 24.11.2026: nicht dringend, nicht vor Punkt 8 vorziehen. (24.11.2026)
 - **Rechtstexte an zwei Stellen:** Die Entwürfe mit Erklärungen stehen in `docs/recht/`, die angezeigte Fassung in
   `app/src/legal/texte.ts`. Wer eines ändert, muss das andere nachziehen. Idee, falls das oft vorkommt: die App-Fassung
   beim Bauen aus den Markdown-Dateien erzeugen (Hinweise für Benjamin dort als Kommentare). (24.11.2026)
-- **Datenschutzerklärung, „1. Verantwortlich“:** Dort steht wie im Impressum (Variante A) nur der Wohnort. Art. 13 DSGVO
-  verlangt Name und „Kontaktdaten“ – die E-Mail-Adresse ist eine; ob der Ort daneben genügt, ist offen (`[[PRÜFEN]]` in
-  `docs/recht/README.md`, im PR gefragt). (24.11.2026)
+- ✅ **Datenschutzerklärung, „1. Verantwortlich“:** Dort stand wie im Impressum (Variante A) nur der Wohnort; Art. 13
+  DSGVO verlangt Name und „Kontaktdaten“ – ob der Ort neben der E-Mail-Adresse genügt, war offen. (24.11.2026) Erledigt
+  24.11.2026 mit Impressum Variante B: Dort steht jetzt dieselbe volle Anschrift wie im Impressum.
 - **Pages-Workflow nach dem Mergen rot, bis das Impressum ausgefüllt ist:** gewollt – `npm run web:pages` bricht ab und
   listet die fehlenden Angaben im Protokoll; GitHub schickt dann eine Mail „workflow failed“. Nach dem Eintragen läuft
   er beim nächsten Push von selbst (oder „Re-run jobs“). (24.11.2026)
@@ -415,7 +458,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   mehr (Abschnitt 4 der Datenschutzerklärung entfällt), und Fotos verschwinden nicht mehr an der Quelle (siehe unten).
   Laut `recipeImages.ts` erlauben alle 177 Fotos kommerzielle Nutzung (79 × CC BY 2.0, 2 × CC BY 3.0, 94 × CC BY-SA
   2.0–4.0, 2 × CC0/gemeinfrei); Urheber:in und Lizenz müssen sichtbar bleiben. Vorher die Größe messen – für die
-  Web-Version unkritisch, in der App wird das Paket größer. Benjamin entscheidet (im PR gefragt). (24.11.2026)
+  Web-Version unkritisch, in der App wird das Paket größer. Benjamin hat am 24.11.2026 Variante (a) gewählt – steht
+  jetzt als Vorrang oben. (24.11.2026)
 - **Konto löschen fehlt:** App und Server können ein Konto anlegen und abmelden, aber nicht löschen. Vor dem Start der
   Anmeldung nötig – Recht auf Löschung (Art. 17 DSGVO); auch Apple verlangt für Apps mit Konten eine Löschfunktion in
   der App (vor dem Einreichen in den App-Review-Richtlinien nachlesen). (24.11.2026)
@@ -423,7 +467,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   können Gesundheitsangaben enthalten (Art. 9 DSGVO: ausdrückliche Einwilligung). Vor der ersten Nutzung einmal fragen,
   im Profil widerrufbar machen und ein Mindestalter festlegen (in Österreich willigen Kinder ab 14 selbst ein, bei
   Gesundheitsdaten laut herrschender Meinung auch dann nur mit den Eltern). Gehört zu Teil B der
-  Datenschutzerklärung. (24.11.2026)
+  Datenschutzerklärung. Mindestalter am 24.11.2026 noch offen (Claude klärt es im Chat; Benjamins erste Einschätzung:
+  keins nötig). (24.11.2026)
 - **Sicherung der Historie startet ohne Nachfrage:** Sobald ein Server erreichbar ist, geht das Tagebuch dorthin (so
   gewünscht). Für Benjamins Laptop unkritisch; vor einem Server für andere zusammen mit der Einwilligung für die
   KI-Funktionen fragen und im Profil abschaltbar machen – Ernährungsdaten können Gesundheitsdaten sein (Art. 9 DSGVO,
