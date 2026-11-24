@@ -19,12 +19,13 @@ Funktionen kommen in den offenen PR #2; (2) Rezeptfotos zuerst – unklare Fotos
 Beschreibungen und Videotitel vegetarischer und veganer Rezepte geprüft, Platzhalter für Rezepte ohne Foto; (3) Vorrat
 Variante (b), Knopf „Abgehaktes in den Vorrat“. Ebenfalls erledigt: Punkt 5 (Offline-Modus), Punkt 7 (Entwürfe in
 `docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet drei Dinge, im PR gefragt) und Expo SDK 58 (Vorrang
-unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten; 8.1 (Server zum Testen auf
-dem Laptop mit Ollama und `start-test.cmd`) und 8.2 (Ernährungshistorie dauerhaft speichern) sind erledigt.
-Reihenfolge ab jetzt: Vorrang 8.3 (Videos je Sprache, danach als Daueraufgabe pro Lauf etwa 40 Rezepte nach der
-obersten Aufgabe) → Vorrang „Impressum & Datenschutz in App und Web-Version“ → Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
-vorher den für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll –
-ohne Antwort nach dem Vorrang „Impressum“ weiter mit Punkt 8.
+unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten und sind erledigt: 8.1 (Server
+zum Testen auf dem Laptop mit Ollama und `start-test.cmd`), 8.2 (Ernährungshistorie dauerhaft speichern) und 8.3
+(Videos in der gewählten Sprache; das Suchen weiterer Videos läuft als Daueraufgabe, pro Lauf etwa 40 Rezepte nach der
+obersten Aufgabe). Reihenfolge ab jetzt: Vorrang „Impressum & Datenschutz in App und Web-Version“ → Punkte 8–10. Der
+Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht vorher den für den 24.11. Offen im PR: ob
+„Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll – ohne Antwort nach dem Vorrang „Impressum“
+weiter mit Punkt 8.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -33,6 +34,22 @@ Jeden Tag einmal, direkt nach dem Setup und vor der obersten offenen Aufgabe: Fe
 committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly`, dann
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
 „Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
+
+## Daueraufgabe: Videos je Sprache (8.3, Teil 3, Benjamins Wunsch vom 24.11.2026)
+
+Pro Lauf nach der obersten Aufgabe etwa 40 Rezepte: je Katalogrezept und Sprache ein passendes, öffentlich verfügbares
+YouTube-Video, zuerst en, dann es, fr, it, dazu de, wo es fehlt. Kandidaten über die Websuche (`allowed_domains`
+youtube.com); Verfügbarkeit, Originaltitel und Kanal per YouTube-oEmbed prüfen – die Websuche zeigt oft automatisch
+übersetzte Titel, maßgeblich ist der Titel laut oEmbed. Titel in der Zielsprache und dasselbe Gericht; bei vegetarischen
+und veganen Rezepten kein Fleisch und kein Fisch im Titel (Server-Test in fünf Sprachen, auch „con carne“). Kanäle, die
+erkennbar in einer anderen Sprache sprechen, nicht nehmen. Eintragen in `server/src/data/videos/<sprache>.ts`, sortiert
+wie der Katalog. Lieber kein Video als ein ungeprüftes.
+
+Fortschritt (Rezepte mit Video, von 236): **de: 193** · **en: 69** · **es: 1** · **fr: 0** · **it: 1**
+
+- 24.11.2026: en +41 (Porridge mit Beeren bis Kürbis-Kokos-Suppe, Katalogreihenfolge). Ohne passendes Video: Quark mit
+  Beeren und Walnüssen, Brötchen mit Hüttenkäse und Gurke (Treffer zeigen Paneer-Sandwiches). Weiter mit
+  `kartoffel_lauch_suppe`.
 
 ## ✅ Vorrang: Expo SDK 58 für Expo Go auf iPhone und Android (Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
 
@@ -113,7 +130,14 @@ werden verschluckt, und das Profil zeigt nur 7 oder 30 Tage.
 - [x] Logik ohne native Module in `app/src/lib` mit Tests, Server-Endpunkte mit Tests, Texte in allen fünf Sprachen; die
   Sicherung in Teil B des Datenschutz-Entwurfs ergänzen.
 
-## Vorrang: Verlinkte Videos in der gewählten Sprache (8.3, Benjamins Wunsch vom 24.11.2026)
+## ✅ Vorrang: Verlinkte Videos in der gewählten Sprache (8.3, Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
+
+24.11.2026: Eine Datei je Sprache (`server/src/data/videos/`), Feld `RecipeVideo.language`, alle 224 Videos per oEmbed
+nachgeprüft – 16 Titel standen in automatischer deutscher Übersetzung, jetzt überall der Originaltitel; aufgeteilt in
+193 de, 28 en, 1 it, 1 es, Keema Matar entfernt (Kanal auf Urdu). App: nur Videos der gewählten Sprache, sonst „🔎 Video
+suchen · YouTube“ mit Rezeptname und Suchwort in dieser Sprache (`lib/videos.ts`, 9 Tests); Kopien und Editor behalten
+die Katalogvideos. Server-Test für Videotitel in fünf Sprachen; Web-Rauchtest prüft Deutsch und Englisch. Teil 3 läuft
+als Daueraufgabe weiter (oben), erste Etappe: 41 englische Videos.
 
 Heute hat jedes Katalogrezept ein YouTube-Video (`server/src/data/recipeVideos.ts`), fast alle auf Deutsch.
 
@@ -122,12 +146,7 @@ Heute hat jedes Katalogrezept ein YouTube-Video (`server/src/data/recipeVideos.t
 2. Im Rezept nur Videos in der gewählten Sprache (de-AT und de-CH zählen als de). Gibt es dort keins, öffnet derselbe
    Knopf eine YouTube-Suche in dieser Sprache (Rezeptname in der Sprache plus `searchSuffix`). Die Suchlinks unter „Mehr
    Videos“, Originalbeiträge importierter Rezepte und selbst eingetragene Links bleiben. Logik in `app/src/lib` mit Tests.
-3. Danach Daueraufgabe in Etappen (pro Lauf nach der obersten Aufgabe etwa 40 Rezepte): je Katalogrezept und Sprache ein
-   passendes, öffentlich verfügbares YouTube-Video, zuerst en, dann es, fr, it, dazu de, wo es fehlt. Kandidaten über die
-   Websuche; Verfügbarkeit, Titel und Kanal per YouTube-oEmbed prüfen; Titel in der Zielsprache und dasselbe Gericht. Bei
-   vegetarischen und veganen Rezepten kein Fleisch und kein Fisch im Titel; den Server-Test für Videotitel auf alle fünf
-   Sprachen erweitern. Fortschritt je Sprache hier festhalten (z. B. „en: 120/236“). Lieber kein Video als ein
-   ungeprüftes.
+3. Danach Daueraufgabe in Etappen – steht jetzt als eigener Abschnitt „Daueraufgabe: Videos je Sprache“ oben.
 
 ## Vorrang: Impressum & Datenschutz in App und Web-Version (Nachtschicht, 24.11.2026)
 
@@ -334,6 +353,14 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   baut in einer frischen Umgebung und ist nicht betroffen. (24.11.2026)
 - **Video bei der Calzone zeigt Cannelloni:** `vg_calzone_spinat` verlinkt „Schnelles Cannelloni mit
   Spinat-Ricotta-Füllung“ – vegetarisch, aber ein anderes Gericht. Bei Gelegenheit ein Calzone-Video suchen. (24.11.2026)
+- **Weitere deutsche Videos zeigen ein anderes Gericht:** beim Aufteilen nach Sprachen aufgefallen –
+  `m_putenschnitzel_natur` (Kartoffelpfanne mit Bohnen, ohne Pute), `v_raeuchertofu_broetchen` (Keto-Avocado-Brötchen),
+  `w_rind_madras` (veganes Madras-Curry statt Rind), `m_lachs_ruehrei_brot` (Krabbenrührei statt Lachs). Bei der
+  Daueraufgabe „Videos je Sprache“ (Teil „de, wo es fehlt“) zusammen mit der Calzone ersetzen. (24.11.2026)
+- **Admin-Änderungen frieren die Videos eines Rezepts ein:** `applyOverrides` ersetzt `media` als Ganzes. Speichert ein
+  Admin ein Katalogrezept, erscheinen später ergänzte Videos in anderen Sprachen bei diesem Rezept nicht. Erst mit Server
+  und Admin-Konten relevant; Lösung: im Patch nur geänderte Medien speichern oder Katalogvideos beim Anwenden ergänzen.
+  (24.11.2026)
 - **Suche im Tausch-Dialog:** Ohne Einschränkungen passen fast 190 Rezepte; trotz „Mehr anzeigen“ ist das viel Blättern.
   Ein Suchfeld wie in „Entdecken“ wäre eine neue Funktion – erst nach dem Mergen. (24.11.2026)
 - **Tauschen in der laufenden Woche plant die schon vergangenen Tage dieser Woche mit:** Dort kann danach ein

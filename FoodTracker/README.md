@@ -14,7 +14,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Monatsplan** | Plant immer 30 Tage in vier Wochenblöcken mit je eigener Einkaufsliste; Reste und Vorräte einer Woche gehen in die nächste. Der Plan richtet sich nach den Antworten aus dem Fragebogen. Optional schlägt Claude neue Rezepte nach Wunsch vor. |
 | **Profil (👤)** | Ernährungshistorie (7 Tage, 30 Tage, 1 Jahr oder alles – Kalorien pro Tag, Woche oder Monat, Durchschnitt pro erfasstem Tag, Makros, häufigste Gerichte, alle erfassten Tage zum Blättern), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
 | **Historie sichern** | Das Tagebuch wird nie automatisch gelöscht und liegt in einem eigenen Speicher (auch wenn Fotos den übrigen Speicher füllen; scheitert das Speichern, erscheint ein Hinweis). Mit Server wird es automatisch gesichert – mit Konto kommt es auf einem neuen Gerät oder nach dem Löschen der Browserdaten zurück. Ohne Server und Konto: Export als Tabelle (CSV) oder Sicherung (JSON) und Import ohne Duplikate. |
-| **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos; dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
+| **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos – je Sprache eines; die App zeigt nur Videos in der gewählten Sprache und sucht sonst auf YouTube in dieser Sprache. Dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
 | **Konten & Rollen** | Anmeldung mit Apple oder Google (optional – die App funktioniert auch anonym). Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
 | **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
@@ -58,7 +58,8 @@ FoodTracker/
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
     ├── src/diary/        Sicherung der Ernährungshistorie (eine Datei pro Konto bzw. Gerät unter data/diary/)
-    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und Video-Link
+    ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und
+    │                     Kochvideos je Sprache (videos/de.ts … es.ts, geprüft per YouTube-oEmbed)
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
 ```
 
@@ -263,7 +264,9 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 - Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
   Fotos stammen aus freien Lizenzen (CC0, Public Domain, CC BY, CC BY-SA, über Openverse von Wikimedia Commons
   und Flickr); Urheber und Lizenz stehen unter dem Foto und verlinken die Quelle. Noch nicht jedes Rezept hat ein Foto.
-  YouTube-Videos werden nur verlinkt. TikTok und Instagram bieten keine offene Suche; dafür gibt es Suchlinks.
+  YouTube-Videos werden nur verlinkt; noch nicht jedes Rezept hat eines in jeder Sprache (Stand in `BACKLOG.md`,
+  „Daueraufgabe: Videos je Sprache“), dann sucht die App auf YouTube. TikTok und Instagram bieten keine offene Suche;
+  dafür gibt es Suchlinks.
 - Halal/koscher prüft die Zutaten (kein Schweinefleisch, kein Fleisch mit Milch bzw. Meeresfrüchte bei koscher);
   ob Fleisch zertifiziert ist, muss man beim Einkauf selbst beachten.
 - Rezepttexte im Katalog gibt es auf Deutsch und Englisch; andere Sprachen übersetzt Claude auf Knopfdruck.
