@@ -15,6 +15,7 @@ const app = createApp({
   feedbackFile: process.env.FEEDBACK_FILE ?? "data/feedback.json",
   usersFile: process.env.USERS_FILE ?? "data/users.json",
   overridesFile: process.env.OVERRIDES_FILE ?? "data/recipe-overrides.json",
+  diaryDir: process.env.DIARY_DIR ?? "data/diary",
   auth: {
     appleAudiences: list(process.env.APPLE_BUNDLE_IDS ?? "host.exp.Exponent"),
     googleAudiences: list(process.env.GOOGLE_CLIENT_IDS),

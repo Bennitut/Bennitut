@@ -8,6 +8,7 @@ import { OverrideStore } from "./admin/overrides.js";
 import { AuthError, ROLES, UserStore, verifyAppleToken, verifyGoogleToken, type User } from "./auth/users.js";
 import { FLAG_REASONS, FeedbackStore } from "./community/feedback.js";
 import { CommunityStore } from "./community/store.js";
+import { DiaryFullError, DiaryStore } from "./diary/store.js";
 import { INGREDIENTS, RECIPES, ingredientById } from "./data/catalog.js";
 import { findProvider, linesFromShoppingList, pantryFromOrder, providers } from "./delivery/providers.js";
 import { MONTH_DAYS, planMonth } from "./planner/monthPlanner.js";
@@ -131,6 +132,28 @@ const PhotoBody = z.object({
   uri: z.string().max(700_000).regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/),
 });
 
+const Amount = z.number().min(0).max(100_000);
+/** Zeitpunkt in einheitlicher ISO-Form (mit Millisekunden und „Z“), damit Server und App gleich vergleichen. */
+const IsoTime = z
+  .string()
+  .max(40)
+  .refine((s) => !Number.isNaN(Date.parse(s)), "Kein Zeitpunkt")
+  .transform((s) => new Date(s).toISOString());
+const DiaryEntryBody = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  time: z.string().regex(/^\d{2}:\d{2}$/),
+  title: z.string().max(300),
+  nutrients: z.object({ kcal: Amount, protein: Amount, carbs: Amount, fat: Amount }),
+  source: z.enum(["foto", "plan", "manuell"]),
+});
+const DiarySyncBody = z.object({
+  since: z.number().int().min(0).default(0),
+  changes: z
+    .array(z.object({ id: z.string().min(1).max(100), updatedAt: IsoTime, entry: DiaryEntryBody.nullable() }))
+    .max(5000)
+    .default([]),
+});
+
 function deviceId(c: Context): string {
   return DeviceId.parse(c.req.header("X-Device-Id"));
 }
@@ -153,6 +176,7 @@ export function createApp({
   feedbackFile = null,
   usersFile = null,
   overridesFile = null,
+  diaryDir = null,
   auth = NO_AUTH,
   ai = new Ai(aiSettingsFromEnv()),
   corsOrigins = [],
@@ -161,6 +185,8 @@ export function createApp({
   feedbackFile?: string | null;
   usersFile?: string | null;
   overridesFile?: string | null;
+  /** Ordner für die Sicherung der Ernährungshistorie (eine Datei pro Konto bzw. Gerät); null = nur im Speicher. */
+  diaryDir?: string | null;
   auth?: AuthConfig;
   /** Claude oder Ollama (siehe ai/provider.ts); ohne Angabe aus der Umgebung bzw. server/.env. */
   ai?: Ai;
@@ -171,6 +197,7 @@ export function createApp({
   const feedback = new FeedbackStore(feedbackFile);
   const users = new UserStore(usersFile, auth.adminEmails.map((e) => e.toLowerCase()));
   const overrides = new OverrideStore(overridesFile);
+  const diary = new DiaryStore(diaryDir);
   /** Katalog inklusive Änderungen der Admins. */
   const catalogRecipes = () => overrides.apply(RECIPES);
 
@@ -333,6 +360,23 @@ export function createApp({
     const body = z.object({ reason: z.enum(FLAG_REASONS), note: z.string().trim().max(500).default("") }).parse(await c.req.json());
     feedback.flag(actorId(c), RecipeIdParam.parse(c.req.param("id")), body.reason, body.note);
     return c.body(null, 204);
+  });
+
+  // Sicherung der Ernährungshistorie: Die App schickt Neues, Geändertes und Gelöschtes und bekommt, was sie noch nicht
+  // kennt (siehe app/src/lib/diary.ts). Mit Konto gehört die Historie dem Konto, sonst der Geräte-ID.
+  app.post("/api/diary/sync", async (c) => {
+    const user = currentUser(c);
+    // Abgelaufene Sitzung: nicht still unter der Geräte-ID speichern, sondern melden – die App meldet dann ab.
+    if (bearer(c) && !user) throw new AuthError("invalid_token");
+    const owner = user ? `user:${user.id}` : `device:${deviceId(c)}`;
+    const body = DiarySyncBody.parse(await c.req.json());
+    const changes = body.changes.map((r) => ({ id: r.id, updatedAt: r.updatedAt, entry: r.entry ? { ...r.entry, id: r.id, updatedAt: r.updatedAt } : null }));
+    try {
+      return c.json({ owner, ...diary.sync(owner, body.since, changes) });
+    } catch (e) {
+      if (e instanceof DiaryFullError) return c.json({ error: "diary_full" }, 413);
+      throw e;
+    }
   });
 
   // Anmeldung mit Apple oder Google; das Ergebnis ist ein eigenes Sitzungstoken für die App.
