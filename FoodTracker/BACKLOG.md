@@ -20,9 +20,12 @@ vier unklaren Fotos ersetzt bzw. entfernt, Schlagwörter und Beschreibungen alle
 und veganer Rezepte geprüft, danach der Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog.
 (3) Vorrat: Variante (b), ein Knopf „Abgehaktes in den Vorrat“ unter der Einkaufsliste – erledigt (Vorrang unten).
 Promo-Clips neu aufgenommen (Clip 2 zeigt jetzt auch den Vorrat), Punkt 5 erledigt (Teil 2: Bestellungen, Community;
-Teil 3: Rezept, Übersetzen, KI-Wünsche, Anmeldung), danach Clips 1 und 3 noch einmal aufgenommen.
-Als Nächstes: am 25.11. der Tagesbericht für den 24.11., dann Punkt 7 (Rechtstexte), danach 8–10. Offen im PR:
-ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 7 drankommen soll – ohne Antwort weiter mit Punkt 7.
+Teil 3: Rezept, Übersetzen, KI-Wünsche, Anmeldung), danach Clips 1 und 3 noch einmal aufgenommen. Punkt 7 erledigt:
+Entwürfe für Impressum und Datenschutzerklärung in `docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet
+drei Dinge (Impressum-Variante, Rezeptfotos, Mindestalter; im PR gefragt).
+Als Nächstes: am 25.11. der Tagesbericht für den 24.11., dann der Vorrang „Impressum & Datenschutz in App und
+Web-Version“ (unten), danach 8–10. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vorher drankommen
+soll – ohne Antwort nach dem Vorrang weiter mit Punkt 8.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -31,6 +34,21 @@ Jeden Tag einmal, direkt nach dem Setup und vor der obersten offenen Aufgabe: Fe
 committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly`, dann
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
 „Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
+
+## Vorrang: Impressum & Datenschutz in App und Web-Version (Nachtschicht, 24.11.2026)
+
+Vor Punkt 8 erledigen. Grund: Nach dem Mergen geht die Web-Version auf GitHub Pages online, und laut USP braucht
+„jegliche Website“ die Offenlegung nach § 25 Mediengesetz (Strafe bis 20.000 Euro). Die Entwürfe liegen in
+`docs/recht/` (Erklärungen und Quellen in `docs/recht/README.md`).
+
+- Neuer Bildschirm „Impressum & Datenschutz“: in der App unter Profil, in der Web-Version zusätzlich von jeder Seite
+  aus erreichbar (WKO: „ständig leicht und unmittelbar auffindbar“), z. B. ein kleiner Link unten auf „Heute“.
+- Benjamins Angaben (Name, Wohnort bzw. Anschrift, E-Mail …) an genau einer Stelle im Code, damit er sie in einer
+  Datei einträgt; Texte aus `docs/recht/` übernehmen (Impressum Variante A, bis Benjamin entscheidet). Teil B der
+  Datenschutzerklärung erst mit Server zeigen. Texte auf Deutsch, in den anderen Sprachen ein Satz dazu.
+- Solange Angaben fehlen: in der App ein deutlicher Hinweis „Entwurf“, und `npm run web:pages` (damit auch der
+  Pages-Workflow) bricht mit einer verständlichen Meldung ab – so geht keine Web-Version ohne Offenlegung online.
+- Erkennung der Platzhalter in `app/src/lib` mit Tests; der Web-Rauchtest öffnet den neuen Bildschirm.
 
 ## ✅ Vorrang: Abgehaktes in den Vorrat (Benjamins Entscheidung vom 24.11.2026, Variante b) – erledigt 24.11.2026
 
@@ -97,8 +115,9 @@ veröffentlichen, nur vorbereiten; einschalten und mergen macht Benjamin.
 - [x] **6. Tests für die App-Logik** in `app/src/lib` (Planer, Vorrat, Nährwerte, Datumslogik) mit einem
   leichtgewichtigen Test-Runner ohne native Module.
   - 24.11.2026: `npm test` in `app/` (Node-Test-Runner + `tsx`, Teil von `npm run check`, rund 4 s): 79 Tests für Datum (fünf Zeitzonen, Zeitumstellung), Vorrat, Nährwerte/Kalorienbedarf, Planer wie in der App ohne Server (mit den Einkaufslisten ist jedes Gericht kochbar) und Übersetzungen. Zwei Fehler im Vorrat gefunden und behoben: leere Posten nach dem Runden und eine um einen Tag zu lange Haltbarkeit nach der Umstellung auf Sommerzeit.
-- [ ] **7. Rechtstexte als Entwürfe:** Datenschutzerklärung und Impressum (Österreich) mit klar markierten
+- [x] **7. Rechtstexte als Entwürfe:** Datenschutzerklärung und Impressum (Österreich) mit klar markierten
   Platzhaltern für Benjamins Angaben. Nichts erfinden.
+  - 24.11.2026: `docs/recht/` mit `impressum.md` (Variante A: Offenlegung nach § 25 Abs. 5 MedienG, Variante B: dazu § 5 ECG), `datenschutz.md` (Teil A für heute ohne Server: Gerät, GitHub Pages, Rezeptfotos, Links; Teil B für die Server-Funktionen) und `README.md` mit Checkliste der Angaben, drei Entscheidungen und Quellen mit Stand; Platzhalter `[[ANGABE|ENTSCHEIDUNG|PRÜFEN: …]]`. Was der Server speichert und an Anthropic schickt, aus dem Code nachgeprüft. RIS und Wikimedia waren nicht abrufbar.
 - [ ] **8. `docs/MONETARISIERUNG.md`:** Vorschlag kostenlos gegenüber Premium (KI-Funktionen verursachen
   API-Kosten und gehören ins Premium), Preisideen, Wege ohne Vorabkosten. Nur ein Konzept, keine
   Zahlungsanbindung.
@@ -230,9 +249,29 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   „Aufgaben erledigt“ mit) und listet die an dem Tag neu notierten Punkte. `node --test reports/make-report.test.cjs`
   prüft das Lesen und das Format dieser Datei. Keine fast leere letzte Seite mehr (PR-Link steht jetzt oben).
   (24.11.2026)
-- **Datenschutz (für Punkt 7):** Die Web-Version und die App laden Rezeptfotos direkt von `upload.wikimedia.org` und
+- ✅ **Datenschutz (für Punkt 7):** Die Web-Version und die App laden Rezeptfotos direkt von `upload.wikimedia.org` und
   `live.staticflickr.com` – dabei sehen diese Dienste die IP-Adresse. In der Datenschutzerklärung erwähnen oder die
-  Fotos später selbst ausliefern. (23.11.2026)
+  Fotos später selbst ausliefern. (23.11.2026) Erledigt 24.11.2026: in `docs/recht/datenschutz.md`, Abschnitt 4,
+  beschrieben; „Rezeptfotos selbst ausliefern“ steht als eigener Punkt unten, Benjamin entscheidet (im PR gefragt).
+- **Rezeptfotos selbst ausliefern:** Löst zwei Probleme auf einmal: Wikimedia und Flickr erfahren keine IP-Adressen
+  mehr (Abschnitt 4 der Datenschutzerklärung entfällt), und Fotos verschwinden nicht mehr an der Quelle (siehe unten).
+  Laut `recipeImages.ts` erlauben alle 177 Fotos kommerzielle Nutzung (79 × CC BY 2.0, 2 × CC BY 3.0, 94 × CC BY-SA
+  2.0–4.0, 2 × CC0/gemeinfrei); Urheber:in und Lizenz müssen sichtbar bleiben. Vorher die Größe messen – für die
+  Web-Version unkritisch, in der App wird das Paket größer. Benjamin entscheidet (im PR gefragt). (24.11.2026)
+- **Konto löschen fehlt:** App und Server können ein Konto anlegen und abmelden, aber nicht löschen. Vor dem Start der
+  Anmeldung nötig – Recht auf Löschung (Art. 17 DSGVO); auch Apple verlangt für Apps mit Konten eine Löschfunktion in
+  der App (vor dem Einreichen in den App-Review-Richtlinien nachlesen). (24.11.2026)
+- **Einwilligung vor KI-Funktionen:** Mit Server gehen Fotos, Rezepttexte und Wünsche an Anthropic; Wünsche und Fotos
+  können Gesundheitsangaben enthalten (Art. 9 DSGVO: ausdrückliche Einwilligung). Vor der ersten Nutzung einmal fragen,
+  im Profil widerrufbar machen und ein Mindestalter festlegen (in Österreich willigen Kinder ab 14 selbst ein, bei
+  Gesundheitsdaten laut herrschender Meinung auch dann nur mit den Eltern). Gehört zu Teil B der
+  Datenschutzerklärung. (24.11.2026)
+- **Nutzerverzeichnis nur mit Zustimmung:** Heute steht jedes nicht gesperrte Konto mit Namen im Verzeichnis, das alle
+  Angemeldeten sehen. Datensparsamer: nur wer zustimmt oder etwas teilt. Vor dem Start der Anmeldung entscheiden.
+  (24.11.2026)
+- **RIS und Wikimedia aus der Cloud nicht lesbar:** WebFetch meldet beim RIS (Gesetzestexte) „ROBOTS_UNREACHABLE“ und
+  bei Wikimedia-Seiten „url_not_found“ – nicht auf anderem Weg holen. Für Rechtsfragen reichen meist die Erläuterungen
+  von WKO und USP (beide lesbar). (24.11.2026)
 - **Promo-Clips aktuell halten:** Ändert sich die Oberfläche deutlich, die Clips mit `node make-clips.cjs` neu
   aufnehmen (etwa drei Minuten). Die Texteinblendungen versprechen bewusst nur, was ohne Server geht. (23.11.2026)
 - **App-Symbol ist noch das Expo-Standardsymbol** (`assets/icon.png`, Android-Symbole, Splash): Für die Stores
