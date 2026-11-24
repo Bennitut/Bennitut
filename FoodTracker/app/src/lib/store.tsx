@@ -6,6 +6,7 @@ import { ApiError, api, setAuthToken, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import { withStoredTexts } from "./recipeText";
+import { checkedToBook, deliveryToBook } from "./shopping";
 import type {
   Account,
   DiaryEntry,
@@ -36,6 +37,11 @@ interface PersistedState {
   eatenMeals: string[];
   /** Abgehakte Einträge der Einkaufsliste ("Woche:Zutat"), gelten für den aktuellen Plan. */
   shoppingChecked: string[];
+  /**
+   * Einträge der Einkaufsliste ("Woche:Zutat"), die schon im Vorrat gebucht sind – über „Abgehaktes in den Vorrat“ oder
+   * eine gelieferte Bestellung. Gelten für den aktuellen Plan; so kommt nichts doppelt in den Vorrat.
+   */
+  shoppingBooked: string[];
   orders: Order[];
   /** Eigene und importierte Rezepte. */
   myRecipes: Recipe[];
@@ -101,6 +107,7 @@ function initialState(): PersistedState {
     planRecipes: [],
     eatenMeals: [],
     shoppingChecked: [],
+    shoppingBooked: [],
     orders: [],
     myRecipes: [],
     favoriteIds: [],
@@ -132,6 +139,7 @@ async function loadState(): Promise<PersistedState> {
       plan,
       eatenMeals: plan ? (saved.eatenMeals ?? []).filter((e): e is string => typeof e === "string") : [],
       shoppingChecked: plan ? (saved.shoppingChecked ?? []).filter((e): e is string => typeof e === "string") : [],
+      shoppingBooked: plan ? (saved.shoppingBooked ?? []).filter((e): e is string => typeof e === "string") : [],
       pantry: migrateStock(saved.pantry ?? []),
       settings: { ...base.settings, ...saved.settings },
     };
@@ -173,11 +181,15 @@ interface Store extends PersistedState {
   setPlan: (plan: MonthPlan, extraRecipes: Recipe[]) => void;
   markMealEaten: (meal: PlannedMeal, title: string) => void;
   toggleShoppingItem: (key: string) => void;
+  /** Bucht die abgehakten, noch nicht gebuchten Zeilen einer Woche (ab 0) als ganze Packungen in den Vorrat. */
+  bookCheckedShopping: (week: number) => void;
   toggleLock: (meal: PlannedMeal) => void;
   /** Nach dem Fragebogen soll der Plan-Tab gleich einen Plan erstellen. */
   pendingPlan: boolean;
   setPendingPlan: (pending: boolean) => void;
   saveOrder: (order: Order) => void;
+  /** Neuer Stand einer Bestellung; ist sie gerade geliefert worden, kommt die Ware (ohne schon Gebuchtes) in den Vorrat. */
+  receiveOrder: (order: Order, delivered: PantryItem[]) => void;
   updateSettings: (settings: Partial<Settings>) => void;
   saveRecipe: (recipe: Recipe) => void;
   deleteRecipe: (id: string) => void;
@@ -284,7 +296,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const planRecipes = [...s.planRecipes, ...extraRecipes].filter((r) => used.has(r.id));
           // Gegessenes bleibt markiert, wenn derselbe Monat neu geplant wurde.
           const samePlan = s.plan?.startDate === plan.startDate;
-          return { ...s, plan, planRecipes, eatenMeals: samePlan ? s.eatenMeals : [], shoppingChecked: samePlan ? s.shoppingChecked : [] };
+          return {
+            ...s,
+            plan,
+            planRecipes,
+            eatenMeals: samePlan ? s.eatenMeals : [],
+            shoppingChecked: samePlan ? s.shoppingChecked : [],
+            shoppingBooked: samePlan ? s.shoppingBooked : [],
+          };
         }),
       markMealEaten: (meal, title) =>
         setState((s) => {
@@ -303,6 +322,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...s,
           shoppingChecked: s.shoppingChecked.includes(key) ? s.shoppingChecked.filter((k) => k !== key) : [...s.shoppingChecked, key],
         })),
+      bookCheckedShopping: (week) =>
+        setState((s) => {
+          const list = s.plan?.weeks[week]?.shoppingList;
+          if (!list) return s;
+          const booking = checkedToBook(list, week, s.shoppingChecked, s.shoppingBooked);
+          if (booking.keys.length === 0) return s;
+          return { ...s, pantry: addToPantry(s.pantry, booking.items), shoppingBooked: [...s.shoppingBooked, ...booking.keys] };
+        }),
       toggleLock: (meal) =>
         setState((s) =>
           s.plan
@@ -319,6 +346,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : s,
         ),
       saveOrder: (order) => setState((s) => ({ ...s, orders: [order, ...s.orders.filter((o) => o.id !== order.id)] })),
+      receiveOrder: (order, delivered) =>
+        setState((s) => {
+          const previous = s.orders.find((o) => o.id === order.id);
+          // Der Server kennt die Woche nicht; sie steht nur in der gespeicherten Bestellung.
+          const merged: Order = { ...order, forWeek: order.forWeek ?? previous?.forWeek };
+          const orders = [merged, ...s.orders.filter((o) => o.id !== order.id)];
+          // Genau einmal buchen: nur beim Wechsel auf „geliefert“.
+          if (order.status !== "geliefert" || previous?.status === "geliefert") return { ...s, orders };
+          const booking = deliveryToBook(delivered, merged.forWeek, s.plan?.startDate, s.shoppingBooked);
+          return {
+            ...s,
+            orders,
+            pantry: addToPantry(s.pantry, booking.items),
+            shoppingBooked: [...s.shoppingBooked, ...booking.keys.filter((k) => !s.shoppingBooked.includes(k))],
+          };
+        }),
       updateSettings: (settings) => setState((s) => ({ ...s, settings: { ...s.settings, ...settings } })),
       saveRecipe: (recipe) =>
         setState((s) => ({ ...s, myRecipes: [recipe, ...s.myRecipes.filter((r) => r.id !== recipe.id)] })),

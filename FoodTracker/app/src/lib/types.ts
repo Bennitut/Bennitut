@@ -93,6 +93,8 @@ export interface Order {
   lines: { ingredientId: string; packs: number; packSize: number; unit: string }[];
   checkoutUrl: string | null;
   createdAt: string;
+  /** Nur in der App: Plan (Startdatum) und Woche (ab 0), für die bestellt wurde – damit nichts doppelt in den Vorrat kommt. */
+  forWeek?: { planStart: string; week: number };
 }
 
 export interface CommunityRecipe {

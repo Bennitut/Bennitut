@@ -8,12 +8,15 @@ import { weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { today } from "../../lib/pantry";
 import { useI18n } from "../../lib/i18n";
+import { checkedToBook, shoppingKey } from "../../lib/shopping";
 import { useStore } from "../../lib/store";
 import type { DeliveryProviderInfo } from "../../lib/types";
 
 export default function ShoppingScreen() {
-  const { plan, orders, saveOrder, addPantryItems, ingredients, shoppingChecked, toggleShoppingItem } = useStore();
+  const { plan, orders, saveOrder, receiveOrder, ingredients, shoppingChecked, shoppingBooked, toggleShoppingItem, bookCheckedShopping } = useStore();
   const [leftoversOpen, setLeftoversOpen] = useState(false);
+  /** Wie viele Zeilen der letzte Tipp auf „Abgehaktes in den Vorrat“ gebucht hat (für die Bestätigung). */
+  const [bookedNow, setBookedNow] = useState<number | null>(null);
   const i18n = useI18n();
   const { t } = i18n;
   const [providers, setProviders] = useState<DeliveryProviderInfo[]>([]);
@@ -38,8 +41,22 @@ export default function ShoppingScreen() {
     i18n.ingredientName(a.ingredientId).localeCompare(i18n.ingredientName(b.ingredientId), i18n.language),
   );
   const weekIndex = plan && week ? plan.weeks.indexOf(week) : 0;
-  const checkKey = (ingredientId: string) => `${weekIndex}:${ingredientId}`;
+  const checkKey = (ingredientId: string) => shoppingKey(weekIndex, ingredientId);
   const checkedCount = toBuy.filter((i) => shoppingChecked.includes(checkKey(i.ingredientId))).length;
+  // Abgehakt, aber noch nicht im Vorrat – das bucht der Knopf unter der Liste.
+  const toBook = week ? checkedToBook(week.shoppingList, weekIndex, shoppingChecked, shoppingBooked).keys.length : 0;
+  const bookNote =
+    toBook > 0
+      ? t("shopping.bookHint")
+      : bookedNow
+        ? t("shopping.booked", { n: bookedNow })
+        : checkedCount > 0
+          ? t("shopping.allBooked")
+          : t("shopping.bookHint");
+  const bookChecked = () => {
+    bookCheckedShopping(weekIndex);
+    setBookedNow(toBook);
+  };
   const groups = CATEGORY_ORDER.map((category) => ({
     category,
     items: toBuy.filter((i) => ingredients.get(i.ingredientId)?.category === category),
@@ -64,7 +81,8 @@ export default function ShoppingScreen() {
     setError(null);
     try {
       const order = await api.order(providerId, toBuy);
-      saveOrder(order);
+      // Die Woche merken: Was davon schon über „Abgehaktes in den Vorrat“ gebucht ist, kommt bei der Lieferung nicht doppelt.
+      saveOrder(plan ? { ...order, forWeek: { planStart: plan.startDate, week: weekIndex } } : order);
       if (order.checkoutUrl) await Linking.openURL(order.checkoutUrl);
     } catch (e) {
       setError(i18n.error(e));
@@ -73,13 +91,11 @@ export default function ShoppingScreen() {
     }
   };
 
-  // Gelieferte Bestellungen werden genau einmal in den Vorrat gebucht.
+  // Gelieferte Bestellungen werden genau einmal in den Vorrat gebucht (ohne schon über die Liste Gebuchtes).
   const refreshOrder = async (orderProviderId: string, orderId: string) => {
     try {
       const { order, pantry: delivered } = await api.orderStatus(orderProviderId, orderId);
-      const previous = orders.find((o) => o.id === orderId);
-      if (order.status === "geliefert" && previous?.status !== "geliefert") addPantryItems(delivered);
-      saveOrder(order);
+      receiveOrder(order, delivered);
     } catch (e) {
       setError(i18n.error(e));
     }
@@ -94,7 +110,10 @@ export default function ShoppingScreen() {
               key={i}
               label={`${t("plan.week", { n: i + 1 })} · ${formatDay(addDays(plan.startDate, w.startDay), i18n.language)}`}
               selected={week === w}
-              onPress={() => setSelectedWeek(i)}
+              onPress={() => {
+                setSelectedWeek(i);
+                setBookedNow(null);
+              }}
             />
           ))}
         </ChipRow>
@@ -124,6 +143,7 @@ export default function ShoppingScreen() {
               <Card key={category} title={t(`pantry.categories.${category}`)} icon={style.emoji} tint={style.tint}>
                 {items.map((item) => {
                   const checked = shoppingChecked.includes(checkKey(item.ingredientId));
+                  const inPantry = shoppingBooked.includes(checkKey(item.ingredientId));
                   return (
                     <Pressable
                       key={item.ingredientId}
@@ -137,7 +157,10 @@ export default function ShoppingScreen() {
                         <Text style={[styles.text, { fontWeight: "600" }, checked && { textDecorationLine: "line-through" }]}>
                           {i18n.ingredientName(item.ingredientId)}
                         </Text>
-                        <Muted>{t("shopping.packs", { packs: item.packs, size: i18n.number(item.packSize), unit: i18n.unit(item.unit) })}</Muted>
+                        <Muted>
+                          {t("shopping.packs", { packs: item.packs, size: i18n.number(item.packSize), unit: i18n.unit(item.unit) })}
+                          {inPantry ? ` · 🧺 ${t("shopping.inPantry")}` : ""}
+                        </Muted>
                       </View>
                       <Text style={[styles.text, { color: style.color, fontWeight: "700" }]}>{i18n.price(item.price)}</Text>
                       <View
@@ -160,6 +183,10 @@ export default function ShoppingScreen() {
               </Card>
             );
           })}
+          <Card>
+            <Muted>{bookNote}</Muted>
+            <Button label={t("shopping.bookChecked", { n: toBook })} onPress={bookChecked} disabled={toBook === 0} />
+          </Card>
         </>
       )}
 

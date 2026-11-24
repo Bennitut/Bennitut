@@ -22,11 +22,11 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Instagram & TikTok** | Link zu einem Koch-Video einfügen → Claude liest Beschreibung, Vorschaubild und (optional) Einzelbilder aus dem gespeicherten Video und macht daraus ein Rezept mit Mengen. |
 | **Community** | Eigene Rezepte teilen, Rezepte anderer entdecken (beliebt/neu) und als Favorit speichern. Favoriten zählen als „Likes“. |
 | **Zero Waste** | Rezepte werden so kombiniert, dass gekaufte Packungen aufgebraucht werden; vorhandene Vorräte kommen zuerst dran; Verderbliches wird nur innerhalb der Haltbarkeit eingeplant; Reste geöffneter Dosen zählen als Verschwendung. Was trotzdem übrig wäre, wird als „♻️ Reste mitverwenden“ auf passende Gerichte verteilt. |
-| **Vorrat** | Eigener Tab mit dem aktuellen Lagerbestand der Küche, nach Kategorien sortiert, mit geschätzter Resthaltbarkeit („bald verbrauchen“), Mengen zum Nachzählen und Rezeptvorschlägen, die mit dem Vorhandenen kochbar sind. |
+| **Vorrat** | Eigener Tab mit dem aktuellen Lagerbestand der Küche, nach Kategorien sortiert, mit geschätzter Resthaltbarkeit („bald verbrauchen“), Mengen zum Nachzählen und Rezeptvorschlägen, die mit dem Vorhandenen kochbar sind. Was man in der Einkaufsliste abhakt, bucht ein Tipp auf „Abgehaktes in den Vorrat“ als ganze Packungen in den Vorrat – auch ohne Server; was später doch geliefert wird, kommt nicht doppelt dazu. |
 | **Lieferdienst** | Die Einkaufsliste wird mit einem Tipp bestellt. Gelieferte Ware landet automatisch im Vorrat. |
 | **Automatisches Tracking** | Hakt man eine geplante Mahlzeit als „Gegessen“ ab, wird sie ins Tagebuch übernommen und die Zutaten werden vom Vorrat abgezogen. |
 
-Kreislauf: **Plan → Einkaufsliste → Bestellung → Vorrat → Kochen/Essen → Tagebuch.**
+Kreislauf: **Plan → Einkaufsliste → Abhaken oder Bestellung → Vorrat → Kochen/Essen → Tagebuch.**
 
 ## Sprachen und Regionen
 
@@ -45,7 +45,7 @@ FoodTracker/
 │   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
-│   └── test/             Tests der App-Logik (Datum, Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten)
+│   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten)
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 ├── reports/      Tagesberichte der Nachtschicht als PDF (make-report.cjs, Test: node --test reports/make-report.test.cjs)
 └── server/   Backend (Node, Hono, TypeScript)
@@ -122,10 +122,11 @@ Sekunden – ohne Simulator und ohne native Module. Sie prüfen die Datumslogik 
 der Zeitumstellung), Vorrat und Haltbarkeit, Nährwerte und Kalorienbedarf, den Planer so, wie die App ihn ohne Server
 aufruft (mit den Einkaufslisten ist jedes Gericht kochbar), Neuplanen und Tauschen (Startdatum, fixierte Gerichte),
 die Übersetzungen (gleiche Platzhalter in allen Sprachen, kein doppeltes Emoji in Kartentiteln), die Rezepttexte
-je Sprache (Fallback auf Englisch, wann „Übersetzen“ erscheint, mit KI verbesserte Texte) und die langen Rezeptlisten
-(„Entdecken“ und Tauschen zeigen zuerst 30 Rezepte, Sortierung nach Bewertung).
-Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf → Vorrat
-durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
+je Sprache (Fallback auf Englisch, wann „Übersetzen“ erscheint, mit KI verbesserte Texte), die langen Rezeptlisten
+(„Entdecken“ und Tauschen zeigen zuerst 30 Rezepte, Sortierung nach Bewertung) und „Abgehaktes in den Vorrat“ (ganze
+Packungen, nichts doppelt – auch nicht, wenn danach eine Bestellung geliefert wird).
+Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
+abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet

@@ -1,8 +1,9 @@
 // Rauchtest der Web-Version im Browser (headless Chromium über Playwright).
 //
 //   npm run web:export                # baut die statische Web-Version nach dist/
-//   npm run web:smoke                 # öffnet jede Seite und spielt Fragebogen → Monatsplan → Einkauf → Vorrat durch,
-//                                     # danach „Entdecken“ und Tauschen (zuerst 30 Rezepte, nicht alle Fotos auf einmal)
+//   npm run web:smoke                 # öffnet jede Seite und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
+//                                     # abhaken, „Abgehaktes in den Vorrat“) → Vorrat durch, danach „Entdecken“ und
+//                                     # Tauschen (zuerst 30 Rezepte, nicht alle Fotos auf einmal)
 //   npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe für GitHub Pages (Unterpfad /Bennitut)
 //
 // Den Unterpfad erkennt der Test selbst an den Skript-Pfaden in index.html. Gibt es eine 404.html, verhält sich
@@ -156,11 +157,21 @@ async function main() {
     await page.getByText(/Einkauf Woche 1/).first().waitFor({ timeout: 10_000 });
     const shoppingPath = new URL(page.url()).pathname;
     if (shoppingPath !== `${base}/shopping`) throw new Error(`Tab „Einkauf“ führt zu ${shoppingPath} statt ${base}/shopping`);
+    // Zwei Zeilen abhaken und mit „Abgehaktes in den Vorrat“ buchen; danach ist nichts mehr zu buchen (nichts doppelt).
+    const rows = page.getByRole("checkbox");
+    await rows.nth(0).click();
+    await rows.nth(1).click();
+    await tap("🧺 Abgehaktes in den Vorrat (2)");
+    await page.getByText("✓ 2 Lebensmittel in den Vorrat gebucht.", { exact: true }).waitFor({ timeout: 5_000 });
+    await page.getByText("🧺 Abgehaktes in den Vorrat (0)", { exact: true }).waitFor({ timeout: 5_000 });
     await tap("Vorrat");
+    const stocked = () => page.getByText("2 Lebensmittel", { exact: true }).first().waitFor({ timeout: 10_000 });
+    await stocked();
     await page.reload({ waitUntil: "networkidle" });
+    await stocked();
     await page.goto(site + "/plan", { waitUntil: "networkidle" });
     await page.getByText(/^Woche 1/).first().waitFor({ timeout: 10_000 });
-    console.log("Ablauf Fragebogen → Plan → Einkauf → Vorrat ok, Plan bleibt nach dem Neuladen erhalten.");
+    console.log("Ablauf Fragebogen → Plan → Einkauf → Vorrat ok: 2 abgehakte Zeilen gebucht, Plan und Vorrat bleiben nach dem Neuladen.");
   } catch (e) {
     failures.push(`Ablauf: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
