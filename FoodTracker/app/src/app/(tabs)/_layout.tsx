@@ -2,6 +2,7 @@ import { Link } from "expo-router";
 import { Tabs } from "expo-router/js-tabs";
 import { Platform, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LegalHeaderLink } from "../../components/Legal";
 import { colors } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
 
@@ -35,11 +36,15 @@ export default function TabsLayout() {
   // (Browser, iPhone SE) – die Beschriftung wäre abgeschnitten.
   const tallTabBar = Platform.OS === "web" || insets.bottom === 0;
   const profileButton = () => (
-    <Link href="/profile" accessibilityLabel={t("profile.title")} style={{ marginRight: 16 }}>
-      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.selected, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ fontSize: 18 }}>{t("profile.open")}</Text>
-      </View>
-    </Link>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginRight: 16 }}>
+      {/* Web-Version: „Impressum“ von jeder Seite aus erreichbar; in der App steht er im Profil. */}
+      {Platform.OS === "web" ? <LegalHeaderLink /> : null}
+      <Link href="/profile" accessibilityLabel={t("profile.title")}>
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.selected, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ fontSize: 18 }}>{t("profile.open")}</Text>
+        </View>
+      </Link>
+    </View>
   );
   return (
     <Tabs

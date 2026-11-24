@@ -600,4 +600,12 @@ export const en: Dictionary = {
     diaryFailed: "⚠️ Your diary could not be saved – storage is probably full. Save a backup in your profile and delete, for example, your own photos.",
     stateFailed: "⚠️ Plan, pantry and recipes could not be saved – storage is probably full. Your diary is not affected. Delete, for example, your own photos or imported recipes.",
   },
+  legal: {
+    title: "Legal notice & privacy",
+    short: "Legal notice",
+    draftBadge: "Draft",
+    draftText: "Not complete yet – please don't publish it like this. Missing: {list}. To be filled in at {file}.",
+    draftServer: "Part B of the privacy policy (features with a server) is still a draft.",
+    germanOnly: "The legal notice (Impressum) and the privacy policy are only available in German.",
+  },
 };

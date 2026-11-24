@@ -600,4 +600,12 @@ export const it: Dictionary = {
     diaryFailed: "⚠️ Non è stato possibile salvare il tuo diario: probabilmente la memoria è piena. Salva un backup nel profilo ed elimina ad esempio le tue foto.",
     stateFailed: "⚠️ Non è stato possibile salvare piano, dispensa e ricette: probabilmente la memoria è piena. Il tuo diario non è interessato. Elimina ad esempio le tue foto o le ricette importate.",
   },
+  legal: {
+    title: "Note legali e privacy",
+    short: "Note legali",
+    draftBadge: "Bozza",
+    draftText: "Non ancora completo – non pubblicarlo così. Mancano: {list}. Da inserire in {file}.",
+    draftServer: "La parte B dell'informativa sulla privacy (funzioni con server) è ancora una bozza.",
+    germanOnly: "Le note legali (Impressum) e l'informativa sulla privacy sono disponibili solo in tedesco.",
+  },
 };

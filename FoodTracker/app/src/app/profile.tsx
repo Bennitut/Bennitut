@@ -2,6 +2,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { ComingSoonNote } from "../components/ComingSoon";
+import { legalDraftState } from "../components/Legal";
 import { StorageWarning } from "../components/StorageWarning";
 import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, ShowMore, colors, styles } from "../components/ui";
 import type { TKey } from "../i18n";
@@ -291,6 +292,11 @@ export default function ProfileScreen() {
       </Card>
 
       <Button label={`🌐 ${t("profile.settings")} ›`} variant="secondary" onPress={() => router.push("/settings")} />
+      <Button
+        label={`§ ${t("legal.title")}${legalDraftState().draft ? ` · ${t("legal.draftBadge")}` : ""} ›`}
+        variant="secondary"
+        onPress={() => router.push("/legal")}
+      />
     </Screen>
   );
 }

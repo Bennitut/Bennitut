@@ -1,9 +1,13 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Platform, View } from "react-native";
+import { LegalHeaderLink } from "../components/Legal";
 import { colors } from "../components/ui";
 import { useI18n } from "../lib/i18n";
 import { StoreProvider } from "../lib/store";
+
+/** Web-Version: „Impressum“ oben rechts auf jeder Seite (die Tabs zeigen ihn neben dem Profil-Knopf). */
+const webLegalLink = Platform.OS === "web" ? () => <LegalHeaderLink edge /> : undefined;
 
 function RootStack() {
   const { t } = useI18n();
@@ -16,6 +20,7 @@ function RootStack() {
         headerStyle: { backgroundColor: colors.background },
         headerTitleStyle: { fontWeight: "700", color: colors.text },
         contentStyle: { backgroundColor: colors.background },
+        headerRight: webLegalLink,
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -28,6 +33,7 @@ function RootStack() {
       <Stack.Screen name="users" options={{ title: t("account.directoryTitle") }} />
       <Stack.Screen name="admin" options={{ title: t("admin.title") }} />
       <Stack.Screen name="onboarding" options={{ title: t("onboarding.title"), presentation: "modal" }} />
+      <Stack.Screen name="legal" options={{ title: t("legal.title"), headerRight: () => null }} />
     </Stack>
   );
 }

@@ -600,4 +600,12 @@ export const de = {
     diaryFailed: "⚠️ Dein Tagebuch konnte nicht gespeichert werden – vermutlich ist der Speicher voll. Speichere im Profil eine Sicherung und lösche z. B. eigene Fotos.",
     stateFailed: "⚠️ Plan, Vorrat und Rezepte konnten nicht gespeichert werden – vermutlich ist der Speicher voll. Dein Tagebuch ist davon nicht betroffen. Lösche z. B. eigene Fotos oder importierte Rezepte.",
   },
+  legal: {
+    title: "Impressum & Datenschutz",
+    short: "Impressum",
+    draftBadge: "Entwurf",
+    draftText: "Noch nicht vollständig – so bitte nicht veröffentlichen. Es fehlen: {list}. Einzutragen in {file}.",
+    draftServer: "Teil B der Datenschutzerklärung (Funktionen mit Server) ist noch ein Entwurf.",
+    germanOnly: "Impressum und Datenschutzerklärung gibt es nur auf Deutsch.",
+  },
 };

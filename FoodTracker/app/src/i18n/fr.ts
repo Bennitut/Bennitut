@@ -600,4 +600,12 @@ export const fr: Dictionary = {
     diaryFailed: "⚠️ Votre journal n'a pas pu être enregistré – la mémoire est sans doute pleine. Faites une sauvegarde dans votre profil et supprimez par exemple vos propres photos.",
     stateFailed: "⚠️ Le menu, le garde-manger et les recettes n'ont pas pu être enregistrés – la mémoire est sans doute pleine. Votre journal n'est pas concerné. Supprimez par exemple vos propres photos ou des recettes importées.",
   },
+  legal: {
+    title: "Mentions légales et confidentialité",
+    short: "Mentions légales",
+    draftBadge: "Brouillon",
+    draftText: "Pas encore complet – ne le publiez pas ainsi. Il manque : {list}. À compléter dans {file}.",
+    draftServer: "La partie B de la politique de confidentialité (fonctions avec serveur) est encore un brouillon.",
+    germanOnly: "Les mentions légales (Impressum) et la politique de confidentialité ne sont disponibles qu'en allemand.",
+  },
 };

@@ -9,7 +9,8 @@
 //                                     # Videos je Sprache (Deutsch, Englisch, sonst die YouTube-Suche),
 //                                     # dann die Ernährungshistorie: Umzug aus dem alten Speicherort, „Alles“,
 //                                     # Export (JSON, CSV), Import nach gelöschten Browserdaten ohne Duplikate und
-//                                     # der Hinweis bei vollem Speicher
+//                                     # der Hinweis bei vollem Speicher; dazu „Impressum & Datenschutz“ (Link oben
+//                                     # auf jeder Seite, „Entwurf“, solange Angaben fehlen, Hinweis auf Englisch)
 //   npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe für GitHub Pages (Unterpfad /Bennitut)
 //
 // Den Unterpfad erkennt der Test selbst an den Skript-Pfaden in index.html. Gibt es eine 404.html, verhält sich
@@ -25,7 +26,7 @@ const path = require("node:path");
 
 // npm-Skripte laufen im App-Ordner; dort legt `expo export` den Ordner dist/ an.
 const DIST = path.resolve(process.argv[2] ?? "dist");
-const ROUTES = ["/", "/scan", "/plan", "/recipes", "/pantry", "/shopping", "/profile", "/onboarding", "/settings", "/login", "/recipe/edit", "/recipe/import", "/admin", "/users"];
+const ROUTES = ["/", "/scan", "/plan", "/recipes", "/pantry", "/shopping", "/profile", "/onboarding", "/settings", "/login", "/recipe/edit", "/recipe/import", "/admin", "/users", "/legal"];
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".ttf": "font/ttf", ".svg": "image/svg+xml" };
 
 /** Unterpfad aus den Skript-Pfaden von index.html, z. B. "/Bennitut" – oder "" für die Wurzel. */
@@ -310,6 +311,42 @@ async function main() {
     console.log(`Videos je Sprache: ${checks.map(([id, l]) => `${id} (${l})`).join(", ")} zeigen nur Videos ihrer Sprache, sonst die YouTube-Suche.`);
   } catch (e) {
     failures.push(`Videos je Sprache: ${e.message.split("\n")[0]}`);
+    await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
+  }
+
+  // Impressum & Datenschutz: In der Web-Version führt „Impressum“ oben auf jeder Seite (Tabs und Unterseiten) dorthin,
+  // dazu der Knopf im Profil. Solange in src/legal/angaben.ts Angaben fehlen, steht oben „Entwurf“ (dieselbe Prüfung
+  // wie in der App und in `npm run web:pages`); Teil B der Datenschutzerklärung gibt es ohne Server nicht.
+  try {
+    const { missingLegalInfo } = require("tsx/cjs/api").require("../src/legal/texte.ts", __filename);
+    const draft = missingLegalInfo({ withServer: false }).length > 0;
+    const headerLink = (target, name) => target.getByRole("link", { name, exact: true }).filter({ visible: true });
+    await page.goto(site + "/", { waitUntil: "networkidle" });
+    await headerLink(page, "Impressum").first().click();
+    await page.getByText("Offenlegung gemäß § 25 Mediengesetz", { exact: true }).waitFor({ timeout: 10_000 });
+    const legalPath = new URL(page.url()).pathname;
+    if (legalPath !== `${base}/legal`) throw new Error(`„Impressum“ führt zu ${legalPath} statt ${base}/legal`);
+    await page.getByRole("heading", { name: "Datenschutzerklärung", exact: true }).waitFor({ timeout: 5_000 });
+    await page.getByText("5. Links, Kamera und Fotos", { exact: true }).waitFor({ timeout: 5_000 });
+    const draftShown = (await page.getByText("📝 Entwurf", { exact: true }).count()) > 0;
+    if (draft !== draftShown) throw new Error(draft ? "Angaben fehlen, aber kein Hinweis „Entwurf“" : "Hinweis „Entwurf“, obwohl alle Angaben da sind");
+    if (await page.getByText(/Teil B/).count()) throw new Error("Teil B der Datenschutzerklärung erscheint ohne Server");
+    await page.goto(site + "/recipe/linsen_bolognese", { waitUntil: "networkidle" });
+    await headerLink(page, "Impressum").first().waitFor({ timeout: 10_000 });
+    await page.goto(site + "/profile", { waitUntil: "networkidle" });
+    await page.getByText(new RegExp(`^§ Impressum & Datenschutz${draft ? " · Entwurf" : ""} ›$`)).waitFor({ timeout: 10_000 });
+    // In anderen Sprachen: ein Satz, dass es die Texte nur auf Deutsch gibt.
+    const english = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-GB" });
+    const enPage = await english.newPage();
+    watch(enPage, "/legal (en)");
+    await enPage.goto(site + "/plan", { waitUntil: "networkidle" });
+    await headerLink(enPage, "Legal notice").first().click();
+    await enPage.getByText(/^The legal notice \(Impressum\) and the privacy policy are only available in German\./).waitFor({ timeout: 10_000 });
+    await enPage.getByText("Offenlegung gemäß § 25 Mediengesetz", { exact: true }).waitFor({ timeout: 5_000 });
+    await english.close();
+    console.log(`Impressum & Datenschutz: oben auf jeder Seite und im Profil verlinkt, ${draft ? "„Entwurf“ (Angaben fehlen noch)" : "vollständig"}, ohne Teil B, auf Englisch mit Hinweis.`);
+  } catch (e) {
+    failures.push(`Impressum: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
   }
 
