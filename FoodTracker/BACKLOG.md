@@ -46,11 +46,15 @@ und veganen Rezepten kein Fleisch und kein Fisch im Titel (Server-Test in fünf 
 erkennbar in einer anderen Sprache sprechen, nicht nehmen. Eintragen in `server/src/data/videos/<sprache>.ts`, sortiert
 wie der Katalog. Lieber kein Video als ein ungeprüftes.
 
-Fortschritt (Rezepte mit Video, von 236): **de: 193** · **en: 69** · **es: 1** · **fr: 0** · **it: 1**
+Fortschritt (Rezepte mit Video, von 236): **de: 193** · **en: 108** · **es: 1** · **fr: 0** · **it: 1**
 
 - 24.11.2026: en +41 (Porridge mit Beeren bis Kürbis-Kokos-Suppe, Katalogreihenfolge). Ohne passendes Video: Quark mit
   Beeren und Walnüssen, Brötchen mit Hüttenkäse und Gurke (Treffer zeigen Paneer-Sandwiches). Weiter mit
   `kartoffel_lauch_suppe`.
+- 24.11.2026 (abends): en +39 (Kartoffel-Lauch-Suppe bis Quesadillas), alle per oEmbed geprüft. Ohne passendes Video:
+  Bergkäsebrot mit Apfel (Treffer zeigen gegrillte Cheddar-Sandwiches). Nahe Varianten genommen, wo das Gericht im
+  Kern dasselbe ist: Kartoffeln mit Quark und Leinöl (statt Ofenkartoffeln mit Kräuterquark), Rösti mit Lauch und
+  Gruyère, Frikadellen ohne Rotkohl, ungarische gefüllte Paprika, Burrito statt Wrap. Weiter mit `griechischer_salat`.
 
 ## ✅ Vorrang: Expo SDK 58 für Expo Go auf iPhone und Android (Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
 
