@@ -16,9 +16,10 @@ Für die PR-Größe (Grenze etwa 1.500 Zeilen) zählen Videodateien und die gene
 
 **Stand 24.11.2026:** PR #2 hat die Grenze von etwa 1.500 geänderten Zeilen überschritten. Bis Benjamin ihn mergt, nur
 Fixes und Tests: Punkt 6 (Tests für die App-Logik), das doppelte Emoji, Neuplanen/Fixieren, der Tagesbericht, die
-Rezepttexte je Sprache (Tests) und die Fotos mit Fleisch oder Fisch bei vegetarischen Rezepten sind erledigt. Als
-Nächstes: prüfen, ob die Promo-Clips das entfernte Kürbisrisotto-Foto zeigen (dann neu aufnehmen), danach „Entdecken“
-lädt alle Katalogfotos auf einmal (siehe „Ideen und Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem Mergen im neuen PR.
+Rezepttexte je Sprache (Tests), die Fotos mit Fleisch oder Fisch bei vegetarischen Rezepten, die Prüfung der Promo-Clips
+und „Entdecken“ (zuerst 30 Rezepte statt aller Fotos) sind erledigt. Als Nächstes: am 25.11. der Tagesbericht für den
+24.11., dann der fehlende Platzhalter für Rezepte ohne Foto im Plan und im Tausch-Dialog (siehe „Ideen und
+Erkenntnisse“). Punkt 5, Teil 2 folgt nach dem Mergen im neuen PR.
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -120,15 +121,24 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Fleisch-Ragù aus), den vegetarischen Enchiladas („tacos and enchiladas“), Mapo Tofu und Nasi Goreng mit Tempeh nennt
   der Titel kein Fleisch, die Gerichte enthalten es aber oft – Benjamin sieht sie sich am besten selbst an. Ersetzen
   nur durch andere frei lizenzierte Fotos (Openverse), sonst Platzhalter. (24.11.2026)
-- **Promo-Clips und das entfernte Kürbisrisotto-Foto:** `bildnachweise.md` nennt es für alle drei Clips (dort stehen
-  alle beim Aufnehmen geladenen Fotos). Prüfen, ob es im Bild zu sehen ist; wenn ja, die Clips mit `node make-clips.cjs`
-  neu aufnehmen (das Huhn ist auf dem Foto kaum zu erkennen, die Clips zeigen aber einen vegetarischen Plan).
+- ✅ **Promo-Clips und das entfernte Kürbisrisotto-Foto:** erledigt 24.11.2026 – Bild für Bild geprüft: Das Foto ist in
+  keinem Clip zu sehen, neu aufnehmen war nicht nötig. Vom Plan zeigen die Clips nur Montag und das Frühstück am Dienstag
+  (Rösti, Krautfleckerl, Mujaddara, Çılbır), dazu das Rösti-Rezept, „Heute“ und die Einkaufsliste (ohne Rezeptfotos).
+  Geladen wurde es nur, weil die Plan-Ansicht die Fotos der ganzen Woche lädt; deshalb steht es bis zum nächsten
+  Aufnehmen noch in `bildnachweise.md` (dort lieber zu viele als zu wenige). Auch das Foto von Nasi Goreng mit Tempeh
+  (siehe oben) ist in keinem Clip zu sehen. (24.11.2026)
+- ✅ **„Entdecken“ lädt alle Katalogfotos auf einmal:** erledigt 24.11.2026 – „Entdecken“ und der Tausch-Dialog im Plan
+  (ohne Einschränkungen fast 190 passende Rezepte) zeigen zuerst 30 Rezepte und „Mehr anzeigen (30 von 236)“ für je 30
+  weitere; die Suche läuft weiter über den ganzen Katalog. Logik in `lib/recipeLists.ts` mit 6 Tests, der Web-Rauchtest
+  prüft beide Listen (vorher lud „Entdecken“ 176 Fotos auf einmal, jetzt 20). Eine virtualisierte Liste (FlatList) hätte
+  geheißen, den ganzen Bildschirm umzubauen. Langfristig helfen selbst ausgelieferte Fotos (siehe Datenschutz).
   (24.11.2026)
-- **„Entdecken“ lädt alle Katalogfotos auf einmal:** Die Rezeptliste rendert alle 236 Katalogrezepte samt 184
-  Vorschaubildern in einer ScrollView. Auf älteren iPhones kostet das Speicher, und Wikimedia drosselt viele
-  gleichzeitige Bildabrufe (HTTP 429 – beim gleichzeitigen Laden von gut 100 Fotos blieben fünf leer, einzeln
-  abgerufen kamen sie kurz danach). Vorschlag: zuerst etwa 30 zeigen und „Mehr anzeigen“, oder eine virtualisierte
-  Liste. Langfristig helfen selbst ausgelieferte Fotos (siehe Datenschutz). (24.11.2026)
+- **Kein Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog:** Dort steht dann gar kein
+  Bild, der Name rückt nach links und die Zeilen stehen versetzt (z. B. Mujaddara). „Entdecken“ zeigt in dem Fall 🍽️ auf
+  grauem Grund (`components/RecipeRow.tsx`). Kleiner Fix: denselben Platzhalter verwenden, danach die Promo-Clips 1 und 3
+  neu aufnehmen (dort ist Mujaddara zu sehen). (24.11.2026)
+- **Suche im Tausch-Dialog:** Ohne Einschränkungen passen fast 190 Rezepte; trotz „Mehr anzeigen“ ist das viel Blättern.
+  Ein Suchfeld wie in „Entdecken“ wäre eine neue Funktion – erst nach dem Mergen. (24.11.2026)
 - **Tauschen in der laufenden Woche plant die schon vergangenen Tage dieser Woche mit:** Dort kann danach ein
   anderes Gericht stehen, auch bei schon als gegessen markierten (der Haken hängt am Platz, nicht am Rezept). „Neu
   planen“ an einem späteren Tag beginnt einen neuen Monat und setzt Gegessenes zurück, auch das von heute. Idee:
