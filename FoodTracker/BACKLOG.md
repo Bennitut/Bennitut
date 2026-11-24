@@ -19,10 +19,10 @@ Funktionen kommen in den offenen PR #2; (2) Rezeptfotos zuerst – unklare Fotos
 Beschreibungen und Videotitel vegetarischer und veganer Rezepte geprüft, Platzhalter für Rezepte ohne Foto; (3) Vorrat
 Variante (b), Knopf „Abgehaktes in den Vorrat“. Ebenfalls erledigt: Punkt 5 (Offline-Modus), Punkt 7 (Entwürfe in
 `docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet drei Dinge, im PR gefragt) und Expo SDK 58 (Vorrang
-unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten.
-Reihenfolge ab jetzt: Vorrang 8.1 (Server zum Testen auf dem Laptop) → 8.2 (Ernährungshistorie) → 8.3 (Videos je
-Sprache, danach als Daueraufgabe pro Lauf etwa 40 Rezepte nach der obersten Aufgabe) → Vorrang „Impressum & Datenschutz
-in App und Web-Version“ → Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
+unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten; 8.1 (Server zum Testen auf
+dem Laptop mit Ollama und `start-test.cmd`) ist erledigt.
+Reihenfolge ab jetzt: Vorrang 8.2 (Ernährungshistorie) → 8.3 (Videos je Sprache, danach als Daueraufgabe pro Lauf etwa
+40 Rezepte nach der obersten Aufgabe) → Vorrang „Impressum & Datenschutz in App und Web-Version“ → Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
 vorher den für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll –
 ohne Antwort nach dem Vorrang „Impressum“ weiter mit Punkt 8.
 
@@ -47,7 +47,15 @@ Go“), auf iOS lässt sich keine ältere Version installieren. Nach dem Upgrade
 alle Checks plus Bundles für beide Plattformen; im PR „In 5 Minuten testen“ mit Expo Go für SDK 58 und den
 Windows-Voraussetzungen (Git und Node.js LTS per winget, `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`).
 
-## Vorrang: Server zum Testen auf dem Laptop, ohne XAMPP (8.1, Benjamins Wunsch vom 24.11.2026)
+## ✅ Vorrang: Server zum Testen auf dem Laptop, ohne XAMPP (8.1, Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
+
+24.11.2026: CORS für den eigenen Rechner und private Netze (auch auf Fehlerantworten), `server/.env` mit Vorlage
+`.env.example`, Ollama als kostenlose KI neben Claude (alle KI-Funktionen über `server/src/ai/provider.ts`, Prompts in
+`ai/tasks.ts`), 503 `ai_not_configured` plus drei weitere `ai_*`-Codes mit Texten in fünf Sprachen, `/api/health` mit
+KI-Zustand, Server-Zeile im Profil, `start-test.cmd`, Startmeldung mit WLAN-Adresse, KI und Firewall-Regel, README.
+30 neue Server-Tests (86), 2 App-Tests (114); im Browser mit `npx expo start --web` und laufendem Server geprüft: Der
+Import meldet ohne KI „Auf dem Server ist keine KI eingerichtet …“ statt „Keine Verbindung zum Server.“ Mit echtem
+Ollama nicht prüfbar (unter „Ideen und Erkenntnisse“).
 
 Im Browser (`npx expo start`, Taste `w`) zeigt der Rezept-Import „Keine Verbindung zum Server.“ Kein XAMPP: Es bringt
 Apache, PHP und MySQL mit und kann den Node-Server nicht ausführen; der Server läuft direkt mit Node.js auf dem Laptop
@@ -55,26 +63,26 @@ Apache, PHP und MySQL mit und kann den Node-Server nicht ausführen; der Server 
 KI-Wünsche funktionieren, ohne dass Benjamin Geld ausgibt. Ein Server im Internet für echte Tester gehört nicht dazu
 (nur unter „Ideen und Erkenntnisse“ notieren, was dafür nötig wäre).
 
-- [ ] CORS mit `hono/cors`: `http://localhost`, `127.0.0.1` und private Netze (10.x, 172.16–31.x, 192.168.x) mit
+- [x] CORS mit `hono/cors`: `http://localhost`, `127.0.0.1` und private Netze (10.x, 172.16–31.x, 192.168.x) mit
   beliebigem Port, weitere Ursprünge über `CORS_ORIGINS` (kommagetrennt); nicht pauschal jede Website. Mit Tests.
-- [ ] `server/.env` lesen, falls vorhanden; eingechecktes `server/.env.example` ohne Geheimnisse erklärt alle Variablen
+- [x] `server/.env` lesen, falls vorhanden; eingechecktes `server/.env.example` ohne Geheimnisse erklärt alle Variablen
   (`ALLOW_DEV_LOGIN=1` nur zum Testen); `.env` und `server/data/` stehen in `.gitignore`.
-- [ ] Kostenlose KI: Anbieter Ollama neben Claude. `AI_PROVIDER` (`claude` oder `ollama`); ohne Angabe Claude, wenn
+- [x] Kostenlose KI: Anbieter Ollama neben Claude. `AI_PROVIDER` (`claude` oder `ollama`); ohne Angabe Claude, wenn
   `ANTHROPIC_API_KEY` gesetzt ist, sonst Ollama, wenn es unter `OLLAMA_URL` (Standard `http://127.0.0.1:11434`)
   antwortet. Modell `gemma4:e4b` (versteht Bilder, `OLLAMA_MODEL`; im README `qwen3-vl:8b` als Alternative).
   `/api/chat` ohne Streaming, Temperatur 0, Bilder als Base64, `format` = JSON-Schema aus dem Zod-Schema, Denken aus;
   Antwort mit demselben Zod-Schema prüfen, Fehler auf die `AnalysisError`-Codes abbilden, großzügiges Zeitlimit (auch in
   der App). Alle KI-Funktionen über diese eine Stelle; Tests mit nachgebautem `fetch`, ohne echtes Ollama.
-- [ ] Ohne KI: KI-Endpunkte antworten mit 503 `ai_not_configured`, die App zeigt einen verständlichen Text in allen
+- [x] Ohne KI: KI-Endpunkte antworten mit 503 `ai_not_configured`, die App zeigt einen verständlichen Text in allen
   fünf Sprachen; `/api/health` meldet, welche KI aktiv ist.
-- [ ] `FoodTracker/start-test.cmd` zum Doppelklicken: bei Bedarf `npm install` in `server` und `app`, Server im eigenen
+- [x] `FoodTracker/start-test.cmd` zum Doppelklicken: bei Bedarf `npm install` in `server` und `app`, Server im eigenen
   Fenster, danach `npx expo start`. Beim Serverstart: Adresse im WLAN, aktive KI bzw. ob Ollama erreichbar ist,
   Hinweis auf die Firewall-Regel für Port 3000 (fürs iPhone).
-- [ ] Profil: eine Zeile zum Server – verbunden mit Claude, mit lokaler KI, ohne KI oder nicht erreichbar.
-- [ ] README und PR („In 5 Minuten testen“): `winget install Ollama.Ollama`, `ollama pull gemma4:e4b`, `git pull`,
+- [x] Profil: eine Zeile zum Server – verbunden mit Claude, mit lokaler KI, ohne KI oder nicht erreichbar.
+- [x] README und PR („In 5 Minuten testen“): `winget install Ollama.Ollama`, `ollama pull gemma4:e4b`, `git pull`,
   `FoodTracker\start-test.cmd` doppelklicken, im Browser Taste `w`, am iPhone den QR-Code, Firewall-Regel als
   Administrator; Instagram gibt die Beschreibung ohne Anmeldung oft nicht heraus → Caption ins Feld „Beschreibung“.
-- [ ] Prüfen: Server-Tests; im Browser mit `npx expo start --web` und laufendem Server scheitert der Import nicht mehr
+- [x] Prüfen: Server-Tests; im Browser mit `npx expo start --web` und laufendem Server scheitert der Import nicht mehr
   an der Verbindung (ohne KI kommt die neue Meldung); dazu der bisherige Web-Rauchtest.
 
 ## Vorrang: Ernährungshistorie automatisch und dauerhaft speichern (8.2, Benjamins Wunsch vom 24.11.2026)
@@ -264,6 +272,17 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   entfernten Fotos). Clip 2 zeigt jetzt auch „Gekauft? Ein Tipp – ab in den Vorrat“ (Knopf, Vorrat mit Haltbarkeit,
   „🧺 im Vorrat“ in der Liste) und ist 23 s lang; „Liefern lassen“ zeigt dabei „Bald verfügbar“. `bildnachweise.md`
   ohne Frittata, Kürbisrisotto und Nasi Goreng, `clips.md` mit neuen Texten zu Clip 2.
+- **Ollama mit echtem Modell nicht geprüft:** In der Cloud-Sitzung läuft kein Ollama mit `gemma4:e4b` (9,4 GB, braucht
+  eine Grafikkarte). Anfrage und Antwort folgen der Ollama-Doku (`/api/chat`, `format` als JSON-Schema, `think: false`)
+  und sind mit nachgebautem `fetch` und einem nachgebauten Ollama-Server getestet. Offen: wie gut `gemma4:e4b` die
+  Schemas trifft (vor allem den Kassenbon mit dem ganzen Zutatenkatalog) und wie lange es auf 8 GB Grafikspeicher
+  braucht. Bei „Die KI-Antwort konnte nicht gelesen werden“ steht die Ursache im Server-Fenster; Benjamin um die Zeile
+  bitten. Ideen, falls es hakt: `OLLAMA_NUM_CTX` senken, `qwen3-vl:8b` probieren, Katalog im Prompt kürzen. (24.11.2026)
+- **Server im Internet für echte Tester:** Gehört nicht zu 8.1. Nötig wären: ein Rechner im Internet mit HTTPS (z. B.
+  kleiner VPS mit Domain und Let's Encrypt), dauerhafter Speicher für `server/data/`, `CORS_ORIGINS` mit der
+  Pages-Adresse und `EXPO_PUBLIC_API_URL` beim Bauen der Web-Version, `ALLOW_DEV_LOGIN` aus und Apple/Google-Anmeldung
+  eingerichtet. KI dann über Claude (Ollama braucht eine Grafikkarte, in der Cloud teuer) – also vorher Punkt 9
+  (Kosten begrenzen), Einwilligung und Teil B der Datenschutzerklärung, „Konto löschen“ und das Impressum. (24.11.2026)
 - **Android in Expo Go ohne Gerät nicht prüfbar:** Manifest und Entwicklungs-Bundle für Android entstehen mit SDK 58
   fehlerfrei; Android-spezifisch im Code sind nur der Schatten (`elevation`) und die Google-Client-ID, die
   Android-Einstellungen in `app.json` (Symbole, `predictiveBackGestureEnabled`, Paketname) wirken in Expo Go nicht.
@@ -298,10 +317,10 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Wikimedia drosselt schnelle Abfragen (HTTP 429, ein paar Sekunden Pause hilft), Flickr-Bilder selbst sind gesperrt,
   Flickr-Seiten mit Titel, Beschreibung und Schlagwörtern aber lesbar. YouTube-Titel kommen über oEmbed; fünf Videos
   antworten dort mit 401 (Einbetten abgeschaltet, Vorschaubild vorhanden – der Link funktioniert). (24.11.2026)
-- **Server ohne CORS:** Der Server schickt keine CORS-Header. Im Browser mit `npx expo start` (Taste `w`, Port 8081)
-  dürften Anfragen an den Server auf Port 3000 deshalb scheitern (nicht ausprobiert; Expo Go ist nicht betroffen).
-  Für eine Web-Version mit Server `hono/cors` für die eigenen Adressen einschalten. Zum Prüfen am 24.11.2026 lief die
-  App deshalb hinter einem kleinen Proxy auf derselben Adresse wie der Server. (24.11.2026)
+- ✅ **Server ohne CORS:** Der Server schickte keine CORS-Header; im Browser mit `npx expo start` (Taste `w`, Port 8081)
+  scheiterten Anfragen an Port 3000 deshalb mit „Keine Verbindung zum Server.“ (Expo Go war nicht betroffen). (24.11.2026)
+  Erledigt 24.11.2026 mit Vorrang 8.1: `hono/cors` für localhost, 127.0.0.1 und private Netze, weitere über
+  `CORS_ORIGINS`.
 - **Web-Export mit `EXPO_PUBLIC_API_URL`:** Metro übernimmt die Variable nur mit `npx expo export --clear`; ohne
   `--clear` kam am 24.11.2026 der zwischengespeicherte Stand ohne Server heraus (und umgekehrt). Der Pages-Workflow
   baut in einer frischen Umgebung und ist nicht betroffen. (24.11.2026)
