@@ -14,26 +14,129 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 24.11.2026 (spät abends):** Benjamins Entscheidungen vom 24.11.2026 sind umgesetzt: (1) PR-Grenze aufgehoben,
-neue Funktionen kommen in den offenen PR #2; (2) Rezeptfotos zuerst – unklare Fotos ersetzt bzw. entfernt, Schlagwörter,
-Beschreibungen und Videotitel vegetarischer und veganer Rezepte geprüft, Platzhalter für Rezepte ohne Foto; (3) Vorrat
-Variante (b), Knopf „Abgehaktes in den Vorrat“. Ebenfalls erledigt: Punkt 5 (Offline-Modus), Punkt 7 (Entwürfe in
-`docs/recht/`), Expo SDK 58, Benjamins Wünsche 8.1–8.3 (Server zum Testen mit Ollama und `start-test.cmd`,
-Ernährungshistorie, Videos in der gewählten Sprache – das Suchen weiterer Videos läuft als Daueraufgabe) und
-„Impressum & Datenschutz in App und Web-Version“ (alle als Vorrang unten).
-**Benjamins Antworten vom 24.11.2026 (gegen 23 Uhr, im Chat):** (1) Impressum **Variante B** – umgestellt (Vorrang
-unten, erledigt 24.11.2026); der Name steht in `app/src/legal/angaben.ts`, Anschrift, E-Mail und zweiten Kontaktweg
-fragt Claude im Chat ab – sobald sie in den Anweisungen der Nachtschicht stehen, dort eintragen und „Stand“ auf das
-Datum setzen, bis dahin Platzhalter. (2) Rezeptfotos **Variante (a), selbst ausliefern** – Vorrang unten, als Nächstes.
-(3) Mindestalter für Konto und KI-Funktionen: noch offen, Claude klärt es im Chat (Benjamins erste Einschätzung: keins
-nötig). (4) „Löschen geht in der Web-Version nicht“: nicht dringend, nicht vor Punkt 8 (bleibt unter „Ideen und
-Erkenntnisse“). (5) `start-test.cmd` holt den neuesten Stand selbst (erledigt, unter „Ideen und Erkenntnisse“).
-Reihenfolge ab jetzt: Vorrang „Rezeptfotos selbst ausliefern“, dann Punkte 8–10. Der Tagesbericht bleibt wie gewohnt:
-Der erste Lauf am 25.11. (Japan-Zeit) macht vorher den für den 24.11.
+**Stand 25.11.2026 (früh):** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit Konten,
+dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
+Teilschritt in der Reihenfolge 9.1 bis 9.5. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+„Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
+Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
+1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
+die Wünsche 8.1–8.3 (Server zum Testen mit Ollama und `start-test.cmd`, Ernährungshistorie, Videos in der gewählten
+Sprache), „Impressum & Datenschutz in App und Web-Version“ und Impressum Variante B.
+**Benjamins Antworten vom 24.11.2026 (gegen 23:30 Uhr, im Chat per Auswahlmenü):** (1) Impressum **Variante B** –
+umgestellt; seine Angaben hat Claude im Chat in `app/src/legal/angaben.ts` eingetragen (Commit 69027d1), nur noch
+prüfen. (2) Rezeptfotos **Variante (a), selbst ausliefern**. (3) **Kein Mindestalter** – die App bleibt für alle offen,
+auch Konto und KI-Funktionen; keine Altersgrenze und keine Altersprüfung, aber der Hinweis zur Zustimmung eines
+Elternteils. (4) „Löschen geht in der Web-Version nicht“: nicht dringend, nicht vorziehen. (5) `start-test.cmd` holt
+den neuesten Stand selbst (erledigt). (6) **Kontaktformular**, sobald der Server steht. Einzelheiten: Vorrang 2.
+
+## Vorrang 1: Server im Internet mit Konten, dauerhafter Speicherung und Reel-Import (9, Benjamins Wunsch vom 24.11.2026, 23:22 Uhr)
+
+Benjamin will: Konten anlegen können, Daten werden dauerhaft gespeichert, und Instagram-Reels und Ähnliches lassen sich
+importieren. Geht allem anderen vor; nur ein noch offenes Expo-Update käme davor. Die Nachtschicht legt keine Konten bei
+Diensten an und veröffentlicht nichts: Sie macht den Server fertig, Benjamin richtet das Hosting einmalig nach
+`docs/SERVER-HOSTING.md` ein. Fertiges aus 8.1 und 8.2 (CORS, `.env`, KI-Stelle mit Ollama, Historien-Sicherung)
+weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teilschritt (unten von oben nach unten).
+
+**9.1 Konten**
+
+- [ ] Server: Registrierung und Anmeldung mit E-Mail und Passwort (zusätzlich zu Apple, Google und Dev-Login):
+  Passwörter mit scrypt aus `node:crypto` (keine nativen Pakete), Mindestlänge 10, Sitzungs-Token mit Ablauf, Abmelden,
+  Rate-Limit für Anmeldeversuche, keine Auskunft, ob eine E-Mail schon registriert ist; Dev-Login nur mit
+  `ALLOW_DEV_LOGIN=1`. Dazu Passwort ändern, Konto löschen und „Meine Daten exportieren“ (DSGVO). Passwort-Reset per
+  E-Mail nur, wenn ein Mail-Dienst konfiguriert ist (optionale `SMTP_*`-Variablen in `.env.example`); sonst den Knopf
+  ausblenden und unter „Ideen und Erkenntnisse“ notieren.
+- [ ] App: Anmelde- und Registrierungsbildschirm in allen fünf Sprachen, Anmeldung bleibt gespeichert
+  (`expo-secure-store` auf dem Handy, localStorage im Web), die App funktioniert weiter ohne Konto; im Profil Passwort
+  ändern, Konto löschen und Daten exportieren.
+- [ ] Beim ersten Anmelden die lokalen Daten des Geräts ins Konto übernehmen, ohne Duplikate.
+- [ ] Kein Mindestalter (Vorrang 2, Antwort 3): keine Altersabfrage, aber bei der Registrierung und vor der ersten
+  Nutzung der KI-Funktionen der Hinweis, dass Kinder unter 14 und – für Gesundheitsdaten wie Allergien oder das
+  Ernährungstagebuch – Minderjährige unter 18 nur mit Zustimmung eines Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8
+  und 9 DSGVO).
+
+**9.2 Dauerhafte Speicherung**
+
+- [ ] Eine Speicherschicht im Server für alle Nutzerdaten: Profil und Fragebogen, Pläne, Einkaufsliste, Vorrat,
+  Tagebuch/Historie, eigene und importierte Rezepte (Fotos als Dateien bzw. in einem Objektspeicher, nicht in der
+  Datenbank). Mit `DATABASE_URL` Postgres (für kostenlose Anbieter wie Neon oder Supabase), ohne `DATABASE_URL` eine
+  lokale Datei unter `server/data/`. Versionierte Migrationen; Tests ohne echte Datenbank (z. B. pg-mem oder die
+  Datei-Variante). Konten und Sitzungen gehören auch dorthin (auf kostenlosen Cloud-Diensten gehen Dateien beim Neustart
+  verloren).
+- [ ] Abgleich App ↔ Server wie in 8.2 (Eintrags-ID, Löschmarken, Zeitstempel), jetzt für alle genannten Daten; offline
+  weiter nutzbar, Abgleich sobald verbunden.
+- [ ] Server-Adresse: `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie bisher der
+  Laptop im WLAN.
+
+**9.3 Bereit fürs Internet (vorbereiten, nicht deployen)**
+
+- [ ] Dockerfile und Health-Check für den Server; `CORS_ORIGINS` für die Web-Version (`https://bennitut.github.io`)
+  und eigene Domains.
+- [ ] `docs/SERVER-HOSTING.md` auf Deutsch, Schritt für Schritt, zwei kostenlose Wege mit ehrlichen Grenzen:
+  (a) Laptop plus Cloudflare Tunnel (KI kostenlos über Ollama auf der GPU, aber nur erreichbar, solange der Laptop
+  läuft); (b) kostenloser Cloud-Dienst mit kostenloser Postgres-Datenbank (aktuelle Gratis-Angebote per Websuche prüfen,
+  z. B. Render plus Neon; Schlafmodus, Speicher- und Rechenlimits, wo eine Kreditkarte verlangt wird). Ehrlich: Ohne GPU
+  braucht die KI dort die Claude-API (kostet API-Geld) oder eine Weiterleitung an Ollama auf dem Laptop (`OLLAMA_URL` auf
+  die Tunnel-Adresse, mit geheimem Schlüssel) – als Option vorsehen. Klar abgrenzen, was Benjamin selbst tun muss.
+- [ ] Sicherheit: nur über HTTPS, Rate-Limits, Größenbegrenzung für Uploads, keine Geheimnisse im Repo, Logs ohne
+  Passwörter, Tokens oder E-Mail-Adressen; Datenschutz-Entwurf um Konten, Speicherung, Hosting-Anbieter und Reel-Import
+  ergänzen.
+
+**9.4 Import von Instagram-Reels, TikTok und YouTube Shorts**
+
+- [ ] App: Link einfügen (in Expo Go zusätzlich einen kopierten Link aus der Zwischenablage anbieten; ein echtes
+  Teilen-Ziel braucht einen eigenen Build → „Ideen und Erkenntnisse“) und alternativ das Video selbst hochladen
+  (gespeichertes Reel oder Bildschirmaufnahme aus der Mediathek).
+- [ ] Server bei einem Link: nur öffentlich zugängliche Angaben ohne Anmeldung (oEmbed, Open-Graph-Titel und
+  -Beschreibung, bei YouTube die öffentliche Seite). Keine Anmeldung bei Instagram oder TikTok, keine Umgehung von
+  Sperren, kein Herunterladen der Videos mit Werkzeugen wie yt-dlp. Reicht die Beschreibung nicht, bittet die App, das
+  Video hochzuladen oder die Caption einzufügen.
+- [ ] Server bei einem hochgeladenen Video: mit ffmpeg Ton und einige Standbilder; Transkription über eine austauschbare
+  Stelle (Whisper lokal, z. B. über transformers.js auf der CPU, oder ein Whisper-Server unter `WHISPER_URL`; Wahl im PR
+  begründen); eingeblendeten Text über das Bildmodell der KI-Stelle; daraus mit demselben Zod-Schema ein Rezept. Ohne KI
+  `ai_not_configured`. Als Hintergrundauftrag mit Statusabfrage und Fortschritt in der App.
+- [ ] Quelle und Link im importierten Rezept speichern; das hochgeladene Video nach der Auswertung löschen. Tests mit
+  kurzen, selbst erzeugten Testvideos (ffmpeg `testsrc`, Stille oder Sprachsynthese) und nachgebauten KI-Antworten.
+
+**9.5 Prüfen und berichten**
+
+- [ ] Alle Checks, dazu ein End-to-End-Test im Browser mit laufendem Server: registrieren, Daten anlegen, abmelden,
+  Browserdaten löschen, neu anmelden, Daten sind wieder da; Reel-Import mit einem Testvideo. Im PR „In 5 Minuten
+  testen“ um Konto und Reel-Import ergänzen und Benjamin per Auswahlmenü fragen, welchen Hosting-Weg aus
+  `SERVER-HOSTING.md` er nehmen will (a oder b).
+
+**Danach, sobald der Server steht (Server-Themen)**
+
+- [ ] Kontaktformular in App und Web-Version (Vorrang 2, Antwort 6): Nachricht an den Server, von dort per E-Mail weiter
+  oder zum Abholen abgelegt. Ist es fertig, Benjamin per Auswahlmenü fragen, ob die Telefonnummer aus dem Impressum soll
+  (Vorgabe: ja).
+
+## Vorrang 2: Benjamins Antworten vom 24.11.2026, gegen 23:30 Uhr (10, im Chat per Auswahlmenü)
+
+Nach Vorrang 1 in dieser Reihenfolge; Antwort 3 (kein Mindestalter) und 6 (Kontaktformular) gelten schon beim Bau von
+Vorrang 1.
+
+- [ ] 1. Impressum **Variante B**: Die Texte sind umgestellt (24.11.2026), Benjamins Angaben stehen in
+  `app/src/legal/angaben.ts` (Commit 69027d1, Rechtstexte-Tests grün). Nur noch prüfen: App und Web-Version zeigen kein
+  „Entwurf“ mehr, `npm run web:pages` läuft durch; verbleibende `[[PRÜFEN]]`-Stellen im PR auflisten. Die Angaben
+  nirgends sonst wiederholen.
+- [ ] 2. Rezeptfotos **Variante (a), selbst ausliefern** – eigener Abschnitt „Vorrang: Rezeptfotos selbst ausliefern“
+  unten.
+- [ ] 3. **Kein Mindestalter** (Benjamins Entscheidung, nachdem er die Folgen kannte): Die App bleibt für alle offen,
+  auch Konto und KI-Funktionen. Keine Altersgrenze und keine Altersprüfung, aber der Hinweis, dass Kinder unter 14 und –
+  für Gesundheitsdaten wie Allergien oder das Ernährungstagebuch – Minderjährige unter 18 nur mit Zustimmung eines
+  Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8 und 9 DSGVO). Die Platzhalter zum Mindestalter in `docs/recht/` und
+  `app/src/legal/texte.ts` entsprechend ersetzen; Teil B der Datenschutzerklärung, Registrierung (9.1) und die
+  Einwilligung vor den KI-Funktionen folgen dem.
+- [x] 4. „Löschen geht in der Web-Version nicht“: nicht dringend, nicht vorziehen – bleibt unter „Ideen und
+  Erkenntnisse“.
+- [x] 5. `start-test.cmd` holt den neuesten Stand selbst (Commits ac6a7b2 und 870bdc5 von Claude aus dem Chat) – erledigt
+  24.11.2026, unter „Ideen und Erkenntnisse“.
+- [ ] 6. **Kontaktformular**, damit die Telefonnummer später wieder aus dem Impressum kann – steht bei den Server-Themen
+  in Vorrang 1 („Danach“).
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
-Jeden Tag einmal, direkt nach dem Setup und vor der obersten offenen Aufgabe: Fehlt
+Jeden Tag einmal, nach dem Teilschritt von Vorrang 1 (vorher direkt nach dem Setup): Fehlt
 `reports/<Vortag>.pdf` (Datum des Vortags in Japan-Zeit, `JJJJ-MM-TT`) oder wurde sie noch am Vortag selbst
 committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly`, dann
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
@@ -59,7 +162,7 @@ Fortschritt (Rezepte mit Video, von 236): **de: 193** · **en: 108** · **es: 1*
   Kern dasselbe ist: Kartoffeln mit Quark und Leinöl (statt Ofenkartoffeln mit Kräuterquark), Rösti mit Lauch und
   Gruyère, Frikadellen ohne Rotkohl, ungarische gefüllte Paprika, Burrito statt Wrap. Weiter mit `griechischer_salat`.
 
-## Vorrang: Rezeptfotos selbst ausliefern (9.2, Benjamins Entscheidung vom 24.11.2026, Variante a)
+## Vorrang: Rezeptfotos selbst ausliefern (10.2, Benjamins Entscheidung vom 24.11.2026, Variante a)
 
 Die frei lizenzierten Fotos aus `server/src/data/recipeImages.ts` einmalig herunterladen, verkleinern (etwa 800 px
 breit, JPEG oder WebP; Gesamtgröße messen, Ziel höchstens etwa 15 MB) und aus dem eigenen Projekt ausliefern, so dass
@@ -81,7 +184,7 @@ Fassungen der Quelle nehmen (Flickr „c“ = 800 px, Wikimedia-Vorschaubild in 
 - [ ] Danach Abschnitt 4 der Datenschutzerklärung (Rezeptfotos) und „Kurz gesagt“ in `app/src/legal/texte.ts` und
   `docs/recht/datenschutz.md` anpassen bzw. streichen, Bildnachweis im Impressum und `docs/recht/README.md` nachziehen.
 
-## ✅ Vorrang: Impressum Variante B (9.1, Benjamins Entscheidung vom 24.11.2026) – erledigt 24.11.2026
+## ✅ Vorrang: Impressum Variante B (10.1, Benjamins Entscheidung vom 24.11.2026) – erledigt 24.11.2026
 
 24.11.2026: Impressum mit den Angaben nach § 5 E-Commerce-Gesetz und der Offenlegung nach § 25 Mediengesetz
 („Medieninhaber und Diensteanbieter“, volle Anschrift mit „Österreich“, E-Mail, zweiter Kontaktweg, Gegenstand,
@@ -90,7 +193,8 @@ Bildnachweis); `angaben.ts` mit den Feldern Straße, Hausnummer mit Stiege und T
 unter „1. Verantwortlich“ dieselbe volle Anschrift – damit ist die Frage, ob dort der Wohnort genügt, erledigt.
 Mindestalter-Platzhalter „noch offen“. `docs/recht/` auf Variante B (Variante A nur noch zum Vergleich). 3 neue Tests
 (159). Benjamins Name ist eingetragen; Anschrift, E-Mail, zweiter Kontaktweg und „Stand“ fehlen noch (Claude fragt im
-Chat), bis dahin „Entwurf“ und kein Pages-Build.
+Chat), bis dahin „Entwurf“ und kein Pages-Build. Nachtrag: Claude hat die übrigen Angaben am 24.11. im Chat eingetragen
+(Commit 69027d1); was noch zu prüfen ist, steht in Vorrang 2.
 
 ## ✅ Vorrang: Expo SDK 58 für Expo Go auf iPhone und Android (Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
 
@@ -118,8 +222,8 @@ Ollama nicht prüfbar (unter „Ideen und Erkenntnisse“).
 Im Browser (`npx expo start`, Taste `w`) zeigt der Rezept-Import „Keine Verbindung zum Server.“ Kein XAMPP: Es bringt
 Apache, PHP und MySQL mit und kann den Node-Server nicht ausführen; der Server läuft direkt mit Node.js auf dem Laptop
 (gleicher Rechner, Port 3000). Ziel: Ein Doppelklick startet alles; Import, Foto- und Bon-Erkennung, Übersetzen und
-KI-Wünsche funktionieren, ohne dass Benjamin Geld ausgibt. Ein Server im Internet für echte Tester gehört nicht dazu
-(nur unter „Ideen und Erkenntnisse“ notieren, was dafür nötig wäre).
+KI-Wünsche funktionieren, ohne dass Benjamin Geld ausgibt. Den Server im Internet für echte Tester gibt es seit dem
+24.11.2026 (23:22 Uhr) als eigenen Vorrang 1 (oben).
 
 - [x] CORS mit `hono/cors`: `http://localhost`, `127.0.0.1` und private Netze (10.x, 172.16–31.x, 192.168.x) mit
   beliebigem Port, weitere Ursprünge über `CORS_ORIGINS` (kommagetrennt); nicht pauschal jede Website. Mit Tests.
@@ -348,8 +452,9 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   ohne Frittata, Kürbisrisotto und Nasi Goreng, `clips.md` mit neuen Texten zu Clip 2.
 - ✅ **`start-test.cmd` holt den neuesten Stand selbst:** erledigt 24.11.2026 (Commit ac6a7b2 von Claude aus dem
   Chat, Benjamins Wunsch): `git pull --ff-only` in einem Klammerblock, danach startet die Datei frisch mit
-  `--ohne-pull`; scheitert der Pull an Änderungen von `npm install` an `package-lock.json`, werden nur diese verworfen
-  und es wird noch einmal versucht. Nicht zurückbauen und den Schalter `--ohne-pull` genau so schreiben – Benjamins
+  `--ohne-pull`; scheitert der Pull an lokalen Änderungen (npm und Expo ändern auf Benjamins Laptop `package.json`,
+  `package-lock.json` und `tsconfig.json`), legt sie diese mit `git stash` beiseite und versucht es noch einmal (Commit
+  870bdc5). Nicht zurückbauen und den Schalter `--ohne-pull` genau so schreiben – Benjamins
   Desktop-Verknüpfung erkennt daran, dass die Datei schon selbst aktualisiert. Wer Batch-Dateien ändert: `git pull` kann
   die laufende Datei ersetzen, deshalb gehört alles, was danach noch laufen muss, in den Klammerblock. Zum Testen reicht
   jetzt ein Doppelklick auf `start-test.cmd` (oder eine Verknüpfung darauf), kein `git pull` von Hand. (24.11.2026)
@@ -359,11 +464,12 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Schemas trifft (vor allem den Kassenbon mit dem ganzen Zutatenkatalog) und wie lange es auf 8 GB Grafikspeicher
   braucht. Bei „Die KI-Antwort konnte nicht gelesen werden“ steht die Ursache im Server-Fenster; Benjamin um die Zeile
   bitten. Ideen, falls es hakt: `OLLAMA_NUM_CTX` senken, `qwen3-vl:8b` probieren, Katalog im Prompt kürzen. (24.11.2026)
-- **Server im Internet für echte Tester:** Gehört nicht zu 8.1. Nötig wären: ein Rechner im Internet mit HTTPS (z. B.
-  kleiner VPS mit Domain und Let's Encrypt), dauerhafter Speicher für `server/data/`, `CORS_ORIGINS` mit der
-  Pages-Adresse und `EXPO_PUBLIC_API_URL` beim Bauen der Web-Version, `ALLOW_DEV_LOGIN` aus und Apple/Google-Anmeldung
-  eingerichtet. KI dann über Claude (Ollama braucht eine Grafikkarte, in der Cloud teuer) – also vorher Punkt 9
-  (Kosten begrenzen), Einwilligung und Teil B der Datenschutzerklärung, „Konto löschen“ und das Impressum. (24.11.2026)
+- **Server im Internet für echte Tester:** Seit Benjamins Wunsch vom 24.11.2026 (23:22 Uhr) Vorrang 1 (oben), mit
+  Konten, dauerhafter Speicherung und Reel-Import. Was damals notiert wurde und dort mitzudenken ist: HTTPS, dauerhafter
+  Speicher (auf kostenlosen Cloud-Diensten gehen Dateien unter `server/data/` beim Neustart verloren), `CORS_ORIGINS` mit
+  der Pages-Adresse, `EXPO_PUBLIC_API_URL` beim Bauen der Web-Version, `ALLOW_DEV_LOGIN` aus. KI über Claude (kostet)
+  oder eine Weiterleitung an Ollama auf dem Laptop – dazu Punkt 9 (Kosten begrenzen), die Einwilligung und Teil B der
+  Datenschutzerklärung. (24.11.2026)
 - **Android in Expo Go ohne Gerät nicht prüfbar:** Manifest und Entwicklungs-Bundle für Android entstehen mit SDK 58
   fehlerfrei; Android-spezifisch im Code sind nur der Schatten (`elevation`) und die Google-Client-ID, die
   Android-Einstellungen in `app.json` (Symbole, `predictiveBackGestureEnabled`, Paketname) wirken in Expo Go nicht.
@@ -462,13 +568,19 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   jetzt als Vorrang oben. (24.11.2026)
 - **Konto löschen fehlt:** App und Server können ein Konto anlegen und abmelden, aber nicht löschen. Vor dem Start der
   Anmeldung nötig – Recht auf Löschung (Art. 17 DSGVO); auch Apple verlangt für Apps mit Konten eine Löschfunktion in
-  der App (vor dem Einreichen in den App-Review-Richtlinien nachlesen). (24.11.2026)
+  der App (vor dem Einreichen in den App-Review-Richtlinien nachlesen). Steht jetzt in Vorrang 1 (9.1). (24.11.2026)
 - **Einwilligung vor KI-Funktionen:** Mit Server gehen Fotos, Rezepttexte und Wünsche an Anthropic; Wünsche und Fotos
   können Gesundheitsangaben enthalten (Art. 9 DSGVO: ausdrückliche Einwilligung). Vor der ersten Nutzung einmal fragen,
-  im Profil widerrufbar machen und ein Mindestalter festlegen (in Österreich willigen Kinder ab 14 selbst ein, bei
-  Gesundheitsdaten laut herrschender Meinung auch dann nur mit den Eltern). Gehört zu Teil B der
-  Datenschutzerklärung. Mindestalter am 24.11.2026 noch offen (Claude klärt es im Chat; Benjamins erste Einschätzung:
-  keins nötig). (24.11.2026)
+  im Profil widerrufbar machen (in Österreich willigen Kinder ab 14 selbst ein, bei Gesundheitsdaten laut herrschender
+  Meinung auch dann nur mit den Eltern). Gehört zu Teil B der
+  Datenschutzerklärung. Mindestalter: **keins** (Benjamins Entscheidung vom 24.11.2026, 23:30 Uhr) – keine Altersgrenze
+  und keine Altersprüfung, aber vor der ersten Nutzung der Hinweis, dass Kinder unter 14 und bei Gesundheitsdaten
+  Minderjährige unter 18 nur mit Zustimmung eines Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8 und 9 DSGVO; Vorrang 2,
+  Antwort 3). (24.11.2026)
+- **Claude-API für andere und Minderjährige:** Laufen die KI-Funktionen später mit der Claude-API für andere, gelten
+  Anthropics Vorgaben für Produkte, die Minderjährige nutzen können
+  (https://support.claude.com/en/articles/9307344) – die App hat kein Mindestalter (Vorrang 2, Antwort 3). Vor dem Start
+  des Servers für andere prüfen. (25.11.2026)
 - **Sicherung der Historie startet ohne Nachfrage:** Sobald ein Server erreichbar ist, geht das Tagebuch dorthin (so
   gewünscht). Für Benjamins Laptop unkritisch; vor einem Server für andere zusammen mit der Einwilligung für die
   KI-Funktionen fragen und im Profil abschaltbar machen – Ernährungsdaten können Gesundheitsdaten sein (Art. 9 DSGVO,
