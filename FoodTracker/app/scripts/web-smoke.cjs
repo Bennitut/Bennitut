@@ -319,11 +319,15 @@ async function main() {
   // wie in der App und in `npm run web:pages`); Teil B der Datenschutzerklärung gibt es ohne Server nicht.
   try {
     const { missingLegalInfo } = require("tsx/cjs/api").require("../src/legal/texte.ts", __filename);
+    const IMPRESSUM_HEADING = "Angaben gemäß § 5 E-Commerce-Gesetz und Offenlegung gemäß § 25 Mediengesetz";
     const draft = missingLegalInfo({ withServer: false }).length > 0;
     const headerLink = (target, name) => target.getByRole("link", { name, exact: true }).filter({ visible: true });
     await page.goto(site + "/", { waitUntil: "networkidle" });
     await headerLink(page, "Impressum").first().click();
-    await page.getByText("Offenlegung gemäß § 25 Mediengesetz", { exact: true }).waitFor({ timeout: 10_000 });
+    // Impressum Variante B (§ 5 ECG und § 25 MedienG): Überschrift und die Zeile mit der vollen Anschrift.
+    await page.getByText(IMPRESSUM_HEADING, { exact: true }).waitFor({ timeout: 10_000 });
+    // Der Absatz enthält Zeilenumbrüche (Name, Straße, PLZ und Ort, Land) – daher „s“, damit „.“ sie mitnimmt.
+    await page.getByText(/^Medieninhaber und Diensteanbieter:\s.+\sÖsterreich$/s).waitFor({ timeout: 5_000 });
     const legalPath = new URL(page.url()).pathname;
     if (legalPath !== `${base}/legal`) throw new Error(`„Impressum“ führt zu ${legalPath} statt ${base}/legal`);
     await page.getByRole("heading", { name: "Datenschutzerklärung", exact: true }).waitFor({ timeout: 5_000 });
@@ -342,7 +346,7 @@ async function main() {
     await enPage.goto(site + "/plan", { waitUntil: "networkidle" });
     await headerLink(enPage, "Legal notice").first().click();
     await enPage.getByText(/^The legal notice \(Impressum\) and the privacy policy are only available in German\./).waitFor({ timeout: 10_000 });
-    await enPage.getByText("Offenlegung gemäß § 25 Mediengesetz", { exact: true }).waitFor({ timeout: 5_000 });
+    await enPage.getByText(IMPRESSUM_HEADING, { exact: true }).waitFor({ timeout: 5_000 });
     await english.close();
     console.log(`Impressum & Datenschutz: oben auf jeder Seite und im Profil verlinkt, ${draft ? "„Entwurf“ (Angaben fehlen noch)" : "vollständig"}, ohne Teil B, auf Englisch mit Hinweis.`);
   } catch (e) {

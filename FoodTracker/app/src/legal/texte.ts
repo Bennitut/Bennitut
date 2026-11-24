@@ -1,12 +1,14 @@
 // Impressum und Datenschutzerklärung, wie App und Web-Version sie zeigen (Bildschirm src/app/legal.tsx).
 //
 // Quelle sind die Entwürfe in docs/recht/ (dort mit Erklärungen, Varianten und Quellen) – Änderungen an beiden Stellen
-// nachziehen. Übernommen sind Impressum Variante A (rein privat; so lange, bis Benjamin sich für B entscheidet) und
-// Teil A der Datenschutzerklärung (ohne Server). Teil B und das Mindestalter erscheinen nur, wenn die App einen Server
-// kennt – dort stehen die offenen Punkte noch als Platzhalter, und die App zeigt „Entwurf“.
-// Bei offenen Entscheidungen gilt, was im PR als Vorgabe steht: Fotos „so lassen“ (Variante c), Impressum A.
+// nachziehen. Übernommen sind Impressum Variante B (Angaben nach § 5 E-Commerce-Gesetz und Offenlegung nach § 25
+// Mediengesetz; Benjamins Entscheidung vom 24.11.2026) und Teil A der Datenschutzerklärung (ohne Server). Teil B und
+// das Mindestalter erscheinen nur, wenn die App einen Server kennt – dort stehen die offenen Punkte noch als
+// Platzhalter, und die App zeigt „Entwurf“.
+// Rezeptfotos: Benjamin hat am 24.11.2026 „selbst ausliefern“ gewählt (Variante a). Abschnitt 4 beschreibt den Stand,
+// bis alle Fotos aus dem eigenen Projekt kommen; danach anpassen (BACKLOG.md, Vorrang „Rezeptfotos selbst ausliefern“).
 // Deine Angaben kommen aus angaben.ts; fehlt eine, steht dort ein Platzhalter [[ANGABE: …]].
-import { missingIn, orPlaceholder, type LegalSection, type Placeholder } from "../lib/legal";
+import { contactLine, missingIn, orPlaceholder, type LegalSection, type Placeholder } from "../lib/legal";
 import { ANGABEN, type Angaben } from "./angaben";
 
 export interface LegalOptions {
@@ -21,10 +23,16 @@ export interface LegalDocuments {
 
 function fields(a: Angaben) {
   const email = orPlaceholder(a.email, "E-Mail-Adresse");
+  const strasse = orPlaceholder(a.strasse, "Straße");
+  const hausnummer = orPlaceholder(a.hausnummer, "Hausnummer mit Stiege und Tür");
+  const plz = orPlaceholder(a.plz, "Postleitzahl");
+  const ort = orPlaceholder(a.ort, "Ort");
   return {
     name: orPlaceholder(a.name, "Vor- und Nachname"),
-    wohnort: orPlaceholder(a.wohnort, "Wohnort – die Gemeinde genügt"),
+    /** Volle Anschrift in drei Zeilen: Straße mit Hausnummer, PLZ und Ort, Land. */
+    anschrift: [`${strasse} ${hausnummer}`, `${plz} ${ort}`, "Österreich"].join("\n"),
     email: email.includes("[[") ? email : `[${email}](mailto:${email})`,
+    kontakt: contactLine(a.zweiterKontakt, "Zweiter Kontaktweg, z. B. Telefonnummer"),
     stand: orPlaceholder(a.stand, "Datum („Stand“)"),
     webAdresse: orPlaceholder(a.webAdresse, "Adresse der Web-Version, z. B. bennitut.github.io"),
   };
@@ -35,7 +43,7 @@ const PHOTO_CREDIT =
   "(CC BY, CC BY-SA, CC0) oder sind gemeinfrei. Urheber:in und Lizenz stehen jeweils unter dem Foto; ein Tipp darauf " +
   "öffnet die Originalseite.";
 
-/** Impressum, Variante A (Offenlegung nach § 25 Abs. 5 Mediengesetz). */
+/** Impressum, Variante B: Angaben nach § 5 E-Commerce-Gesetz und Offenlegung nach § 25 Mediengesetz. */
 export function impressum(a: Angaben = ANGABEN): LegalSection[] {
   const f = fields(a);
   return [
@@ -43,13 +51,10 @@ export function impressum(a: Angaben = ANGABEN): LegalSection[] {
       title: "Impressum",
       level: 1,
       blocks: [
-        "**Offenlegung gemäß § 25 Mediengesetz**",
-        [
-          `Medieninhaber: ${f.name}`,
-          `Wohnort: ${f.wohnort}`,
-          "Gegenstand: Entwicklung und kostenlose Bereitstellung der App „FoodTracker“ zum Planen von Mahlzeiten ohne Reste",
-          `Kontakt: ${f.email}`,
-        ].join("\n"),
+        "**Angaben gemäß § 5 E-Commerce-Gesetz und Offenlegung gemäß § 25 Mediengesetz**",
+        ["Medieninhaber und Diensteanbieter:", f.name, f.anschrift].join("\n"),
+        [`E-Mail: ${f.email}`, f.kontakt].join("\n"),
+        "Gegenstand: Entwicklung und kostenlose Bereitstellung der App „FoodTracker“ zum Planen von Mahlzeiten ohne Reste",
         PHOTO_CREDIT,
         `Stand: ${f.stand}`,
       ],
@@ -81,7 +86,7 @@ export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN):
       title: "1. Verantwortlich",
       level: 2,
       blocks: [
-        [f.name, f.wohnort, `E-Mail: ${f.email}`].join("\n"),
+        [f.name, f.anschrift, `E-Mail: ${f.email}`].join("\n"),
         "Fragen zum Datenschutz und Anfragen zu deinen Rechten (Abschnitt 6) bitte an diese E-Mail-Adresse.",
       ],
     },
@@ -184,11 +189,12 @@ export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN):
     ],
   });
   if (withServer) {
-    // Das Mindestalter betrifft vor allem Konto und KI-Funktionen; Benjamin entscheidet, sobald es einen Server gibt.
+    // Das Mindestalter betrifft vor allem Konto und KI-Funktionen; noch offen (Benjamins erste Einschätzung vom
+    // 24.11.2026: keins nötig). Bis zur Antwort bleibt der Abschnitt ein Platzhalter.
     sections.push({
       title: `${number++}. Mindestalter`,
       level: 2,
-      blocks: ["[[ENTSCHEIDUNG: Mindestalter, z. B. „FoodTracker richtet sich an Personen ab 16 Jahren.“ – siehe docs/recht/README.md, Entscheidung 3.]]"],
+      blocks: ["[[ENTSCHEIDUNG: Mindestalter für Konto und KI-Funktionen – noch offen, siehe docs/recht/README.md, Entscheidung 3.]]"],
     });
   }
   sections.push({

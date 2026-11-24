@@ -1,15 +1,32 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bulletText, describePlaceholder, isMissing, missingIn, orPlaceholder, parseInline, placeholdersIn } from "../src/lib/legal";
+import { bulletText, contactLine, describePlaceholder, isMissing, missingIn, orPlaceholder, parseInline, placeholdersIn } from "../src/lib/legal";
 import { ANGABEN, type Angaben } from "../src/legal/angaben";
 import { datenschutz, impressum, legalDocuments, missingLegalInfo } from "../src/legal/texte";
 
 /** Ausgedachte, vollständige Angaben – nur für die Tests. */
 const COMPLETE: Angaben = {
   name: "Erika Muster",
-  wohnort: "Graz",
+  strasse: "Musterstraße",
+  hausnummer: "12/3/4",
+  plz: "8010",
+  ort: "Graz",
   email: "foodtracker@example.org",
+  zweiterKontakt: "+43 660 1234567",
   stand: "1. Dezember 2026",
+  webAdresse: "bennitut.github.io",
+};
+
+/** Alle Felder leer – so sieht man, welche Angaben das Impressum verlangt. */
+const EMPTY: Angaben = {
+  name: "",
+  strasse: "",
+  hausnummer: "",
+  plz: "",
+  ort: "",
+  email: "",
+  zweiterKontakt: "",
+  stand: "",
   webAdresse: "bennitut.github.io",
 };
 
@@ -29,6 +46,16 @@ describe("Platzhalter in Impressum und Datenschutzerklärung", () => {
     assert.equal(orPlaceholder("  Graz ", "Wohnort"), "Graz");
     assert.equal(orPlaceholder("", "Wohnort"), "[[ANGABE: Wohnort]]");
     assert.equal(orPlaceholder("[[ANGABE: Ort, z. B. Graz]]", "Wohnort"), "[[ANGABE: Ort, z. B. Graz]]");
+  });
+
+  it("zeigt eine reine Telefonnummer als „Telefon: …“ und anderes so, wie es eingetragen ist", () => {
+    assert.equal(contactLine("+43 660 1234567", "Kontakt"), "Telefon: +43 660 1234567");
+    assert.equal(contactLine(" 0660/1234567 ", "Kontakt"), "Telefon: 0660/1234567");
+    assert.equal(contactLine("+43 (0)316 123456-7", "Kontakt"), "Telefon: +43 (0)316 123456-7");
+    assert.equal(contactLine("Telefon: +43 660 1234567", "Kontakt"), "Telefon: +43 660 1234567");
+    assert.equal(contactLine("Kontaktformular: https://example.org/kontakt", "Kontakt"), "Kontaktformular: https://example.org/kontakt");
+    assert.equal(contactLine("", "Zweiter Kontaktweg"), "[[ANGABE: Zweiter Kontaktweg]]");
+    assert.equal(contactLine("[[ANGABE: Telefonnummer]]", "Kontakt"), "[[ANGABE: Telefonnummer]]");
   });
 
   it("liest Art und Bezeichnung der Platzhalter", () => {
@@ -94,11 +121,19 @@ describe("Texte der App", () => {
     assert.ok(missing.every((p) => p.type === "ANGABE"), "ohne Server nur fehlende Angaben, keine offenen Entscheidungen");
   });
 
-  it("sind mit allen Angaben ohne Server fertig (Impressum Variante A, Datenschutz Teil A)", () => {
+  it("sind mit allen Angaben ohne Server fertig (Impressum Variante B, Datenschutz Teil A)", () => {
     assert.deepEqual(missingLegalInfo({ withServer: false }, COMPLETE), []);
     const docs = legalDocuments({ withServer: false }, COMPLETE);
     const text = allText([...docs.impressum, ...docs.datenschutz]);
-    for (const expected of ["Offenlegung gemäß § 25 Mediengesetz", "Medieninhaber: Erika Muster", "Wohnort: Graz", "Teil A", "GitHub Pages", "Deine Rechte"]) {
+    for (const expected of [
+      "Angaben gemäß § 5 E-Commerce-Gesetz und Offenlegung gemäß § 25 Mediengesetz",
+      "Medieninhaber und Diensteanbieter:\nErika Muster\nMusterstraße 12/3/4\n8010 Graz\nÖsterreich",
+      "Telefon: +43 660 1234567",
+      "Gegenstand: ",
+      "Teil A",
+      "GitHub Pages",
+      "Deine Rechte",
+    ]) {
       assert.ok(text.includes(expected), `fehlt: ${expected}`);
     }
     assert.ok(text.includes("[foodtracker@example.org](mailto:foodtracker@example.org)"), "E-Mail als Link");
@@ -110,6 +145,22 @@ describe("Texte der App", () => {
   it("zeigen ein leeres Feld als fehlende Angabe statt als leere Zeile", () => {
     const missing = missingLegalInfo({ withServer: false }, { ...COMPLETE, name: " ", email: "" }).map((p) => p.label);
     assert.deepEqual(missing, ["Vor- und Nachname", "E-Mail-Adresse"]);
+  });
+
+  it("verlangen im Impressum die vollen Angaben nach § 5 ECG: Name, Anschrift, E-Mail und einen zweiten Kontaktweg", () => {
+    assert.deepEqual(
+      missingIn(impressum(EMPTY)).map((p) => p.label),
+      ["Vor- und Nachname", "Straße", "Hausnummer mit Stiege und Tür", "Postleitzahl", "Ort", "E-Mail-Adresse", "Zweiter Kontaktweg, z. B. Telefonnummer", "Datum („Stand“)"],
+    );
+  });
+
+  it("nennen unter „Verantwortlich“ dieselbe volle Anschrift wie das Impressum", () => {
+    const verantwortlich = datenschutz({ withServer: false }, COMPLETE).find((s) => s.title === "1. Verantwortlich");
+    assert.ok(verantwortlich);
+    assert.equal(
+      verantwortlich.blocks[0],
+      "Erika Muster\nMusterstraße 12/3/4\n8010 Graz\nÖsterreich\nE-Mail: [foodtracker@example.org](mailto:foodtracker@example.org)",
+    );
   });
 
   it("bleiben mit Server ein Entwurf, bis Teil B fertig ist", () => {

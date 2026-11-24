@@ -52,7 +52,7 @@ if (missingLegal.length > 0) {
         list,
         "",
         "Bitte in FoodTracker/app/src/legal/angaben.ts eintragen (Erklärungen: FoodTracker/docs/recht/README.md).",
-        "Ohne Offenlegung nach § 25 Mediengesetz soll keine Web-Version online gehen.",
+        "Ohne vollständiges Impressum (§ 5 E-Commerce-Gesetz, § 25 Mediengesetz) soll keine Web-Version online gehen.",
         "Nur zum Ausprobieren auf dem eigenen Rechner: npm run web:pages -- --entwurf",
       ].join("\n"),
     );

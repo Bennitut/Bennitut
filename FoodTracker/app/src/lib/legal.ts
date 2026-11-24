@@ -35,6 +35,19 @@ export function orPlaceholder(value: string | null | undefined, label: string): 
   return value && value.includes("[[") ? value.trim() : `[[ANGABE: ${label}]]`;
 }
 
+/** Eine reine Telefonnummer, z. B. „+43 660 1234567“, „0660/1234567“ oder „+43 (0)316 123456-7“. */
+const PHONE = /^\+?\d[\d ()/.-]{4,}\d$/;
+
+/**
+ * Der zweite Kontaktweg fürs Impressum: eine reine Telefonnummer als „Telefon: …“, alles andere so, wie es eingetragen
+ * ist (z. B. „Kontaktformular: https://…“); fehlt er, ein Platzhalter.
+ */
+export function contactLine(value: string | null | undefined, label: string): string {
+  const v = orPlaceholder(value, label);
+  if (isMissing(v)) return v;
+  return PHONE.test(v) ? `Telefon: ${v}` : v;
+}
+
 function toPlaceholder(content: string): Placeholder {
   const match = content.match(/^\s*([A-ZÄÖÜ]+)\s*:\s*([\s\S]*)$/);
   const label = (match ? match[2] : content).replace(/\s+/g, " ").trim();
