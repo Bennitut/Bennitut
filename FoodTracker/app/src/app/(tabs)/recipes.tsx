@@ -1,9 +1,10 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { TextInput, View } from "react-native";
+import { ComingSoonNote } from "../../components/ComingSoon";
 import { RecipeRow } from "../../components/RecipeRow";
 import { Button, Card, Chip, ChipRow, Muted, Screen, ShowMore, styles } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, HAS_SERVER } from "../../lib/api";
 import { communityCache } from "../../lib/communityCache";
 import { useI18n } from "../../lib/i18n";
 import { PAGE_SIZE, firstPage, sortByRating, topRated } from "../../lib/recipeLists";
@@ -26,7 +27,8 @@ export default function RecipesScreen() {
   // Community-Rezepte bei jedem Öffnen des Tabs neu laden (Favoriten-Zähler ändern sich).
   useFocusEffect(
     useCallback(() => {
-      if (segment !== "discover") return;
+      // Ohne Server gibt es keine Community – die Karte zeigt dann „Bald verfügbar“.
+      if (segment !== "discover" || !HAS_SERVER) return;
       let active = true;
       const timer = setTimeout(() => {
         api
@@ -100,19 +102,25 @@ export default function RecipesScreen() {
       {segment === "discover" ? (
         <>
           <Card title={t("recipes.community")} icon="💬" tint="#ECEBF8">
-            <ChipRow>
-              <Chip label={t("recipes.sortPopular")} selected={sort === "popular"} onPress={() => setSort("popular")} />
-              <Chip label={t("recipes.sortNew")} selected={sort === "new"} onPress={() => setSort("new")} />
-            </ChipRow>
-            {communityError ? <Muted>{t("recipes.communityOffline")}</Muted> : null}
-            {(community ?? []).map((entry) => (
-              <RecipeRow
-                key={entry.id}
-                recipe={entry.recipe}
-                favorite={isFavorite(entry.recipe.id)}
-                subtitle={`${t("recipes.by", { name: entry.authorName })} · ${t("recipes.likes", { n: entry.likes })}`}
-              />
-            ))}
+            {HAS_SERVER ? (
+              <>
+                <ChipRow>
+                  <Chip label={t("recipes.sortPopular")} selected={sort === "popular"} onPress={() => setSort("popular")} />
+                  <Chip label={t("recipes.sortNew")} selected={sort === "new"} onPress={() => setSort("new")} />
+                </ChipRow>
+                {communityError ? <Muted>{t("recipes.communityOffline")}</Muted> : null}
+                {(community ?? []).map((entry) => (
+                  <RecipeRow
+                    key={entry.id}
+                    recipe={entry.recipe}
+                    favorite={isFavorite(entry.recipe.id)}
+                    subtitle={`${t("recipes.by", { name: entry.authorName })} · ${t("recipes.likes", { n: entry.likes })}`}
+                  />
+                ))}
+              </>
+            ) : (
+              <ComingSoonNote text={t("recipes.communitySoon")} />
+            )}
           </Card>
           {best.length > 0 && !query.trim() ? (
             <Card title={t("feedback.topRated")} icon="🏆" tint="#FFF4D6">

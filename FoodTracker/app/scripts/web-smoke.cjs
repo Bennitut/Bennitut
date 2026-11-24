@@ -3,8 +3,8 @@
 //   npm run web:export                # baut die statische Web-Version nach dist/
 //   npm run web:smoke                 # öffnet jede Seite und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
 //                                     # abhaken, „Abgehaktes in den Vorrat“, „Liefern lassen“ zeigt „Bald verfügbar“)
-//                                     # → Vorrat durch, danach „Entdecken“ und Tauschen (zuerst 30 Rezepte, nicht
-//                                     # alle Fotos auf einmal)
+//                                     # → Vorrat durch, danach „Entdecken“ (Community „Bald verfügbar“) und Tauschen
+//                                     # (zuerst 30 Rezepte, nicht alle Fotos auf einmal)
 //   npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe für GitHub Pages (Unterpfad /Bennitut)
 //
 // Den Unterpfad erkennt der Test selbst an den Skript-Pfaden in index.html. Gibt es eine 404.html, verhält sich
@@ -175,7 +175,7 @@ async function main() {
     await stocked();
     await page.goto(site + "/plan", { waitUntil: "networkidle" });
     await page.getByText(/^Woche 1/).first().waitFor({ timeout: 10_000 });
-    console.log("Ablauf Fragebogen → Plan → Einkauf → Vorrat ok: 2 abgehakte Zeilen gebucht, Plan und Vorrat bleiben nach dem Neuladen.");
+    console.log("Ablauf Fragebogen → Plan → Einkauf → Vorrat ok: 2 abgehakte Zeilen gebucht, „Liefern lassen“ zeigt „Bald verfügbar“, Plan und Vorrat bleiben nach dem Neuladen.");
   } catch (e) {
     failures.push(`Ablauf: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
@@ -190,7 +190,10 @@ async function main() {
     photos.clear();
     await tap("Entdecken");
     await page.getByText("FoodTracker-Rezepte", { exact: true }).waitFor({ timeout: 10_000 });
+    // Ohne Server: „Aus der Community“ zeigt „Bald verfügbar“ statt „… konnten nicht geladen werden.“
+    await page.getByText(/^Rezepte anderer entdecken und eigene teilen kommt bald\./).waitFor({ timeout: 5_000 });
     await page.waitForTimeout(1500);
+    if (await page.getByText(/konnten nicht geladen werden/).count()) throw new Error("„Entdecken“ meldet, dass Community-Rezepte nicht geladen werden konnten");
     if (photos.size > 30) throw new Error(`„Entdecken“ lädt ${photos.size} Fotos auf einmal`);
     const first = photos.size;
     await more(30).waitFor({ timeout: 5_000 });
@@ -201,7 +204,7 @@ async function main() {
     // Der Tab „Rezepte“ bleibt geladen; der Dialog liegt im Dokument dahinter.
     await more(30).last().waitFor({ timeout: 5_000 });
     await tap("Schließen");
-    console.log(`„Entdecken“ lädt zuerst ${first} Fotos, „Mehr anzeigen“ zeigt weitere; Tauschen ebenso.`);
+    console.log(`„Entdecken“ zeigt für die Community „Bald verfügbar“, lädt zuerst ${first} Fotos, „Mehr anzeigen“ zeigt weitere; Tauschen ebenso.`);
   } catch (e) {
     failures.push(`Lange Listen: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});

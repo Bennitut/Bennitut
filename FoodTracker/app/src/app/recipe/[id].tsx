@@ -1,8 +1,9 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Image, Linking, Text, View } from "react-native";
+import { ComingSoonNote } from "../../components/ComingSoon";
 import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, HAS_SERVER } from "../../lib/api";
 import { ImproveCard, PhotoGallery, RatingCard } from "../../components/RecipeFeedback";
 import { communityCache } from "../../lib/communityCache";
 import { ingredientEmoji } from "../../lib/emoji";
@@ -220,9 +221,15 @@ export default function RecipeDetailScreen() {
         {isOwn ? (
           <>
             <Button label={t("common.edit")} variant="secondary" onPress={() => router.push(`/recipe/edit?id=${encodeURIComponent(recipe.id)}`)} />
-            <Button label={communityId ? t("recipes.unshare") : t("recipes.share")} variant="secondary" onPress={toggleShare} loading={busy === "share"} />
-            {communityId ? <Muted>{t("recipes.shared")}</Muted> : null}
+            {HAS_SERVER ? (
+              <>
+                <Button label={communityId ? t("recipes.unshare") : t("recipes.share")} variant="secondary" onPress={toggleShare} loading={busy === "share"} />
+                {communityId ? <Muted>{t("recipes.shared")}</Muted> : null}
+              </>
+            ) : null}
             <Button label={t("common.delete")} variant="secondary" onPress={remove} />
+            {/* Ohne Server kein Teilen: Hinweis statt eines Knopfs, der nur „Keine Verbindung“ meldet. */}
+            {HAS_SERVER ? null : <ComingSoonNote text={t("recipes.shareSoon")} />}
           </>
         ) : (
           <Button label={t("recipes.copyToMine")} variant="secondary" onPress={copyToMine} />
