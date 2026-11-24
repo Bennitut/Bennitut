@@ -25,6 +25,7 @@ import type {
   Role,
   ShoppingItem,
 } from "./types";
+import type { ServerHealth } from "./serverStatus";
 
 /**
  * Adresse des Backends, null = kein Server. Während der Entwicklung läuft es auf demselben Rechner wie Expo;
@@ -79,11 +80,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Ohne Server wie ohne Verbindung: Katalog, Planer, Vorrat und Tagebuch laufen in der App weiter.
   if (!BASE_URL) throw new ApiError("network");
   let res: Response;
+  // KI-Anfragen dürfen dauern – mit lokaler KI (Ollama) oft 20–90 Sekunden, beim ersten Mal länger. Der Server
+  // bricht nach 240 Sekunden selbst ab und meldet „ai_timeout“; ohne Server soll die App nicht ewig warten.
+  const slow = path.startsWith("/api/analyze") || /^\/api\/recipes\/(import|translate|improve)$/.test(path) || path === "/api/plan";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), slow ? 300_000 : 10_000);
   try {
-    // KI-Anfragen dürfen dauern; ohne Server soll die App aber nicht ewig warten.
-    const slow = path.startsWith("/api/analyze") || /^\/api\/recipes\/(import|translate|improve)$/.test(path) || path === "/api/plan";
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), slow ? 120_000 : 10_000);
     res = await fetch(`${BASE_URL}${path}`, {
       signal: controller.signal,
       ...init,
@@ -95,10 +97,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
   } catch {
+    clearTimeout(timer);
     throw new ApiError("network");
   }
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) {
+    clearTimeout(timer);
+    return undefined as T;
+  }
   const body = await res.json().catch(() => ({}));
+  clearTimeout(timer);
   if (!res.ok) throw new ApiError(typeof body.error === "string" ? body.error : "internal");
   return body as T;
 }
@@ -117,6 +124,8 @@ export interface PlanPreferences {
 }
 
 export const api = {
+  /** Lebenszeichen des Servers und welche KI er gerade nutzen kann (Profilzeile). */
+  health: () => request<ServerHealth>("/api/health"),
   analyzeMeal: (image: ImagePayload, language: string) =>
     post<MealAnalysis>("/api/analyze/meal", { imageBase64: image.data, mediaType: image.mediaType, language }),
 

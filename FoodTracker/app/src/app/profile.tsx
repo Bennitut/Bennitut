@@ -1,11 +1,12 @@
-import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { ComingSoonNote } from "../components/ComingSoon";
 import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, colors, styles } from "../components/ui";
 import { api, HAS_SERVER } from "../lib/api";
 import { addDays, formatDay } from "../lib/dates";
 import { useI18n } from "../lib/i18n";
+import { serverLine, type ServerHealth } from "../lib/serverStatus";
 import { sumNutrients, today } from "../lib/pantry";
 import { useStore } from "../lib/store";
 
@@ -16,6 +17,22 @@ export default function ProfileScreen() {
   const i18n = useI18n();
   const { t } = i18n;
   const [range, setRange] = useState<(typeof RANGES)[number]>(7);
+  // undefined = wird geprüft, null = keine Antwort. Bei jedem Öffnen neu, z. B. nachdem Ollama gestartet wurde.
+  const [health, setHealth] = useState<ServerHealth | null | undefined>(undefined);
+  useFocusEffect(
+    useCallback(() => {
+      if (!HAS_SERVER) return;
+      let active = true;
+      api
+        .health()
+        .then((h) => active && setHealth(h))
+        .catch(() => active && setHealth(null));
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+  const server = serverLine(health);
   const target = settings.kcalPerPersonPerDay;
   const list = (items: string[]) => (items.length > 0 ? items.join(", ") : t("profile.none"));
 
@@ -78,6 +95,7 @@ export default function ProfileScreen() {
           // Ohne Server keine Anmeldung: Hinweis statt eines Knopfs, der zu „Ohne Verbindung … keine Anmeldung“ führt.
           <ComingSoonNote text={t("account.signInSoon")} />
         )}
+        {HAS_SERVER ? <Muted>{t(server.key, { model: server.model })}</Muted> : null}
       </Card>
 
       <Card title={t("profile.you")} icon="🙋">
