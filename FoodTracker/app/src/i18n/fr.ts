@@ -15,6 +15,7 @@ export const fr: Dictionary = {
     perPerson: "{kcal} kcal par pers.",
     nutrients: "{kcal} kcal · {protein} g protéines · {carbs} g glucides · {fat} g lipides",
     estimatedPrices: "Les prix sont indicatifs.",
+    showMore: "Afficher plus ({shown} sur {total})",
   },
   tabs: {
     today: "Aujourd'hui",

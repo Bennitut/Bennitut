@@ -2,10 +2,11 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { TextInput, View } from "react-native";
 import { RecipeRow } from "../../components/RecipeRow";
-import { Button, Card, Chip, ChipRow, Muted, Screen, styles } from "../../components/ui";
+import { Button, Card, Chip, ChipRow, Muted, Screen, ShowMore, styles } from "../../components/ui";
 import { api } from "../../lib/api";
 import { communityCache } from "../../lib/communityCache";
 import { useI18n } from "../../lib/i18n";
+import { PAGE_SIZE, firstPage, sortByRating, topRated } from "../../lib/recipeLists";
 import { useStore } from "../../lib/store";
 import type { CommunityRecipe, Recipe } from "../../lib/types";
 
@@ -20,6 +21,7 @@ export default function RecipesScreen() {
   const [sort, setSort] = useState<"popular" | "new">("popular");
   const [community, setCommunity] = useState<CommunityRecipe[] | null>(null);
   const [communityError, setCommunityError] = useState(false);
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
   // Community-Rezepte bei jedem Öffnen des Tabs neu laden (Favoriten-Zähler ändern sich).
   useFocusEffect(
@@ -47,13 +49,14 @@ export default function RecipesScreen() {
   const matches = (recipe: Recipe) => !query.trim() || i18n.recipe(recipe).name.toLowerCase().includes(query.trim().toLowerCase());
   const isFavorite = (id: string) => favoriteIds.includes(id);
   const favorites = favoriteIds.map((id) => recipes.get(id)).filter((r): r is Recipe => !!r);
-  // Bewertung mit Vorannahme von 3 Sternen, damit eine einzelne 5-Sterne-Bewertung nicht alles überholt.
-  const score = (id: string) => {
-    const r = ratings[id];
-    return r?.count ? (r.avg * r.count + 3 * 2) / (r.count + 2) : 3;
+  const catalogSorted = sortByRating(catalog.recipes, ratings);
+  const best = topRated(catalogSorted, ratings);
+  // Nicht alle Katalogrezepte auf einmal: Jede Zeile lädt ein Foto (siehe PAGE_SIZE).
+  const catalogPage = firstPage(catalogSorted, limit, matches);
+  const search = (text: string) => {
+    setQuery(text);
+    setLimit(PAGE_SIZE);
   };
-  const catalogSorted = [...catalog.recipes].sort((a, b) => score(b.id) - score(a.id));
-  const topRated = catalogSorted.filter((r) => (ratings[r.id]?.count ?? 0) > 0 && ratings[r.id]!.avg >= 4).slice(0, 10);
 
   return (
     <Screen>
@@ -72,7 +75,7 @@ export default function RecipesScreen() {
         </View>
       </View>
 
-      <TextInput style={styles.input} placeholder={t("recipes.searchPlaceholder")} value={query} onChangeText={setQuery} clearButtonMode="while-editing" />
+      <TextInput style={styles.input} placeholder={t("recipes.searchPlaceholder")} value={query} onChangeText={search} clearButtonMode="while-editing" />
 
       {segment === "mine" ? (
         <Card>
@@ -111,17 +114,18 @@ export default function RecipesScreen() {
               />
             ))}
           </Card>
-          {topRated.length > 0 && !query.trim() ? (
+          {best.length > 0 && !query.trim() ? (
             <Card title={t("feedback.topRated")} icon="🏆" tint="#FFF4D6">
-              {topRated.map((r) => (
+              {best.map((r) => (
                 <RecipeRow key={r.id} recipe={recipes.get(r.id) ?? r} favorite={isFavorite(r.id)} />
               ))}
             </Card>
           ) : null}
           <Card title={t("recipes.catalog")} icon="📖">
-            {catalogSorted.filter(matches).map((r) => (
+            {catalogPage.shown.map((r) => (
               <RecipeRow key={r.id} recipe={recipes.get(r.id) ?? r} favorite={isFavorite(r.id)} />
             ))}
+            <ShowMore shown={catalogPage.shown.length} total={catalogPage.total} onPress={() => setLimit((n) => n + PAGE_SIZE)} />
           </Card>
         </>
       ) : null}

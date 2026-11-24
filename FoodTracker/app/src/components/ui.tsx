@@ -105,6 +105,12 @@ export function Button({
   );
 }
 
+/** „Mehr anzeigen (30 von 236)“ unter einer gekürzten Liste; nichts, sobald alles zu sehen ist. */
+export function ShowMore({ shown, total, onPress }: { shown: number; total: number; onPress: () => void }) {
+  const { t } = useI18n();
+  return shown < total ? <Button label={t("common.showMore", { shown, total })} variant="secondary" onPress={onPress} /> : null;
+}
+
 export function Muted({ children }: { children: ReactNode }) {
   return <Text style={styles.muted}>{children}</Text>;
 }

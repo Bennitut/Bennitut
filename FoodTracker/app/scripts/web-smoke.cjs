@@ -1,7 +1,8 @@
 // Rauchtest der Web-Version im Browser (headless Chromium über Playwright).
 //
 //   npm run web:export                # baut die statische Web-Version nach dist/
-//   npm run web:smoke                 # öffnet jede Seite und spielt Fragebogen → Monatsplan → Einkauf → Vorrat durch
+//   npm run web:smoke                 # öffnet jede Seite und spielt Fragebogen → Monatsplan → Einkauf → Vorrat durch,
+//                                     # danach „Entdecken“ und Tauschen (zuerst 30 Rezepte, nicht alle Fotos auf einmal)
 //   npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe für GitHub Pages (Unterpfad /Bennitut)
 //
 // Den Unterpfad erkennt der Test selbst an den Skript-Pfaden in index.html. Gibt es eine 404.html, verhält sich
@@ -162,6 +163,32 @@ async function main() {
     console.log("Ablauf Fragebogen → Plan → Einkauf → Vorrat ok, Plan bleibt nach dem Neuladen erhalten.");
   } catch (e) {
     failures.push(`Ablauf: ${e.message.split("\n")[0]}`);
+    await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
+  }
+
+  // Lange Listen („Entdecken“, Tauschen im Plan) zeigen zuerst 30 Rezepte – jede Zeile lädt ein Foto.
+  try {
+    const photos = new Set();
+    page.on("request", (r) => r.resourceType() === "image" && r.url().startsWith("https://") && photos.add(r.url()));
+    const more = (shown) => page.getByText(new RegExp(`^Mehr anzeigen \\(${shown} von \\d+\\)$`));
+    await tap("Rezepte");
+    photos.clear();
+    await tap("Entdecken");
+    await page.getByText("FoodTracker-Rezepte", { exact: true }).waitFor({ timeout: 10_000 });
+    await page.waitForTimeout(1500);
+    if (photos.size > 30) throw new Error(`„Entdecken“ lädt ${photos.size} Fotos auf einmal`);
+    const first = photos.size;
+    await more(30).waitFor({ timeout: 5_000 });
+    await more(30).click();
+    await more(60).waitFor({ timeout: 5_000 });
+    await tap("Plan");
+    await tap("⇄ Tauschen");
+    // Der Tab „Rezepte“ bleibt geladen; der Dialog liegt im Dokument dahinter.
+    await more(30).last().waitFor({ timeout: 5_000 });
+    await tap("Schließen");
+    console.log(`„Entdecken“ lädt zuerst ${first} Fotos, „Mehr anzeigen“ zeigt weitere; Tauschen ebenso.`);
+  } catch (e) {
+    failures.push(`Lange Listen: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
   }
 

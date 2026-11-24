@@ -1,13 +1,14 @@
 import { Link, router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, colors, styles } from "../../components/ui";
+import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, ShowMore, colors, styles } from "../../components/ui";
 import { ApiError, api } from "../../lib/api";
 import { MONTH_WEEKS, PlanError, matchesPreferences, planMonth, weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
 import { aggregatePantry, today } from "../../lib/pantry";
 import { planOptions } from "../../lib/profile";
+import { PAGE_SIZE, firstPage } from "../../lib/recipeLists";
 import { prepareReplan } from "../../lib/replan";
 import { mealKey, useStore } from "../../lib/store";
 import type { LockedMeal, MonthPlan, PlannedMeal, WeekPlan } from "../../lib/types";
@@ -27,6 +28,7 @@ export default function PlanScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [swap, setSwap] = useState<PlannedMeal | null>(null);
   const [alternatives, setAlternatives] = useState<string[]>([]);
+  const [alternativesLimit, setAlternativesLimit] = useState(PAGE_SIZE);
   const todayIndex = plan ? daysBetween(plan.startDate, today()) : 0;
   const [selectedWeek, setSelectedWeek] = useState(() => weekOfDay(Math.max(0, todayIndex)));
   const loading = progress !== null;
@@ -118,8 +120,11 @@ export default function PlanScreen() {
       .map((r) => r.id);
     // Favoriten zuerst.
     setAlternatives(ids.sort((a, b) => Number(favoriteIds.includes(b)) - Number(favoriteIds.includes(a))));
+    setAlternativesLimit(PAGE_SIZE);
     setSwap(meal);
   };
+  // Ohne Einschränkungen passen fast 190 Rezepte: zuerst nur einen Teil zeigen, jede Zeile lädt ein Foto (siehe PAGE_SIZE).
+  const alternativesPage = firstPage(alternatives, alternativesLimit);
 
   const chooseAlternative = (recipeId: string) => {
     if (!swap) return;
@@ -285,7 +290,7 @@ export default function PlanScreen() {
             <Muted>{t("plan.noAlternatives")}</Muted>
           ) : (
             <ScrollView contentContainerStyle={{ gap: 8, paddingBottom: 40 }}>
-              {alternatives.map((id) => {
+              {alternativesPage.shown.map((id) => {
                 const recipe = recipes.get(id);
                 if (!recipe) return null;
                 return (
@@ -301,6 +306,7 @@ export default function PlanScreen() {
                   </Pressable>
                 );
               })}
+              <ShowMore shown={alternativesPage.shown.length} total={alternativesPage.total} onPress={() => setAlternativesLimit((n) => n + PAGE_SIZE)} />
             </ScrollView>
           )}
           {loading ? <ActivityIndicator color={colors.primary} /> : null}

@@ -15,6 +15,7 @@ export const de = {
     perPerson: "{kcal} kcal p. P.",
     nutrients: "{kcal} kcal · {protein} g Eiweiß · {carbs} g KH · {fat} g Fett",
     estimatedPrices: "Preise sind Richtwerte.",
+    showMore: "Mehr anzeigen ({shown} von {total})",
   },
   tabs: {
     today: "Heute",
