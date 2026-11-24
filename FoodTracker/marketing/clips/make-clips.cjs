@@ -57,6 +57,14 @@ async function scroll(page, pixels, steps = 10) {
   await page.waitForTimeout(500);
 }
 
+/** Scrollt sichtbar, bis `locator` etwa bei Höhe `y` im Fenster steht (lange Strecken mit mehr Schritten). */
+async function scrollTo(page, locator, y = 360) {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error("Element nicht sichtbar");
+  const distance = box.y - y;
+  await scroll(page, distance, Math.max(10, Math.round(Math.abs(distance) / 90)));
+}
+
 /** Fragebogen durchklicken und den ersten Monatsplan erstellen (vegetarisch, sonst Standardantworten). */
 async function createPlan(page, base, pace = 120) {
   await page.goto(base + "/plan", { waitUntil: "networkidle" });
@@ -103,7 +111,15 @@ const CLIPS = [
       caption("Passende Packungen –\nkaum Reste");
       await scroll(page, 420);
       await page.waitForTimeout(1500);
-      await scroll(page, -680);
+      // Abgehaktes mit einem Tipp in den Vorrat buchen (geht ohne Server) und den Vorrat zeigen.
+      caption("Gekauft? Ein Tipp –\nab in den Vorrat");
+      const book = page.getByText(/^🧺 Abgehaktes in den Vorrat \(\d+\)$/);
+      await scrollTo(page, book);
+      await tap(page, book, 1300);
+      await tap(page, page.getByRole("tab", { name: /Vorrat/ }), 2600);
+      // Zurück zur Liste: Gebuchtes trägt dort „🧺 im Vorrat“ – passt noch zur Einblendung.
+      await tap(page, page.getByRole("tab", { name: /Einkauf/ }), 500);
+      await scroll(page, -4000, 16);
       caption("Jede Woche eine eigene\nListe mit Richtpreisen");
       await tap(page, page.getByText(/^Woche 2/).first(), 1600);
       await scroll(page, 360);

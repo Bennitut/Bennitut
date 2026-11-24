@@ -1,13 +1,13 @@
 # Promo-Clips für erste Tester
 
-Drei Hochkant-Clips (1080×1920, H.264, ohne Ton, je unter 1 MB), aufgenommen aus der Web-Version der App.
+Drei Hochkant-Clips (1080×1920, H.264, ohne Ton, je unter 1,5 MB), aufgenommen aus der Web-Version der App.
 Alle Inhalte stammen aus FoodTracker selbst; Bildnachweise der Rezeptfotos stehen in
 [bildnachweise.md](bildnachweise.md).
 
 | Clip | Länge | Inhalt |
 |---|---|---|
 | [01-monatsplan.mp4](01-monatsplan.mp4) | 20 s | Fragebogen → Monatsplan in einer Sekunde → Reste werden mitverplant |
-| [02-einkaufsliste.mp4](02-einkaufsliste.mp4) | 16 s | Einkaufsliste abhaken, passende Packungen, eigene Liste pro Woche |
+| [02-einkaufsliste.mp4](02-einkaufsliste.mp4) | 23 s | Einkaufsliste abhaken, passende Packungen, mit einem Tipp in den Vorrat, eigene Liste pro Woche |
 | [03-kochen-und-abhaken.mp4](03-kochen-und-abhaken.mp4) | 18 s | Rezept mit Foto → „Gegessen“ → Kalorien und Makros unter „Heute“ |
 
 ## Wo Interessierte die App testen können
@@ -21,12 +21,13 @@ Kurzanleitung für Tester (für Bio, angepinnten Kommentar oder Antwort auf Nach
 
 1. Link am Handy öffnen – läuft im Browser, ohne Download und ohne Konto.
 2. Unter „Plan“ die sechs Fragen beantworten und „Monatsplan erstellen“ tippen.
-3. Einkaufsliste und Vorrat ausprobieren, Gerichte als „Gegessen“ abhaken.
+3. In der Einkaufsliste abhaken, mit „Abgehaktes in den Vorrat“ buchen und Gerichte als „Gegessen“ abhaken.
 4. Die Daten bleiben im Browser auf dem eigenen Gerät; es wird nichts hochgeladen.
 5. Feedback gern als Kommentar oder Nachricht: Was fehlt, was nervt, welches Gericht passt nicht?
 
-Foto- und Kassenbon-Erkennung, Rezept-Import und Community brauchen einen Server und sind in der Web-Version noch
-nicht verfügbar – in den Beiträgen deshalb nicht versprechen.
+Foto- und Kassenbon-Erkennung, Rezept-Import, Community und Bestellungen beim Lieferdienst brauchen einen Server und
+sind in der Web-Version noch nicht verfügbar (die App zeigt dort „Bald verfügbar“) – in den Beiträgen deshalb nicht
+versprechen.
 
 ## Beitragstexte
 
@@ -49,12 +50,15 @@ gewünscht; die Clips selbst haben keinen Ton.
 ### Clip 2 – Einkaufsliste
 
 - **TikTok:** Die Einkaufsliste, die sich selbst schreibt 🛒 Mengen und Packungsgrößen passen zum Plan, damit kaum
-  etwas im Kühlschrank verdirbt. Link in der Bio zum Ausprobieren. `#einkaufsliste #wenigerwegwerfen #mealprep`
+  etwas im Kühlschrank verdirbt. Abgehakt? Ein Tipp, und alles steht im Vorrat. Link in der Bio zum Ausprobieren.
+  `#einkaufsliste #wenigerwegwerfen #mealprep`
 - **Instagram (Reels):** Einkaufen ohne Zettelchaos 🧾 Die Liste kommt direkt aus deinem Essensplan, mit
-  Richtpreisen und Packungen, die aufgehen. Jede Woche eine eigene Liste. Teste die App kostenlos – Link in der Bio.
+  Richtpreisen und Packungen, die aufgehen. Was im Wagen liegt, bucht ein Tipp in den Vorrat – samt Haltbarkeit.
+  Jede Woche eine eigene Liste. Teste die App kostenlos – Link in der Bio.
   `#einkaufsliste #zerowaste #haushalt #mealprep`
 - **YouTube Shorts:** Titel „Diese Einkaufsliste plant gegen Lebensmittelverschwendung“ · Beschreibung: Mengen und
-  Packungsgrößen passend zum Monatsplan, Woche für Woche. Kostenlos testen: https://bennitut.github.io/Bennitut/
+  Packungsgrößen passend zum Monatsplan, Woche für Woche; Gekauftes landet mit einem Tipp im Vorrat. Kostenlos
+  testen: https://bennitut.github.io/Bennitut/
 
 ### Clip 3 – Kochen und abhaken
 
