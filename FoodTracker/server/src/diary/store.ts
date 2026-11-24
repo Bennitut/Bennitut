@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Tagebucheintrag, wie ihn die App schickt (app/src/lib/types.ts, DiaryEntry). */
@@ -104,6 +104,20 @@ export class DiaryStore {
   /** Anzahl gespeicherter Einträge (ohne Löschmarken), z. B. für Tests. */
   count(owner: string): number {
     return Object.values(this.load(owner).records).filter((r) => r.entry !== null).length;
+  }
+
+  /** Alle Einträge ohne Löschmarken, nach Tag und Uhrzeit sortiert – für „Meine Daten exportieren“. */
+  entries(owner: string): DiaryEntryData[] {
+    return Object.values(this.load(owner).records)
+      .flatMap((r) => (r.entry ? [r.entry] : []))
+      .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  }
+
+  /** Beim Löschen eines Kontos: die ganze Sicherung entfernen, auch die Datei. */
+  remove(owner: string) {
+    this.owners.delete(owner);
+    const file = this.file(owner);
+    if (file) rmSync(file, { force: true });
   }
 
   private file(owner: string): string | null {

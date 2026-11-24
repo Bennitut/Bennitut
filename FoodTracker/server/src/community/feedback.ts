@@ -156,6 +156,31 @@ export class FeedbackStore {
     return this.data.photos.filter((p) => p.authorId === authorId).length;
   }
 
+  /** Für „Meine Daten exportieren“: eigene Fotos, vergebene Sterne und Meldungen. */
+  exportFor(actor: string) {
+    return {
+      photos: this.data.photos
+        .filter((p) => p.authorId === actor)
+        .map(({ id, recipeId, uri, authorName, createdAt }) => ({ id, recipeId, uri, authorName, createdAt })),
+      photoRatings: Object.fromEntries(this.data.photos.filter((p) => actor in p.ratings).map((p) => [p.id, p.ratings[actor]!])),
+      recipeRatings: Object.fromEntries(
+        Object.entries(this.data.recipeRatings)
+          .filter(([, ratings]) => actor in ratings)
+          .map(([recipeId, ratings]) => [recipeId, ratings[actor]!]),
+      ),
+      flags: this.data.flags.filter((f) => f.authorId === actor).map(({ recipeId, reason, note, createdAt }) => ({ recipeId, reason, note, createdAt })),
+    };
+  }
+
+  /** Beim Löschen eines Kontos: eigene Fotos, vergebene Sterne und Meldungen entfernen. */
+  removeActor(actor: string) {
+    this.data.photos = this.data.photos.filter((p) => p.authorId !== actor);
+    for (const p of this.data.photos) delete p.ratings[actor];
+    for (const ratings of Object.values(this.data.recipeRatings)) delete ratings[actor];
+    this.data.flags = this.data.flags.filter((f) => f.authorId !== actor);
+    this.save();
+  }
+
   rateRecipe(deviceId: string, recipeId: string, stars: number): RatingView {
     const ratings = (this.data.recipeRatings[recipeId] ??= {});
     ratings[deviceId] = stars;

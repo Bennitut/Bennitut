@@ -3,6 +3,7 @@ import { ENV_FILE, envFileLoaded } from "./env.js";
 import { serve } from "@hono/node-server";
 import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
 import { createApp } from "./app.js";
+import { mailerFromEnv } from "./mail/mailer.js";
 import { lanAddresses, startupMessage } from "./startInfo.js";
 
 /** Kommagetrennte Liste aus einer Umgebungsvariable. */
@@ -10,6 +11,7 @@ const list = (value: string | undefined) => (value ?? "").split(",").map((s) => 
 
 const port = Number(process.env.PORT ?? 3000);
 const ai = new Ai(aiSettingsFromEnv());
+const mailer = mailerFromEnv();
 const app = createApp({
   communityFile: process.env.COMMUNITY_FILE ?? "data/community.json",
   feedbackFile: process.env.FEEDBACK_FILE ?? "data/feedback.json",
@@ -24,6 +26,8 @@ const app = createApp({
   },
   ai,
   corsOrigins: list(process.env.CORS_ORIGINS),
+  mailer,
+  trustProxy: process.env.TRUST_PROXY === "1",
 });
 const server = serve({ fetch: app.fetch, port }, async () => {
   const status = await ai.status();
@@ -35,6 +39,7 @@ const server = serve({ fetch: app.fetch, port }, async () => {
       ollama: ai.settings.ollama,
       envFile: envFileLoaded ? ENV_FILE : null,
       platform: process.platform,
+      mail: mailer !== null,
     }),
   );
   if (process.env.ALLOW_DEV_LOGIN === "1") console.log("\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN.");

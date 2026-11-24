@@ -98,6 +98,23 @@ export class CommunityStore {
     return this.recipes.filter((r) => r.authorId === authorId).length;
   }
 
+  /** Für „Meine Daten exportieren“: selbst geteilte Rezepte und als Favorit markierte. */
+  exportFor(actor: string) {
+    return {
+      shared: this.recipes
+        .filter((r) => r.authorId === actor)
+        .map((r) => ({ id: r.id, recipe: r.recipe, authorName: r.authorName, createdAt: r.createdAt, likes: r.likedBy.length })),
+      liked: this.recipes.filter((r) => r.likedBy.includes(actor)).map((r) => r.id),
+    };
+  }
+
+  /** Beim Löschen eines Kontos: geteilte Rezepte entfernen und Favoriten zurücknehmen. */
+  removeActor(actor: string) {
+    this.recipes = this.recipes.filter((r) => r.authorId !== actor);
+    for (const r of this.recipes) r.likedBy = r.likedBy.filter((d) => d !== actor);
+    this.save();
+  }
+
   private view(r: CommunityRecipe, deviceId: string): CommunityRecipeView {
     return {
       id: r.id,

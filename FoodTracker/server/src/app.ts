@@ -5,7 +5,8 @@ import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
 import { analyzeMealPhoto, analyzeReceipt, generateRecipes, improveRecipe, importRecipe, translateRecipe } from "./ai/tasks.js";
 import { AI_ERROR_STATUS, AiError, AnalysisError } from "./ai/types.js";
 import { OverrideStore } from "./admin/overrides.js";
-import { AuthError, ROLES, UserStore, verifyAppleToken, verifyGoogleToken, type User } from "./auth/users.js";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordProblem, type ScryptCost } from "./auth/password.js";
+import { AuthError, RESET_MINUTES, ROLES, UserStore, normalizeEmail, verifyAppleToken, verifyGoogleToken, type User } from "./auth/users.js";
 import { FLAG_REASONS, FeedbackStore } from "./community/feedback.js";
 import { CommunityStore } from "./community/store.js";
 import { DiaryFullError, DiaryStore } from "./diary/store.js";
@@ -14,6 +15,8 @@ import { findProvider, linesFromShoppingList, pantryFromOrder, providers } from 
 import { MONTH_DAYS, planMonth } from "./planner/monthPlanner.js";
 import { PlanError, matchesPreferences, recipeDiet } from "./planner/zeroWastePlanner.js";
 import { corsMiddleware } from "./http/cors.js";
+import { RateLimiter, clientIp } from "./http/rateLimit.js";
+import { resetMail, type Mailer } from "./mail/mailer.js";
 import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetchPost.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
@@ -173,6 +176,29 @@ export interface AuthConfig {
 
 const NO_AUTH: AuthConfig = { appleAudiences: [], googleAudiences: [], adminEmails: [], allowDevLogin: false };
 
+/** Grenzen gegen das Durchprobieren von Passwörtern und gegen Massen-Registrierungen (pro Server, im Speicher). */
+export interface AuthLimits {
+  /** Anmeldeversuche (auch mit Code) pro IP-Adresse. */
+  login: RateLimiter;
+  /** Fehlversuche pro E-Mail-Adresse bzw. Konto – zählen auch für Adressen ohne Konto. */
+  failures: RateLimiter;
+  /** Registrierungen pro IP-Adresse. */
+  register: RateLimiter;
+  /** Mails mit Code pro IP-Adresse und pro Adresse. */
+  forgot: RateLimiter;
+}
+
+export const defaultAuthLimits = (): AuthLimits => ({
+  login: new RateLimiter(30, 15 * 60_000),
+  failures: new RateLimiter(10, 15 * 60_000),
+  register: new RateLimiter(10, 60 * 60_000),
+  forgot: new RateLimiter(5, 60 * 60_000),
+});
+
+/** Passwortfeld: die Länge prüft passwordProblem (eigene Fehlermeldung statt „invalid_request“). */
+const PasswordField = z.string().max(4 * PASSWORD_MAX_LENGTH);
+const EmailField = z.string().trim().max(254);
+
 export function createApp({
   communityFile,
   feedbackFile = null,
@@ -182,6 +208,10 @@ export function createApp({
   auth = NO_AUTH,
   ai = new Ai(aiSettingsFromEnv()),
   corsOrigins = [],
+  mailer = null,
+  passwordCost,
+  authLimits = defaultAuthLimits(),
+  trustProxy = false,
 }: {
   communityFile: string | null;
   feedbackFile?: string | null;
@@ -194,10 +224,17 @@ export function createApp({
   ai?: Ai;
   /** Weitere Websites, die den Server aus dem Browser nutzen dürfen (CORS_ORIGINS). */
   corsOrigins?: string[];
+  /** E-Mail-Versand für „Passwort vergessen?“ (SMTP_*); null = gibt es nicht, die App blendet den Knopf aus. */
+  mailer?: Mailer | null;
+  /** Rechenaufwand für Passwörter; Standard siehe auth/password.ts, Tests nehmen weniger. */
+  passwordCost?: ScryptCost;
+  authLimits?: AuthLimits;
+  /** Hinter einem Proxy (Cloudflare Tunnel, Render …): IP-Adresse aus dessen Header nehmen (TRUST_PROXY=1). */
+  trustProxy?: boolean;
 }) {
   const community = new CommunityStore(communityFile);
   const feedback = new FeedbackStore(feedbackFile);
-  const users = new UserStore(usersFile, auth.adminEmails.map((e) => e.toLowerCase()));
+  const users = new UserStore(usersFile, auth.adminEmails.map((e) => e.toLowerCase()), passwordCost);
   const overrides = new OverrideStore(overridesFile);
   const diary = new DiaryStore(diaryDir);
   /** Katalog inklusive Änderungen der Admins. */
@@ -238,7 +275,20 @@ export function createApp({
     if (err instanceof PlanError) return c.json({ error: `plan_${err.code}`, detail: err.detail }, 422);
     if (err instanceof SocialFetchError) return c.json({ error: `social_${err.code}` }, 422);
     if (err instanceof AuthError) {
-      const status = ({ unauthorized: 401, invalid_token: 401, forbidden: 403, blocked: 403, not_configured: 501 } as const)[err.code];
+      const status = (
+        {
+          unauthorized: 401,
+          invalid_token: 401,
+          invalid_credentials: 401,
+          forbidden: 403,
+          blocked: 403,
+          weak_password: 400,
+          no_password: 400,
+          invalid_code: 400,
+          not_configured: 501,
+        } as const
+      )[err.code];
+      if (err.code === "weak_password") return c.json({ error: "auth_weak_password", minLength: PASSWORD_MIN_LENGTH, maxLength: PASSWORD_MAX_LENGTH }, status);
       return c.json({ error: `auth_${err.code}` }, status);
     }
     console.error(err);
@@ -403,8 +453,141 @@ export function createApp({
     return c.json({ token, user: me(user) });
   });
 
+  // Konten mit E-Mail und Passwort. Keine Antwort verrät, ob es eine Adresse schon gibt: Unbekannte Adressen und falsche
+  // Passwörter ergeben denselben Fehler in derselben Zeit, „Passwort vergessen?“ antwortet immer gleich. Grenze ohne
+  // Bestätigungs-Mail: Wer sich mit einer vergebenen Adresse und einem fremden Passwort registriert, bekommt den Fehler
+  // statt eines neuen Kontos – das Rate-Limit pro IP-Adresse macht systematisches Ausprobieren langsam.
+  const tooMany = (c: Context, wait: number) => {
+    c.header("Retry-After", String(wait));
+    return c.json({ error: "auth_rate_limited", retryAfter: wait }, 429);
+  };
+  const requireStrong = (password: string) => {
+    if (passwordProblem(password)) throw new AuthError("weak_password");
+  };
+  /** Führt `run` aus und zählt einen Fehlversuch für `key`, wenn Passwort oder Code falsch waren. */
+  const countingFailures = async <T>(key: string, run: () => Promise<T>): Promise<T> => {
+    try {
+      const result = await run();
+      authLimits.failures.reset(key);
+      return result;
+    } catch (e) {
+      if (e instanceof AuthError && (e.code === "invalid_credentials" || e.code === "invalid_code")) authLimits.failures.hit(key);
+      throw e;
+    }
+  };
+
+  app.post("/api/auth/register", async (c) => {
+    const body = z
+      .object({ email: EmailField.pipe(z.email()), password: PasswordField, name: z.string().trim().max(40).optional() })
+      .parse(await c.req.json());
+    const email = normalizeEmail(body.email);
+    const wait = authLimits.register.hit(clientIp(c, trustProxy)) || authLimits.failures.wait(email);
+    if (wait) return tooMany(c, wait);
+    requireStrong(body.password);
+    const { token, user, created } = await countingFailures(email, () => users.register({ email, password: body.password, name: body.name ?? null }));
+    return c.json({ token, user: me(user), created }, created ? 201 : 200);
+  });
+
+  app.post("/api/auth/login", async (c) => {
+    const body = z.object({ email: EmailField, password: PasswordField }).parse(await c.req.json());
+    const email = normalizeEmail(body.email);
+    const wait = authLimits.login.hit(clientIp(c, trustProxy)) || authLimits.failures.wait(email);
+    if (wait) return tooMany(c, wait);
+    const { token, user } = await countingFailures(email, () => users.loginWithPassword(email, body.password));
+    return c.json({ token, user: me(user) });
+  });
+
+  /** Neues Passwort; andere Geräte werden abgemeldet, dieses bleibt angemeldet. */
+  app.post("/api/auth/password", async (c) => {
+    const user = requireUser(c);
+    const body = z.object({ currentPassword: PasswordField, newPassword: PasswordField }).parse(await c.req.json());
+    const key = `user:${user.id}`;
+    const wait = authLimits.failures.wait(key);
+    if (wait) return tooMany(c, wait);
+    requireStrong(body.newPassword);
+    await countingFailures(key, () => users.changePassword(user.id, body.currentPassword, body.newPassword, bearer(c)));
+    return c.body(null, 204);
+  });
+
+  /** Code zum Zurücksetzen per E-Mail – nur mit Mail-Dienst; die Antwort ist immer dieselbe. */
+  app.post("/api/auth/password/forgot", async (c) => {
+    if (!mailer) return c.json({ error: "auth_reset_unavailable" }, 501);
+    const body = z.object({ email: EmailField, language: Language }).parse(await c.req.json());
+    const email = normalizeEmail(body.email);
+    const wait = authLimits.forgot.hit(clientIp(c, trustProxy)) || authLimits.forgot.hit(`email:${email}`);
+    if (wait) return tooMany(c, wait);
+    const reset = users.createResetCode(email);
+    if (reset) {
+      // Im Hintergrund senden, damit die Antwort nicht länger dauert, wenn es das Konto gibt. Im Protokoll nur der
+      // Fehlercode – SMTP-Meldungen enthalten oft die Adresse.
+      mailer.send({ to: reset.email, ...resetMail(body.language, reset.code, RESET_MINUTES) }).catch((e: { code?: string; responseCode?: number }) => {
+        console.error(`Mail mit dem Code zum Zurücksetzen nicht gesendet (${e.code ?? "?"} ${e.responseCode ?? ""}).`);
+      });
+    }
+    return c.body(null, 204);
+  });
+
+  app.post("/api/auth/password/reset", async (c) => {
+    if (!mailer) return c.json({ error: "auth_reset_unavailable" }, 501);
+    const body = z.object({ email: EmailField, code: z.string().trim().max(20), newPassword: PasswordField }).parse(await c.req.json());
+    const email = normalizeEmail(body.email);
+    const key = `reset:${email}`;
+    const wait = authLimits.login.hit(clientIp(c, trustProxy)) || authLimits.failures.wait(key);
+    if (wait) return tooMany(c, wait);
+    requireStrong(body.newPassword);
+    const { token, user } = await countingFailures(key, () => users.resetPassword(email, body.code, body.newPassword));
+    return c.json({ token, user: me(user) });
+  });
+
+  /**
+   * Konto löschen (Art. 17 DSGVO) – mit allen Daten auf dem Server: Sicherung des Tagebuchs, geteilte Rezepte,
+   * Favoriten, Fotos, Sterne und Meldungen. Konten mit Passwort bestätigen mit dem Passwort.
+   */
+  app.delete("/api/auth/me", async (c) => {
+    const user = requireUser(c);
+    const body = z.object({ password: PasswordField.optional() }).parse(await c.req.json().catch(() => ({})));
+    if (user.passwordHash) {
+      const key = `user:${user.id}`;
+      const wait = authLimits.failures.wait(key);
+      if (wait) return tooMany(c, wait);
+      await countingFailures(key, () => users.checkPassword(user.id, body.password ?? ""));
+    }
+    const actor = `user:${user.id}`;
+    community.removeActor(actor);
+    feedback.removeActor(actor);
+    diary.remove(actor);
+    if (user.role === "admin") overrides.anonymize(user.name);
+    users.delete(user.id);
+    return c.body(null, 204);
+  });
+
+  /** „Meine Daten exportieren“ (Art. 15 und 20 DSGVO): alles, was der Server zum Konto speichert, als JSON. */
+  app.get("/api/auth/export", (c) => {
+    const user = requireUser(c);
+    const actor = `user:${user.id}`;
+    const exportedAt = new Date().toISOString();
+    c.header("Content-Disposition", `attachment; filename="foodtracker-konto-${exportedAt.slice(0, 10)}.json"`);
+    c.header("Cache-Control", "no-store");
+    return c.json({
+      format: "foodtracker-account-export",
+      version: 1,
+      exportedAt,
+      account: { ...me(user), lastLoginAt: user.lastLoginAt, ...(user.provider === "password" ? { emailVerified: user.emailVerified === true } : {}) },
+      diary: diary.entries(actor),
+      community: community.exportFor(actor),
+      ...feedback.exportFor(actor),
+    });
+  });
+
   app.get("/api/auth/config", (c) =>
-    c.json({ apple: auth.appleAudiences.length > 0, google: auth.googleAudiences.length > 0, dev: auth.allowDevLogin }),
+    c.json({
+      apple: auth.appleAudiences.length > 0,
+      google: auth.googleAudiences.length > 0,
+      dev: auth.allowDevLogin,
+      password: true,
+      passwordReset: mailer !== null,
+      passwordMinLength: PASSWORD_MIN_LENGTH,
+    }),
   );
 
   app.get("/api/auth/me", (c) => c.json(me(requireUser(c))));

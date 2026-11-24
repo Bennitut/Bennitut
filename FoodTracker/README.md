@@ -16,7 +16,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Historie sichern** | Das Tagebuch wird nie automatisch gelöscht und liegt in einem eigenen Speicher (auch wenn Fotos den übrigen Speicher füllen; scheitert das Speichern, erscheint ein Hinweis). Mit Server wird es automatisch gesichert – mit Konto kommt es auf einem neuen Gerät oder nach dem Löschen der Browserdaten zurück. Ohne Server und Konto: Export als Tabelle (CSV) oder Sicherung (JSON) und Import ohne Duplikate. |
 | **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos – je Sprache eines; die App zeigt nur Videos in der gewählten Sprache und sucht sonst auf YouTube in dieser Sprache. Dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
-| **Konten & Rollen** | Anmeldung mit Apple oder Google (optional – die App funktioniert auch anonym). Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
+| **Konten & Rollen** | Konto mit E-Mail und Passwort oder Anmeldung mit Apple bzw. Google (optional – die App funktioniert auch anonym); Passwort ändern, Konto mit allen Daten löschen, Daten exportieren (im Server fertig, in der App folgt es). Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
 | **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
 | **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
@@ -193,6 +193,9 @@ Packungen, nichts doppelt – auch nicht, wenn danach eine Bestellung geliefert 
 aus dem alten Speicherort, nichts wird automatisch gelöscht, Löschmarken, Abgleich mit dem echten Server-Speicher,
 Auswertung bis „Alles“, CSV und Import ohne Duplikate) und Impressum/Datenschutz (Platzhalter erkennen, vollständige
 Texte ohne Server, Teil B nur mit Server, lückenlose Nummerierung).
+Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
+die Sicherung des Tagebuchs und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
+Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
 abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal),
 prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen, und zuletzt die
@@ -225,11 +228,22 @@ der verderblichen Einkäufe übrig, im schlechtesten Fall 4 %.
 
 ## Anmeldung und Admins einrichten
 
-Der Server liest diese Umgebungsvariablen:
+**Konten mit E-Mail und Passwort** gehen ohne weitere Einrichtung. Passwörter speichert der Server nur als scrypt-Hash
+(`node:crypto`, mindestens 10 Zeichen), Sitzungen gelten 30 Tage und enden beim Abmelden. Gegen das Durchprobieren
+gibt es Grenzen pro IP-Adresse und pro E-Mail-Adresse (`429 auth_rate_limited` mit `Retry-After`); unbekannte Adressen
+und falsche Passwörter ergeben dieselbe Antwort. Endpunkte: `POST /api/auth/register`, `POST /api/auth/login`,
+`POST /api/auth/password` (ändern, andere Geräte werden abgemeldet), `DELETE /api/auth/me` (Konto mit allen Daten auf
+dem Server löschen, mit Passwort bestätigt), `GET /api/auth/export` („Meine Daten exportieren“ als JSON).
+„Passwort vergessen?“ (`/api/auth/password/forgot` und `/reset`, ein 8-stelliger Code per E-Mail, 30 Minuten gültig)
+gibt es nur mit einem Mail-Dienst (`SMTP_*` in `server/.env`, Beispiel Gmail in `.env.example`); `GET /api/auth/config`
+meldet, ob er eingerichtet ist. Hinter einem Proxy (Cloudflare Tunnel, Render) `TRUST_PROXY=1` setzen, damit die
+Grenzen pro IP-Adresse greifen.
+
+Der Server liest außerdem diese Umgebungsvariablen:
 
 | Variable | Bedeutung |
 |---|---|
-| `ADMIN_EMAILS` | Kommagetrennte E-Mail-Adressen, die bei der Anmeldung automatisch Admin werden (z. B. deine eigene). Weitere Admins vergibst du danach im Admin-Bereich. |
+| `ADMIN_EMAILS` | Kommagetrennte E-Mail-Adressen, die bei der Anmeldung automatisch Admin werden (z. B. deine eigene). Konten mit Passwort erst mit bestätigter Adresse (bisher durch einmal „Passwort vergessen?“), sonst könnte sich jede:r mit dieser Adresse registrieren. Weitere Admins vergibst du danach im Admin-Bereich. |
 | `APPLE_BUNDLE_IDS` | Bundle-IDs für „Mit Apple anmelden“. Standard `host.exp.Exponent` (Expo Go); für die eigene App `com.bennitut.foodtracker` ergänzen. |
 | `GOOGLE_CLIENT_IDS` | OAuth-Client-IDs aus der Google Cloud Console (iOS, Android, Web), kommagetrennt. |
 | `ALLOW_DEV_LOGIN` | `1` erlaubt eine Test-Anmeldung nur mit Name/E-Mail – **nur zum Ausprobieren, nie auf einem öffentlichen Server**. |

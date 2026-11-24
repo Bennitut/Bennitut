@@ -39,6 +39,8 @@ export function startupMessage(input: {
   ollama: { url: string; model: string };
   envFile: string | null;
   platform: NodeJS.Platform;
+  /** Ob ein Mail-Dienst (SMTP_*) eingerichtet ist – nur dann gibt es „Passwort vergessen?“. */
+  mail?: boolean;
 }): string {
   const { port, addresses } = input;
   const lines = [
@@ -49,6 +51,13 @@ export function startupMessage(input: {
       ? [`  Im WLAN:             ${addresses.map((a) => `http://${a}:${port}`).join("  ")}`]
       : ["  Im WLAN:             keine Netzwerkadresse gefunden – ist der Rechner mit dem WLAN verbunden?"]),
     `  ${aiLine(input.ai, input.ollama)}`,
+    ...(input.mail === undefined
+      ? []
+      : [
+          input.mail
+            ? "  E-Mail:              eingerichtet – „Passwort vergessen?“ schickt einen Code."
+            : "  E-Mail:              nicht eingerichtet – „Passwort vergessen?“ ist ausgeblendet (SMTP_* in server/.env).",
+        ]),
     `  Einstellungen:       ${input.envFile ?? "keine server/.env (Vorlage: server/.env.example)"}`,
   ];
   if (input.platform === "win32") {

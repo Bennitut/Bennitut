@@ -29,6 +29,18 @@ export class OverrideStore {
     return entry;
   }
 
+  /** Beim Löschen eines Admin-Kontos: dessen Namen aus „zuletzt geändert von“ entfernen. */
+  anonymize(userName: string) {
+    let changed = false;
+    for (const entry of Object.values(this.overrides)) {
+      if (entry.updatedBy === userName) {
+        entry.updatedBy = "Gelöschtes Konto";
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+  }
+
   remove(recipeId: string): boolean {
     if (!this.overrides[recipeId]) return false;
     delete this.overrides[recipeId];
