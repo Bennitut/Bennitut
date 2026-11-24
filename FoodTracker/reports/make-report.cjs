@@ -3,12 +3,14 @@
 //   node FoodTracker/reports/make-report.cjs 2026-11-23     # Datum in Japan-Zeit; ohne Datum: gestern
 //
 // Quellen: Commits auf origin/claude/nightly an diesem Tag, Notizen in FoodTracker/BACKLOG.md und der offene
-// Nachtschicht-PR (Entscheidungen, Status der Checks). Braucht git, gh und Playwright mit Chromium.
+// Nachtschicht-PR (Entscheidungen, Status der Checks). Braucht git, gh und Playwright mit Chromium. Ohne gh:
+// REPORT_PR_JSON=<Datei> mit dem PR als JSON (mindestens number, html_url und body, wie in der GitHub-API).
 // Ergebnis: FoodTracker/reports/<Datum>.pdf
 //
 // Was aus BACKLOG.md im Bericht landet (Format prüft `node --test FoodTracker/reports/`):
 //   - Aufgaben „- [x] **6. Titel**“ mit Notiz „  - TT.MM.JJJJ: …“ (oder „  - TT.MM.JJJJ, Teil 1: …“)
 //   - erledigte Abschnitte „## ✅ Vorrang: Titel (Anlass) – erledigt TT.MM.JJJJ“ mit Absatz „TT.MM.JJJJ: …“
+//   - in noch offenen Abschnitten „## Vorrang …“ erledigte Teilschritte „- [x] Titel … – erledigt TT.MM.JJJJ: Notiz“
 //   - unter „Ideen und Erkenntnisse“: „- ✅ **Titel:** … erledigt TT.MM.JJJJ: …“ (Text danach = Notiz im Bericht)
 //     und neue Punkte „- **Titel:** … (TT.MM.JJJJ)“ (erstes Datum in Klammern = an dem Tag notiert)
 const { execFileSync } = require("node:child_process");
@@ -23,6 +25,8 @@ const DONE_SECTION = new RegExp(String.raw`^## ✅ (.+?) [–-] erledigt (${DATE
 const DONE_IDEA = new RegExp(String.raw`\b[Ee]rledigt (${DATE})`);
 const NOTED = new RegExp(String.raw`\((${DATE})\)`);
 const IDEAS = "## Ideen und Erkenntnisse";
+const OPEN_PRIORITY = /^## (Vorrang[^:]*): /;
+const STEP_DONE = new RegExp(String.raw`^\[x\] (.+?) [–-] erledigt (${DATE}):\s*(.*)$`);
 const sh = (cmd, args) => execFileSync(cmd, args, { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
 
 function reportDate() {
@@ -83,6 +87,16 @@ function blocks(lines) {
 
 const ideaTitle = (item) => plain(item.match(/\*\*(.+?)\*\*/)?.[1] ?? item).replace(/:$/, "");
 
+/** Kurzer Titel eines Teilschritts: kurzes Etikett wie „Server:“ behalten, danach bis „ (“, „: “ oder „. “. */
+function stepTitle(item) {
+  const text = plain(item);
+  const label = text.match(/^([^:]{1,12}): /);
+  const rest = label ? text.slice(label[0].length) : text;
+  const cut = rest.split(/ \(|: |\. /)[0].replace(/\.$/, "");
+  const short = cut.length > 90 ? `${cut.slice(0, 89).trimEnd()}…` : cut;
+  return label ? `${label[1]}: ${short}` : short;
+}
+
 function backlog(day, text = fs.readFileSync(BACKLOG, "utf8")) {
   const [y, m, d] = day.split("-");
   const german = `${d}.${m}.${y}`;
@@ -104,6 +118,14 @@ function backlog(day, text = fs.readFileSync(BACKLOG, "utf8")) {
       const [, kind, title] = plain(section[1]).replace(/\s*\([^)]*\)$/, "").match(/^(?:(Vorrang|Daueraufgabe): )?(.+)$/);
       const note = blocks(lines).find((b) => !b.bullet && b.text.startsWith(`${german}: `));
       done.push({ kind: kind ?? "Abschnitt", title, text: note ? plain(note.text.slice(german.length + 2)) : "" });
+    }
+    // Große Vorrang-Abschnitte laufen über mehrere Tage: deren erledigte Teilschritte einzeln zeigen.
+    const priority = !section && heading.match(OPEN_PRIORITY);
+    if (priority) {
+      for (const { bullet, text: item } of blocks(lines)) {
+        const step = bullet && item.match(STEP_DONE);
+        if (step?.[2] === german) done.push({ kind: `${priority[1]}, Teilschritt`, title: stepTitle(step[1]), text: plain(step[3]) });
+      }
     }
     if (heading !== IDEAS) continue;
     for (const { bullet, text: item } of blocks(lines)) {
@@ -151,7 +173,9 @@ function backlogProblems(text) {
 
 function pullRequest() {
   try {
-    const prs = JSON.parse(sh("gh", ["api", "repos/Bennitut/Bennitut/pulls?head=Bennitut:claude/nightly&state=open"]));
+    const prs = process.env.REPORT_PR_JSON
+      ? [JSON.parse(fs.readFileSync(process.env.REPORT_PR_JSON, "utf8"))]
+      : JSON.parse(sh("gh", ["api", "repos/Bennitut/Bennitut/pulls?head=Bennitut:claude/nightly&state=open"]));
     const pr = prs[0];
     if (!pr) return null;
     const section = (title) => (pr.body.split(/\n## /).find((s) => s.startsWith(title)) ?? "").split("\n").slice(1).join("\n").trim();

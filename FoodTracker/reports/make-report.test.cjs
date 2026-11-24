@@ -99,6 +99,34 @@ describe("Tagesbericht: was aus BACKLOG.md gelesen wird", () => {
   });
 });
 
+describe("Tagesbericht: Teilschritte großer Vorrang-Abschnitte", () => {
+  const STEPS = `# FoodTracker – Backlog
+
+## Vorrang 1: Server im Internet mit Konten (9, Benjamins Wunsch vom 24.11.2026, 23:22 Uhr)
+
+Pro Lauf ein Teilschritt.
+
+- [x] Server: Registrierung und Anmeldung mit E-Mail und Passwort (zusätzlich zu Apple): scrypt, Rate-Limit. – erledigt
+  25.11.2026: \`POST /api/auth/register\` und \`/login\`, 21 Tests.
+- [x] Beim ersten Anmelden die lokalen Daten übernehmen. – erledigt 26.11.2026: ohne Duplikate.
+- [ ] App: Anmeldebildschirm in fünf Sprachen.
+- [x] Etwas ohne Datum.
+`;
+
+  it("zeigt erledigte Teilschritte am Tag ihres Datums, mit kurzem Titel", () => {
+    assert.deepEqual(backlog("2026-11-25", STEPS).done, [
+      {
+        kind: "Vorrang 1, Teilschritt",
+        title: "Server: Registrierung und Anmeldung mit E-Mail und Passwort",
+        text: "POST /api/auth/register und /login, 21 Tests.",
+      },
+    ]);
+    assert.deepEqual(backlog("2026-11-26", STEPS).done.map((x) => x.title), ["Beim ersten Anmelden die lokalen Daten übernehmen"]);
+    assert.deepEqual(backlog("2026-11-24", STEPS).done, []);
+    assert.deepEqual(backlogProblems(STEPS), []);
+  });
+});
+
 describe("BACKLOG.md hat das Format, das der Tagesbericht liest", () => {
   it("abgehakte Aufgaben mit Notiz, erledigte Abschnitte und Ideen mit Datum", () => {
     const text = fs.readFileSync(path.join(__dirname, "..", "BACKLOG.md"), "utf8");
