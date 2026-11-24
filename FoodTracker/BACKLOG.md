@@ -20,9 +20,9 @@ Beschreibungen und Videotitel vegetarischer und veganer Rezepte geprüft, Platzh
 Variante (b), Knopf „Abgehaktes in den Vorrat“. Ebenfalls erledigt: Punkt 5 (Offline-Modus), Punkt 7 (Entwürfe in
 `docs/recht/` – Benjamin trägt seine Angaben ein und entscheidet drei Dinge, im PR gefragt) und Expo SDK 58 (Vorrang
 unten). Benjamins Wünsche vom 24.11.2026 (15:27 Uhr) stehen als Vorrang 8.1–8.3 unten; 8.1 (Server zum Testen auf
-dem Laptop mit Ollama und `start-test.cmd`) ist erledigt.
-Reihenfolge ab jetzt: Vorrang 8.2 (Ernährungshistorie) → 8.3 (Videos je Sprache, danach als Daueraufgabe pro Lauf etwa
-40 Rezepte nach der obersten Aufgabe) → Vorrang „Impressum & Datenschutz in App und Web-Version“ → Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
+dem Laptop mit Ollama und `start-test.cmd`) und 8.2 (Ernährungshistorie dauerhaft speichern) sind erledigt.
+Reihenfolge ab jetzt: Vorrang 8.3 (Videos je Sprache, danach als Daueraufgabe pro Lauf etwa 40 Rezepte nach der
+obersten Aufgabe) → Vorrang „Impressum & Datenschutz in App und Web-Version“ → Punkte 8–10. Der Tagesbericht bleibt wie gewohnt: Der erste Lauf am 25.11. (Japan-Zeit) macht
 vorher den für den 24.11. Offen im PR: ob „Löschen geht in der Web-Version nicht“ (unten) vor Punkt 8 drankommen soll –
 ohne Antwort nach dem Vorrang „Impressum“ weiter mit Punkt 8.
 
@@ -85,25 +85,33 @@ KI-Wünsche funktionieren, ohne dass Benjamin Geld ausgibt. Ein Server im Intern
 - [x] Prüfen: Server-Tests; im Browser mit `npx expo start --web` und laufendem Server scheitert der Import nicht mehr
   an der Verbindung (ohne KI kommt die neue Meldung); dazu der bisherige Web-Rauchtest.
 
-## Vorrang: Ernährungshistorie automatisch und dauerhaft speichern (8.2, Benjamins Wunsch vom 24.11.2026)
+## ✅ Vorrang: Ernährungshistorie automatisch und dauerhaft speichern (8.2, Benjamins Wunsch vom 24.11.2026) – erledigt 24.11.2026
+
+24.11.2026: Tagebuch unter eigenen Schlüsseln (`foodtracker/diary/v1` plus ein Teil pro Jahr in Kurzform) mit
+Migration, Löschmarken und Hinweis bei Speicherfehlern; Sicherung über `POST /api/diary/sync` (`server/data/diary/`,
+pro Konto bzw. Geräte-ID, neuere Fassung gewinnt), Profil mit „1 Jahr“/„Alles“, Wochen- bzw. Monatsbalken, allen Tagen
+zum Blättern und Karte „Sicherung“ (CSV, JSON, Import ohne Duplikate; neu `expo-sharing` und `expo-document-picker`).
+20 App-Tests (134), 7 Server-Tests (93), Web-Rauchtest erweitert; im Browser mit laufendem Server geprüft: Gerät 1
+sichert ins Konto, ein zweites Gerät mit demselben Konto bekommt die Historie zurück, ohne Konto pro Gerät. Teilen und
+Dateiauswahl in Expo Go ohne Gerät nicht prüfbar (unter „Ideen und Erkenntnisse“).
 
 Heute liegt das Tagebuch mit allem anderen unter einem Schlüssel in AsyncStorage bzw. localStorage, Speicherfehler
 werden verschluckt, und das Profil zeigt nur 7 oder 30 Tage.
 
-1. Nichts löscht Tagebucheinträge automatisch (keine Migration, kein neuer Plan, kein neuer Fragebogen); ein Test
-   sichert das ab.
-2. Tagebuch unter einem eigenen Schlüssel (mit Migration), damit es auch gespeichert wird, wenn der übrige Zustand mit
-   Fotos und importierten Rezepten zu groß wird (localStorage meist etwa 5 MB, AsyncStorage unter Android 6 MB).
-   Scheitert das Speichern, einen Hinweis zeigen.
-3. Automatische Sicherung auf dem Server, sobald einer erreichbar ist: neue, geänderte und gelöschte Einträge im
-   Hintergrund hochladen und beim Start abgleichen (über die Eintrags-ID; Gelöschtes als Löschmarke). Ablage unter
-   `server/data/`, pro Konto, sonst pro Geräte-ID. Mit Konto (zum Testen Dev-Login) kommt die Historie auf einem neuen
-   Gerät oder nach dem Löschen der Browserdaten zurück; im Profil in einem Satz erklären. Ohne Server alles lokal.
-4. Im Profil „Historie exportieren“ (CSV und JSON) und „Importieren“ (JSON, ohne Duplikate).
-5. Ansicht: neben 7 und 30 Tagen „1 Jahr“ und „Alles“; bei langen Zeiträumen Balken pro Woche bzw. Monat, Durchschnitt
-   über die erfassten Tage und eine Liste zum Blättern durch alle vergangenen Tage.
-6. Logik ohne native Module in `app/src/lib` mit Tests, Server-Endpunkte mit Tests, Texte in allen fünf Sprachen; die
-   Sicherung in Teil B des Datenschutz-Entwurfs ergänzen.
+- [x] Nichts löscht Tagebucheinträge automatisch (keine Migration, kein neuer Plan, kein neuer Fragebogen); ein Test
+  sichert das ab.
+- [x] Tagebuch unter einem eigenen Schlüssel (mit Migration), damit es auch gespeichert wird, wenn der übrige Zustand mit
+  Fotos und importierten Rezepten zu groß wird (localStorage meist etwa 5 MB, AsyncStorage unter Android 6 MB).
+  Scheitert das Speichern, einen Hinweis zeigen.
+- [x] Automatische Sicherung auf dem Server, sobald einer erreichbar ist: neue, geänderte und gelöschte Einträge im
+  Hintergrund hochladen und beim Start abgleichen (über die Eintrags-ID; Gelöschtes als Löschmarke). Ablage unter
+  `server/data/`, pro Konto, sonst pro Geräte-ID. Mit Konto (zum Testen Dev-Login) kommt die Historie auf einem neuen
+  Gerät oder nach dem Löschen der Browserdaten zurück; im Profil in einem Satz erklären. Ohne Server alles lokal.
+- [x] Im Profil „Historie exportieren“ (CSV und JSON) und „Importieren“ (JSON, ohne Duplikate).
+- [x] Ansicht: neben 7 und 30 Tagen „1 Jahr“ und „Alles“; bei langen Zeiträumen Balken pro Woche bzw. Monat, Durchschnitt
+  über die erfassten Tage und eine Liste zum Blättern durch alle vergangenen Tage.
+- [x] Logik ohne native Module in `app/src/lib` mit Tests, Server-Endpunkte mit Tests, Texte in allen fünf Sprachen; die
+  Sicherung in Teil B des Datenschutz-Entwurfs ergänzen.
 
 ## Vorrang: Verlinkte Videos in der gewählten Sprache (8.3, Benjamins Wunsch vom 24.11.2026)
 
@@ -369,6 +377,20 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   im Profil widerrufbar machen und ein Mindestalter festlegen (in Österreich willigen Kinder ab 14 selbst ein, bei
   Gesundheitsdaten laut herrschender Meinung auch dann nur mit den Eltern). Gehört zu Teil B der
   Datenschutzerklärung. (24.11.2026)
+- **Sicherung der Historie startet ohne Nachfrage:** Sobald ein Server erreichbar ist, geht das Tagebuch dorthin (so
+  gewünscht). Für Benjamins Laptop unkritisch; vor einem Server für andere zusammen mit der Einwilligung für die
+  KI-Funktionen fragen und im Profil abschaltbar machen – Ernährungsdaten können Gesundheitsdaten sein (Art. 9 DSGVO,
+  im Datenschutz-Entwurf B6 als `[[PRÜFEN]]`). (24.11.2026)
+- **Eigene Fotos füllen den Speicher:** Eigene Rezeptfotos stehen als data-URI (je etwa 60–120 KB) im übrigen Zustand;
+  im Browser (localStorage, meist etwa 5 MB pro Adresse) ist nach einigen Dutzend Fotos Schluss. Seit 8.2 erscheint
+  dann ein Hinweis, und das Tagebuch ist nicht betroffen, aber Plan und Vorrat werden nicht mehr gespeichert. Lösung:
+  Fotos als Dateien (`expo-file-system`) bzw. im Browser in IndexedDB statt im Zustand. (24.11.2026)
+- **Teilen und Dateiauswahl in Expo Go ungeprüft:** „Als Tabelle (CSV)“, „Als Sicherung (JSON)“ und „Sicherung
+  importieren“ nutzen in der App `expo-sharing` und `expo-document-picker` (beide in Expo Go); im Browser im Rauchtest
+  geprüft, auf iPhone und Android ohne Gerät nicht. Benjamin im PR gebeten, es auszuprobieren. (24.11.2026)
+- **Tagebuch nur heute bearbeitbar:** Einträge lassen sich nur unter „Heute“ löschen, vergangene Tage im Profil weder
+  löschen noch ändern; nachtragen geht nur am selben Tag. Der Abgleich kann Änderungen schon (`updatedAt`) – eine
+  Bearbeitung im Profil wäre eine neue Funktion. (24.11.2026)
 - **Nutzerverzeichnis nur mit Zustimmung:** Heute steht jedes nicht gesperrte Konto mit Namen im Verzeichnis, das alle
   Angemeldeten sehen. Datensparsamer: nur wer zustimmt oder etwas teilt. Vor dem Start der Anmeldung entscheiden.
   (24.11.2026)
