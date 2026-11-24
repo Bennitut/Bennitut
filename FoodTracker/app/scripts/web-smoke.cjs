@@ -6,6 +6,7 @@
 //                                     # → Vorrat durch, danach „Entdecken“ (Community „Bald verfügbar“) und Tauschen
 //                                     # (zuerst 30 Rezepte, nicht alle Fotos auf einmal), zuletzt „Bald verfügbar“
 //                                     # im Rezept, im Profil, bei der Anmeldung und beim Übersetzen (Französisch),
+//                                     # Videos je Sprache (Deutsch, Englisch, sonst die YouTube-Suche),
 //                                     # dann die Ernährungshistorie: Umzug aus dem alten Speicherort, „Alles“,
 //                                     # Export (JSON, CSV), Import nach gelöschten Browserdaten ohne Duplikate und
 //                                     # der Hinweis bei vollem Speicher
@@ -250,6 +251,33 @@ async function main() {
     console.log("Ohne Server: Rezept, Plan, Profil, Anmeldung und Übersetzen (fr) zeigen „Bald verfügbar“ statt Fehlermeldungen.");
   } catch (e) {
     failures.push(`Bald verfügbar: ${e.message.split("\n")[0]}`);
+    await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
+  }
+
+  // Videos in der gewählten Sprache: Deutsch (hier de-AT) zeigt nur deutsche Videos, Englisch nur englische; fehlt
+  // eines, sucht derselbe Knopf auf YouTube in dieser Sprache (Hinweis darunter).
+  try {
+    await page.goto(site + "/recipe/linsen_bolognese", { waitUntil: "networkidle" });
+    await page.getByText(/^▶ Video ansehen · YouTube · JANNIK kocht/).waitFor({ timeout: 10_000 });
+    if (await page.getByText(/^🔎 Video suchen/).count()) throw new Error("Rezept mit deutschem Video zeigt die Suche");
+    await page.goto(site + "/recipe/v_englisches_fruehstueck", { waitUntil: "networkidle" });
+    await page.getByText("🔎 Video suchen · YouTube", { exact: true }).waitFor({ timeout: 10_000 });
+    await page.getByText(/^Zu diesem Rezept gibt es noch kein Video auf Deutsch/).waitFor({ timeout: 10_000 });
+    if (await page.getByText(/^▶ Video ansehen/).count()) throw new Error("Rezept zeigt auf Deutsch ein englisches Video");
+    const english = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-GB" });
+    const enPage = await english.newPage();
+    watch(enPage, "/recipe/v_englisches_fruehstueck (en)");
+    await enPage.goto(site + "/recipe/v_englisches_fruehstueck", { waitUntil: "networkidle" });
+    await enPage.getByText("▶ Watch video · YouTube · BOSH!", { exact: true }).waitFor({ timeout: 10_000 });
+    await enPage.getByText("Full Flavour English Breakfast (That's 100% Vegan!)", { exact: true }).waitFor({ timeout: 10_000 });
+    if (await enPage.getByText(/^🔎 Find a video/).count()) throw new Error("Rezept mit englischem Video zeigt die Suche");
+    await enPage.goto(site + "/recipe/linsen_bolognese", { waitUntil: "networkidle" });
+    await enPage.getByText("🔎 Find a video · YouTube", { exact: true }).waitFor({ timeout: 10_000 });
+    if (await enPage.getByText(/JANNIK kocht/).count()) throw new Error("Rezept zeigt auf Englisch das deutsche Video");
+    await english.close();
+    console.log("Videos je Sprache: Deutsch und Englisch zeigen nur Videos ihrer Sprache, sonst die YouTube-Suche.");
+  } catch (e) {
+    failures.push(`Videos je Sprache: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
   }
 

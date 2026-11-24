@@ -172,6 +172,8 @@ export const it: Dictionary = {
   },
   recipes: {
     watchVideo: "▶ Guarda il video",
+    findVideo: "🔎 Cerca un video",
+    noVideoInLanguage: "Per questa ricetta non c’è ancora un video in italiano – la ricerca ne trova su YouTube.",
     moreVideos: "Altri video di questo piatto",
     searchSuffix: "ricetta",
     photoCredit: "Foto: {credit}",

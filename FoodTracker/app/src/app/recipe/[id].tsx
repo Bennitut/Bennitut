@@ -6,6 +6,7 @@ import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } f
 import { api, HAS_SERVER } from "../../lib/api";
 import { ImproveCard, PhotoGallery, RatingCard } from "../../components/RecipeFeedback";
 import { communityCache } from "../../lib/communityCache";
+import { CATALOG_VIDEO_LANGUAGES } from "../../lib/catalog";
 import { ingredientEmoji } from "../../lib/emoji";
 import { useI18n } from "../../lib/i18n";
 import { recipeNutrients } from "../../lib/nutrition";
@@ -13,6 +14,7 @@ import { newId } from "../../lib/pantry";
 import { needsTranslation } from "../../lib/recipeText";
 import { useStore } from "../../lib/store";
 import type { Recipe } from "../../lib/types";
+import { videosForLanguage, youtubeSearchUrl } from "../../lib/videos";
 
 const OWN_KINDS: Recipe["source"]["kind"][] = ["eigen", "import"];
 
@@ -22,7 +24,7 @@ const PLATFORM_NAMES = { youtube: "YouTube", tiktok: "TikTok", instagram: "Insta
 const searchLinks = (query: string) => {
   const q = encodeURIComponent(query);
   return [
-    { label: "YouTube", url: `https://www.youtube.com/results?search_query=${q}` },
+    { label: "YouTube", url: youtubeSearchUrl(query) },
     { label: "TikTok", url: `https://www.tiktok.com/search?q=${q}` },
     { label: "Instagram", url: `https://www.instagram.com/explore/search/keyword/?q=${q}` },
   ];
@@ -52,9 +54,12 @@ export default function RecipeDetailScreen() {
   const isFavorite = favoriteIds.includes(recipe.id);
   const communityId = shared[recipe.id];
   const author = recipe.source.kind === "community" ? recipe.source.author : null;
-  const videos = recipe.media?.videos ?? [];
+  const allVideos = recipe.media?.videos ?? [];
+  const videoQuery = `${text.name} ${t("recipes.searchSuffix")}`;
+  // Nur Videos in der gewählten Sprache; gibt es keins, sucht derselbe Knopf auf YouTube in dieser Sprache.
+  const { videos, searchUrl: videoSearchUrl } = videosForLanguage(recipe, i18n.language, videoQuery, CATALOG_VIDEO_LANGUAGES);
   const importUrl = recipe.source.kind === "import" ? recipe.source.url : undefined;
-  const sourceUrl = importUrl && !videos.some((v) => v.url === importUrl) ? importUrl : undefined;
+  const sourceUrl = importUrl && !allVideos.some((v) => v.url === importUrl) ? importUrl : undefined;
   const image = store.imageFor(recipe);
   // Übersetzen braucht Claude über den Server; ohne Server ein Hinweis statt eines Knopfs, der „Keine Verbindung“ meldet.
   const untranslated = needsTranslation(recipe, i18n.language);
@@ -174,9 +179,15 @@ export default function RecipeDetailScreen() {
           />
         ))}
         {videos[0]?.title ? <Muted>{videos[0].title}</Muted> : null}
+        {videoSearchUrl ? (
+          <>
+            <Button label={`${t("recipes.findVideo")} · YouTube`} onPress={() => Linking.openURL(videoSearchUrl)} />
+            <Muted>{t("recipes.noVideoInLanguage")}</Muted>
+          </>
+        ) : null}
         <Text style={styles.label}>{t("recipes.moreVideos")}</Text>
         <View style={styles.chipRow}>
-          {searchLinks(`${text.name} ${t("recipes.searchSuffix")}`).map((link) => (
+          {searchLinks(videoQuery).map((link) => (
             <Button key={link.label} label={link.label} variant="secondary" onPress={() => Linking.openURL(link.url)} />
           ))}
         </View>

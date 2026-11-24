@@ -172,6 +172,8 @@ export const de = {
   },
   recipes: {
     watchVideo: "▶ Video ansehen",
+    findVideo: "🔎 Video suchen",
+    noVideoInLanguage: "Zu diesem Rezept gibt es noch kein Video auf Deutsch – die Suche findet passende auf YouTube.",
     moreVideos: "Mehr Videos zu diesem Gericht",
     searchSuffix: "Rezept",
     photoCredit: "Foto: {credit}",
