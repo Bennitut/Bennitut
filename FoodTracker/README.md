@@ -46,6 +46,7 @@ FoodTracker/
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
 │   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten)
+├── docs/recht/   Entwürfe für Impressum und Datenschutzerklärung (Österreich) mit Platzhaltern für die eigenen Angaben
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 ├── reports/      Tagesberichte der Nachtschicht als PDF (make-report.cjs, Test: node --test reports/make-report.test.cjs)
 └── server/   Backend (Node, Hono, TypeScript)
