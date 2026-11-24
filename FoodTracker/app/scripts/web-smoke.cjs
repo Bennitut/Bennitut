@@ -34,6 +34,22 @@ function detectBase(root) {
   return html.match(/src="([^"]*)\/_expo\/static\/js\/web\//)?.[1] ?? "";
 }
 
+/** Katalogvideos einer Sprache aus server/src/data/videos/<sprache>.ts: Rezept-ID → { youtubeId, channel }. */
+function videoTable(language) {
+  const file = path.resolve(__dirname, "../../server/src/data/videos", `${language}.ts`);
+  const table = new Map();
+  for (const m of fs.readFileSync(file, "utf8").matchAll(/^ {2}(\w+): \{ youtubeId: "([\w-]+)", title: "(?:[^"\\]|\\.)*", channel: ("(?:[^"\\]|\\.)*") \},$/gm)) {
+    table.set(m[1], { youtubeId: m[2], channel: JSON.parse(m[3]) });
+  }
+  return table;
+}
+
+/** Ein Rezept mit Video in der einen Sprache und ohne in der anderen (als Liste, leer wenn es keins gibt). */
+function pickRecipe(has, lacks) {
+  const id = [...has.keys()].find((recipeId) => !lacks.has(recipeId));
+  return id ? [id] : [];
+}
+
 /**
  * Statischer Server. Ohne 404.html: Fallback auf index.html, wie bei einer Single-Page-App üblich.
  * Mit 404.html: wie GitHub Pages – unbekannte Adressen bekommen 404.html mit Status 404
@@ -255,27 +271,43 @@ async function main() {
   }
 
   // Videos in der gewählten Sprache: Deutsch (hier de-AT) zeigt nur deutsche Videos, Englisch nur englische; fehlt
-  // eines, sucht derselbe Knopf auf YouTube in dieser Sprache (Hinweis darunter).
+  // eines, sucht derselbe Knopf auf YouTube in dieser Sprache (Hinweis darunter). Die Rezepte sucht der Test in den
+  // Videodateien des Servers aus, weil dort nach und nach Videos dazukommen (Daueraufgabe in BACKLOG.md).
   try {
-    await page.goto(site + "/recipe/linsen_bolognese", { waitUntil: "networkidle" });
-    await page.getByText(/^▶ Video ansehen · YouTube · JANNIK kocht/).waitFor({ timeout: 10_000 });
-    if (await page.getByText(/^🔎 Video suchen/).count()) throw new Error("Rezept mit deutschem Video zeigt die Suche");
-    await page.goto(site + "/recipe/v_englisches_fruehstueck", { waitUntil: "networkidle" });
-    await page.getByText("🔎 Video suchen · YouTube", { exact: true }).waitFor({ timeout: 10_000 });
-    await page.getByText(/^Zu diesem Rezept gibt es noch kein Video auf Deutsch/).waitFor({ timeout: 10_000 });
-    if (await page.getByText(/^▶ Video ansehen/).count()) throw new Error("Rezept zeigt auf Deutsch ein englisches Video");
+    const de = videoTable("de");
+    const en = videoTable("en");
     const english = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-GB" });
     const enPage = await english.newPage();
-    watch(enPage, "/recipe/v_englisches_fruehstueck (en)");
-    await enPage.goto(site + "/recipe/v_englisches_fruehstueck", { waitUntil: "networkidle" });
-    await enPage.getByText("▶ Watch video · YouTube · BOSH!", { exact: true }).waitFor({ timeout: 10_000 });
-    await enPage.getByText("Full Flavour English Breakfast (That's 100% Vegan!)", { exact: true }).waitFor({ timeout: 10_000 });
-    if (await enPage.getByText(/^🔎 Find a video/).count()) throw new Error("Rezept mit englischem Video zeigt die Suche");
-    await enPage.goto(site + "/recipe/linsen_bolognese", { waitUntil: "networkidle" });
-    await enPage.getByText("🔎 Find a video · YouTube", { exact: true }).waitFor({ timeout: 10_000 });
-    if (await enPage.getByText(/JANNIK kocht/).count()) throw new Error("Rezept zeigt auf Englisch das deutsche Video");
+    watch(enPage, "/recipe/… (en)");
+    const pages = { de: page, en: enPage };
+    // [Rezept, Sprache, Text des Video-Knopfs – oder null: kein Video in dieser Sprache, also die Suche]
+    const checks = [
+      ...pickRecipe(de, en).flatMap((id) => [
+        [id, "de", `▶ Video ansehen · YouTube · ${de.get(id).channel}`],
+        [id, "en", null],
+      ]),
+      ...pickRecipe(en, de).flatMap((id) => [
+        [id, "en", `▶ Watch video · YouTube · ${en.get(id).channel}`],
+        [id, "de", null],
+      ]),
+    ];
+    if (checks.length === 0) throw new Error("kein Rezept mit Video nur auf Deutsch oder nur auf Englisch gefunden");
+    for (const [id, language, button] of checks) {
+      const target = pages[language];
+      const search = language === "de" ? "🔎 Video suchen · YouTube" : "🔎 Find a video · YouTube";
+      await target.goto(site + "/recipe/" + id, { waitUntil: "networkidle" });
+      if (button) {
+        await target.getByText(button, { exact: true }).waitFor({ timeout: 10_000 });
+        if (await target.getByText(search, { exact: true }).count()) throw new Error(`${id} (${language}) zeigt trotz Video die Suche`);
+      } else {
+        await target.getByText(search, { exact: true }).waitFor({ timeout: 10_000 });
+        const hint = language === "de" ? /^Zu diesem Rezept gibt es noch kein Video auf Deutsch/ : /^There’s no video in English for this recipe yet/;
+        await target.getByText(hint).waitFor({ timeout: 10_000 });
+        if (await target.getByText(/^▶ /).count()) throw new Error(`${id} (${language}) zeigt ein Video in einer anderen Sprache`);
+      }
+    }
     await english.close();
-    console.log("Videos je Sprache: Deutsch und Englisch zeigen nur Videos ihrer Sprache, sonst die YouTube-Suche.");
+    console.log(`Videos je Sprache: ${checks.map(([id, l]) => `${id} (${l})`).join(", ")} zeigen nur Videos ihrer Sprache, sonst die YouTube-Suche.`);
   } catch (e) {
     failures.push(`Videos je Sprache: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
