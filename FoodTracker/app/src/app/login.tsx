@@ -4,8 +4,9 @@ import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { Platform, Text, TextInput } from "react-native";
+import { ComingSoon } from "../components/ComingSoon";
 import { Button, Card, ErrorText, Field, Muted, Screen, styles } from "../components/ui";
-import { api } from "../lib/api";
+import { api, HAS_SERVER } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useStore } from "../lib/store";
 import type { Account } from "../lib/types";
@@ -50,6 +51,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!HAS_SERVER) return;
     api.authConfig().then(setConfig).catch(() => setError(t("account.noServer")));
     if (Platform.OS === "ios") AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
   }, [t]);
@@ -91,6 +93,15 @@ export default function LoginScreen() {
       fail(e);
     }
   };
+
+  // Ohne Server (Web-Version) „Bald verfügbar“ statt „Ohne Verbindung zum Server ist keine Anmeldung möglich.“
+  if (!HAS_SERVER) {
+    return (
+      <Screen>
+        <ComingSoon />
+      </Screen>
+    );
+  }
 
   return (
     <Screen>

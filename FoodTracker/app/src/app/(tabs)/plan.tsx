@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { RecipeThumb } from "../../components/RecipeThumb";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, ShowMore, colors, styles } from "../../components/ui";
-import { ApiError, api } from "../../lib/api";
+import { ApiError, HAS_SERVER, api } from "../../lib/api";
 import { MONTH_WEEKS, PlanError, matchesPreferences, planMonth, weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
@@ -61,7 +61,9 @@ export default function PlanScreen() {
       effort: DEVICE_EFFORT,
     };
 
-    const wishes = settings.preferences.trim();
+    // Ohne Server (Web-Version) gibt es kein Wunschfeld; früher eingetragene Wünsche bleiben gespeichert,
+    // lösen aber keine Anfrage und keinen Hinweis „braucht eine Verbindung“ aus.
+    const wishes = HAS_SERVER ? settings.preferences.trim() : "";
     if (wishes && fromWeek === 0) {
       try {
         const result = await api.plan({ ...request, startDate, recipes: userRecipes, preferences: wishes, language: i18n.language });
@@ -196,12 +198,15 @@ export default function PlanScreen() {
           <Link href="/onboarding" style={[styles.text, { color: colors.primary }]}>
             {t("plan.editPreferences")} ›
           </Link>
-          <TextInput
-            style={styles.input}
-            placeholder={t("plan.wishesPlaceholder")}
-            defaultValue={settings.preferences}
-            onChangeText={(preferences) => store.updateSettings({ preferences })}
-          />
+          {/* Wünsche für neue KI-Rezepte braucht Claude über den Server; ohne ihn bleibt die Karte aufgeräumt. */}
+          {HAS_SERVER ? (
+            <TextInput
+              style={styles.input}
+              placeholder={t("plan.wishesPlaceholder")}
+              defaultValue={settings.preferences}
+              onChangeText={(preferences) => store.updateSettings({ preferences })}
+            />
+          ) : null}
           <Muted>{t("plan.pantryHint", { n: aggregatePantry(pantry).length })}</Muted>
           <Button label={plan ? t("plan.recreate") : t("plan.createMonth")} onPress={() => createPlan(0)} loading={loading} />
           {loading ? <Muted>{t("plan.progress", { n: progress!, total: MONTH_WEEKS.length })}</Muted> : null}

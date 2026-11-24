@@ -193,6 +193,7 @@ export const it: Dictionary = {
     unshare: "Rimuovi dalla community",
     shared: "✓ Condivisa",
     shareSoon: "La condivisione delle ricette con la community arriverà presto. Nel frattempo la tua ricetta resta su questo dispositivo.",
+    translateSoon: "La traduzione delle ricette arriverà presto. Ingredienti e quantità sono già nella tua lingua.",
     needName: "Imposta un nome visualizzato nelle impostazioni per condividere ricette.",
     translate: "🌐 Traduci",
     translating: "Traduzione …",
@@ -428,6 +429,7 @@ export const it: Dictionary = {
     deletePhoto: "Elimina",
     makePublic: "Rendi pubblica",
     offline: "Senza connessione al server la foto è stata salvata solo in privato.",
+    shareSoon: "La condivisione delle foto con altri arriverà presto. Nel frattempo la tua foto resta su questo dispositivo: la vedi solo tu.",
     report: "⚠️ Segnala un problema",
     reportTitle: "Cosa non va in questa ricetta?",
     reasonText: "Testo / passaggi",
@@ -449,6 +451,7 @@ export const it: Dictionary = {
     improved: "✨ Testo migliorato con l'IA",
     topRated: "Le più votate",
     improvedNote: "Miglioramento IA applicato",
+    soon: "Valutare le ricette, segnalare problemi e migliorare i testi con l'IA: arriverà presto. Nel frattempo segna le ricette che ami come «Preferita»: l'app le pianifica più spesso.",
   },
   account: {
     title: "Account",
@@ -477,6 +480,7 @@ export const it: Dictionary = {
     search: "Cerca utenti",
     needSignIn: "Accedi per vedere l'elenco utenti.",
     noServer: "Per accedere serve la connessione al server.",
+    signInSoon: "L'accesso arriverà presto. Nel frattempo i tuoi dati restano su questo dispositivo: pianificare, fare la spesa e cucinare funziona senza account.",
   },
   admin: {
     title: "Area admin",

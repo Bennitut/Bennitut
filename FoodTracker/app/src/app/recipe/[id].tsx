@@ -56,6 +56,8 @@ export default function RecipeDetailScreen() {
   const importUrl = recipe.source.kind === "import" ? recipe.source.url : undefined;
   const sourceUrl = importUrl && !videos.some((v) => v.url === importUrl) ? importUrl : undefined;
   const image = store.imageFor(recipe);
+  // Übersetzen braucht Claude über den Server; ohne Server ein Hinweis statt eines Knopfs, der „Keine Verbindung“ meldet.
+  const untranslated = needsTranslation(recipe, i18n.language);
 
   const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>) => {
     setBusy(kind);
@@ -154,11 +156,12 @@ export default function RecipeDetailScreen() {
         <Muted>{t("recipes.perServing")}</Muted>
         <View style={styles.chipRow}>
           <Button label={isFavorite ? t("recipes.unfavorite") : t("recipes.favorite")} variant="secondary" onPress={toggleFavorite} loading={busy === "favorite"} />
-          {needsTranslation(recipe, i18n.language) ? (
+          {untranslated && HAS_SERVER ? (
             <Button label={busy === "translate" ? t("recipes.translating") : t("recipes.translate")} variant="secondary" onPress={translateNow} loading={busy === "translate"} />
           ) : null}
           {sourceUrl ? <Button label={t("recipes.openOriginal")} variant="secondary" onPress={() => Linking.openURL(sourceUrl)} /> : null}
         </View>
+        {untranslated && !HAS_SERVER ? <ComingSoonNote text={t("recipes.translateSoon")} /> : null}
         <ErrorText message={error} />
       </Card>
 

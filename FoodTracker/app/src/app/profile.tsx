@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
+import { ComingSoonNote } from "../components/ComingSoon";
 import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, colors, styles } from "../components/ui";
-import { api } from "../lib/api";
+import { api, HAS_SERVER } from "../lib/api";
 import { addDays, formatDay } from "../lib/dates";
 import { useI18n } from "../lib/i18n";
 import { sumNutrients, today } from "../lib/pantry";
@@ -68,11 +69,14 @@ export default function ProfileScreen() {
               }}
             />
           </>
-        ) : (
+        ) : HAS_SERVER ? (
           <>
             <Muted>{t("account.notSignedIn")}</Muted>
             <Button label={t("account.signIn")} onPress={() => router.push("/login")} />
           </>
+        ) : (
+          // Ohne Server keine Anmeldung: Hinweis statt eines Knopfs, der zu „Ohne Verbindung … keine Anmeldung“ führt.
+          <ComingSoonNote text={t("account.signInSoon")} />
         )}
       </Card>
 

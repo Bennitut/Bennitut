@@ -193,6 +193,7 @@ export const en: Dictionary = {
     unshare: "Remove from community",
     shared: "✓ Shared",
     shareSoon: "Sharing recipes with the community is coming soon. Until then, your recipe stays on this device.",
+    translateSoon: "Translating recipes is coming soon. Ingredients and amounts are already shown in your language.",
     needName: "Set a display name in settings to share recipes.",
     translate: "🌐 Translate",
     translating: "Translating …",
@@ -428,6 +429,7 @@ export const en: Dictionary = {
     deletePhoto: "Delete",
     makePublic: "Make public",
     offline: "Without a connection to the server the photo was only saved privately.",
+    shareSoon: "Sharing photos with others is coming soon. Until then, your photo stays on this device – only you can see it.",
     report: "⚠️ Report a problem",
     reportTitle: "What's wrong with this recipe?",
     reasonText: "Text / steps",
@@ -449,6 +451,7 @@ export const en: Dictionary = {
     improved: "✨ Text improved with AI",
     topRated: "Top rated",
     improvedNote: "AI improvement applied",
+    soon: "Rating recipes, reporting problems and improving texts with AI – coming soon. Until then, mark recipes you love as “Favourite” – the app plans them more often.",
   },
   account: {
     title: "Account",
@@ -477,6 +480,7 @@ export const en: Dictionary = {
     search: "Search users",
     needSignIn: "Please sign in to see the user directory.",
     noServer: "Signing in requires a connection to the server.",
+    signInSoon: "Signing in is coming soon. Until then, your data stays on this device – planning, shopping and cooking work without an account.",
   },
   admin: {
     title: "Admin area",

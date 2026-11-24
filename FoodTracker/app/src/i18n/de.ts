@@ -193,6 +193,7 @@ export const de = {
     unshare: "Aus der Community entfernen",
     shared: "✓ Geteilt",
     shareSoon: "Rezepte in der Community teilen kommt bald. Bis dahin bleibt dein Rezept auf diesem Gerät.",
+    translateSoon: "Rezepte übersetzen kommt bald. Zutaten und Mengen siehst du schon jetzt in deiner Sprache.",
     needName: "Lege in den Einstellungen einen Anzeigenamen fest, um Rezepte zu teilen.",
     translate: "🌐 Übersetzen",
     translating: "Übersetze …",
@@ -428,6 +429,7 @@ export const de = {
     deletePhoto: "Löschen",
     makePublic: "Öffentlich machen",
     offline: "Ohne Verbindung zum Server wurde das Foto nur privat gespeichert.",
+    shareSoon: "Fotos mit anderen teilen kommt bald. Bis dahin bleibt dein Foto auf diesem Gerät – nur du siehst es.",
     report: "⚠️ Problem melden",
     reportTitle: "Was stimmt an diesem Rezept nicht?",
     reasonText: "Text / Schritte",
@@ -449,6 +451,7 @@ export const de = {
     improved: "✨ Text mit KI verbessert",
     topRated: "Am besten bewertet",
     improvedNote: "KI-Verbesserung übernommen",
+    soon: "Rezepte bewerten, Probleme melden und Texte mit KI verbessern – das kommt bald. Bis dahin: Lieblingsrezepte mit „Favorit“ markieren, die plant die App öfter ein.",
   },
   account: {
     title: "Konto",
@@ -477,6 +480,7 @@ export const de = {
     search: "Nutzer:innen suchen",
     needSignIn: "Bitte melde dich an, um das Nutzerverzeichnis zu sehen.",
     noServer: "Ohne Verbindung zum Server ist keine Anmeldung möglich.",
+    signInSoon: "Die Anmeldung kommt bald. Bis dahin bleiben deine Daten auf diesem Gerät – planen, einkaufen und kochen geht ganz ohne Konto.",
   },
   admin: {
     title: "Admin-Bereich",

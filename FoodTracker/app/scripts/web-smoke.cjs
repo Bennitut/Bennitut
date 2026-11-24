@@ -4,7 +4,8 @@
 //   npm run web:smoke                 # öffnet jede Seite und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
 //                                     # abhaken, „Abgehaktes in den Vorrat“, „Liefern lassen“ zeigt „Bald verfügbar“)
 //                                     # → Vorrat durch, danach „Entdecken“ (Community „Bald verfügbar“) und Tauschen
-//                                     # (zuerst 30 Rezepte, nicht alle Fotos auf einmal)
+//                                     # (zuerst 30 Rezepte, nicht alle Fotos auf einmal), zuletzt „Bald verfügbar“
+//                                     # im Rezept, im Profil, bei der Anmeldung und beim Übersetzen (Französisch)
 //   npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe für GitHub Pages (Unterpfad /Bennitut)
 //
 // Den Unterpfad erkennt der Test selbst an den Skript-Pfaden in index.html. Gibt es eine 404.html, verhält sich
@@ -95,10 +96,13 @@ async function main() {
   // Bei GitHub Pages kommen Direktlinks wie /plan absichtlich als 404.html mit Status 404 – das meldet Chromium
   // als „Failed to load resource“. Nur diese Meldung für genau diese Adressen ist erwartet.
   const expected404 = (m) => /status of 404/.test(m.text()) && served404.has(new URL(m.location().url || origin, origin).pathname);
-  const open = async (route) => {
-    const page = await context.newPage();
+  const watch = (page, route) => {
     page.on("pageerror", (e) => failures.push(`${route}: ${e.message}`));
     page.on("console", (m) => m.type() === "error" && !expected404(m) && failures.push(`${route}: ${m.text()}`));
+  };
+  const open = async (route) => {
+    const page = await context.newPage();
+    watch(page, route);
     await page.goto(site + route, { waitUntil: "networkidle" });
     return page;
   };
@@ -207,6 +211,42 @@ async function main() {
     console.log(`„Entdecken“ zeigt für die Community „Bald verfügbar“, lädt zuerst ${first} Fotos, „Mehr anzeigen“ zeigt weitere; Tauschen ebenso.`);
   } catch (e) {
     failures.push(`Lange Listen: ${e.message.split("\n")[0]}`);
+    await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
+  }
+
+  // Ohne Server: Rezept (Bewerten, Melden, KI-Text), Plan (KI-Wünsche), Profil und Anmeldung zeigen „Bald verfügbar“
+  // bzw. blenden das Eingabefeld aus, statt „Keine Verbindung zum Server.“ zu melden.
+  try {
+    const absent = async (target, text, what) => {
+      if (await target.getByText(text, typeof text === "string" ? { exact: true } : undefined).count()) throw new Error(what);
+    };
+    await page.goto(site + "/recipe/linsen_bolognese", { waitUntil: "networkidle" });
+    await page.getByText(/^Rezepte bewerten, Probleme melden und Texte mit KI verbessern – das kommt bald\./).waitFor({ timeout: 10_000 });
+    await absent(page, "Wie gefällt dir das Rezept?", "Rezept zeigt ohne Server die Sterne zum Bewerten");
+    await absent(page, "⚠️ Problem melden", "Rezept zeigt ohne Server „Problem melden“");
+    await absent(page, "Keine Verbindung zum Server.", "Rezept zeigt „Keine Verbindung zum Server.“");
+    await page.goto(site + "/plan", { waitUntil: "networkidle" });
+    await page.getByText(/^Woche 1/).first().waitFor({ timeout: 10_000 });
+    if (await page.getByPlaceholder(/Wünsche für neue KI-Rezepte/).count()) throw new Error("Plan zeigt ohne Server das Feld für KI-Wünsche");
+    await page.goto(site + "/profile", { waitUntil: "networkidle" });
+    await page.getByText(/^Die Anmeldung kommt bald\./).waitFor({ timeout: 10_000 });
+    await absent(page, "Anmelden", "Profil zeigt ohne Server den Knopf „Anmelden“");
+    for (const route of ["/login", "/users"]) {
+      await page.goto(site + route, { waitUntil: "networkidle" });
+      await page.getByText(/^Diese Funktion braucht den FoodTracker-Server und kommt bald\./).waitFor({ timeout: 10_000 });
+      await absent(page, /keine Anmeldung möglich|Bitte melde dich an/, `${route} meldet ohne Server, dass man sich nicht anmelden kann`);
+    }
+    // Auf Französisch fehlt Katalogrezepten die Zubereitung: Hinweis „Übersetzen kommt bald“ statt eines Knopfs ohne Wirkung.
+    const french = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "fr-FR" });
+    const frPage = await french.newPage();
+    watch(frPage, "/recipe/linsen_bolognese (fr)");
+    await frPage.goto(site + "/recipe/linsen_bolognese", { waitUntil: "networkidle" });
+    await frPage.getByText(/^La traduction des recettes arrive bientôt\./).waitFor({ timeout: 10_000 });
+    await absent(frPage, "🌐 Traduire", "Rezept auf Französisch zeigt ohne Server den Knopf „Traduire“");
+    await french.close();
+    console.log("Ohne Server: Rezept, Plan, Profil, Anmeldung und Übersetzen (fr) zeigen „Bald verfügbar“ statt Fehlermeldungen.");
+  } catch (e) {
+    failures.push(`Bald verfügbar: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
   }
 

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { api } from "../lib/api";
+import { api, HAS_SERVER } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { newId } from "../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../lib/photos";
 import { useStore } from "../lib/store";
 import { FLAG_REASONS, type FlagReason, type ImprovedRecipe, type Recipe, type RecipePhoto } from "../lib/types";
+import { ComingSoonNote } from "./ComingSoon";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, Muted, colors, styles } from "./ui";
 
 /** Fünf Sterne; mit onChange antippbar. */
@@ -36,6 +37,10 @@ export function RatingCard({ recipe }: { recipe: Recipe }) {
       setError(i18n.error(e));
     }
   };
+
+  // Bewertungen sammelt der Server; ohne ihn gäbe es nur leere Sterne, die „Keine Verbindung“ melden.
+  // Der Hinweis „Bald verfügbar“ steht gesammelt unten im Rezept (ImproveCard).
+  if (!HAS_SERVER) return null;
 
   return (
     <Card title={t("feedback.rating")} icon="⭐" tint="#FFF4D6">
@@ -72,9 +77,9 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Erst nach dem Laden des Zustands abfragen, sonst fehlt die Geräte-ID.
+  // Erst nach dem Laden des Zustands abfragen, sonst fehlt die Geräte-ID. Ohne Server gibt es nur eigene Fotos.
   useEffect(() => {
-    if (ready) api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
+    if (ready && HAS_SERVER) api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
   }, [recipe.id, ready]);
 
   const mine = myPhotos.filter((p) => p.recipeId === recipe.id);
@@ -129,7 +134,8 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
     setError(null);
     const id = newId();
     let remoteId: string | null = null;
-    if (makePublic) {
+    // Ohne Server bleibt das Foto privat (statt nach dem Speichern „Ohne Verbindung …“ zu melden).
+    if (makePublic && HAS_SERVER) {
       try {
         remoteId = await publish(draft);
       } catch {
@@ -196,7 +202,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
               ) : null}
               {item.own ? (
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                  {!item.own.public ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
+                  {!item.own.public && HAS_SERVER ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
                   <Chip label={t("feedback.deletePhoto")} onPress={() => remove(item)} />
                 </View>
               ) : null}
@@ -219,11 +225,17 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
         <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
           {draft ? <Image source={{ uri: draft }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 16 }} /> : null}
           <Card title={t("feedback.visibility")} icon="👀">
-            <ChipRow>
-              <Chip label={t("feedback.public")} selected={makePublic} onPress={() => setMakePublic(true)} />
-              <Chip label={t("feedback.private")} selected={!makePublic} onPress={() => setMakePublic(false)} />
-            </ChipRow>
-            <Muted>{t("feedback.publicHint")}</Muted>
+            {HAS_SERVER ? (
+              <>
+                <ChipRow>
+                  <Chip label={t("feedback.public")} selected={makePublic} onPress={() => setMakePublic(true)} />
+                  <Chip label={t("feedback.private")} selected={!makePublic} onPress={() => setMakePublic(false)} />
+                </ChipRow>
+                <Muted>{t("feedback.publicHint")}</Muted>
+              </>
+            ) : (
+              <ComingSoonNote text={t("feedback.shareSoon")} />
+            )}
           </Card>
           <Button label={t("feedback.save")} onPress={save} loading={busy} />
           <Button label={t("common.cancel")} variant="secondary" onPress={() => setDraft(null)} />
@@ -303,6 +315,17 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
     setProposal(null);
     setMessage(t("feedback.improved"));
   };
+
+  // Ohne Server ein gesammelter Hinweis statt Knöpfen, die nur „Keine Verbindung“ melden – auch für die
+  // Bewertung (RatingCard ist dann ausgeblendet).
+  if (!HAS_SERVER) {
+    return (
+      <Card>
+        <ComingSoonNote text={t("feedback.soon")} />
+        {hasOverride ? <Button label={t("feedback.restore")} variant="secondary" onPress={() => setTextOverride(recipe.id, i18n.language, null)} /> : null}
+      </Card>
+    );
+  }
 
   return (
     <Card>

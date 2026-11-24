@@ -104,6 +104,15 @@ describe("Übersetzungen", () => {
       assert.ok(translate(language, "shopping.deliverSoon").includes(label), `${language}: „${label}“ fehlt im Hinweis`);
     }
   });
+
+  it("nennt im Hinweis unten im Rezept den Knopf „Favorit“ so, wie er heißt", () => {
+    // Ohne Server ersetzt feedback.soon Bewerten, Melden und „Text mit KI verbessern“ und rät zu Favoriten.
+    for (const language of UI_LANGUAGES) {
+      const label = translate(language, "recipes.favorite").replace(/^[^\p{L}]+/u, "");
+      assert.ok(label.length > 3, `${language}: Knopf ohne Text`);
+      assert.ok(translate(language, "feedback.soon").includes(label), `${language}: „${label}“ fehlt im Hinweis`);
+    }
+  });
 });
 
 describe("Sprache und Region", () => {
