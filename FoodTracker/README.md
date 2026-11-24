@@ -87,10 +87,17 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # sonst blockiert PowerShe
 ollama pull gemma4:e4b                                # KI-Modell, das auch Bilder versteht (rund 9,4 GB)
 ```
 
-Jedes Mal: im Repo-Ordner `git pull`, dann **`FoodTracker\start-test.cmd` doppelklicken**. Das Skript installiert bei
-Bedarf die Pakete (`npm install` in `server` und `app`), legt beim ersten Mal `server\.env` aus `server\.env.example`
-an, startet den Server in einem eigenen Fenster und danach Expo. Im Expo-Fenster die Taste **`w`** öffnet die App im
-Browser; am iPhone den QR-Code mit der Kamera scannen, unter Android in Expo Go (Handy und Laptop im selben WLAN).
+Jedes Mal: **`FoodTracker\start-test.cmd` doppelklicken** – oder eine Verknüpfung darauf (Rechtsklick auf die Datei →
+„Weitere Optionen anzeigen“ → „Senden an“ → „Desktop (Verknüpfung erstellen)“). Das Skript holt zuerst selbst den
+neuesten Stand (`git pull`; ohne Aktualisieren: `start-test.cmd --ohne-pull`), installiert bei Bedarf die Pakete
+(`npm install` in `server` und `app`), legt beim ersten Mal `server\.env` aus `server\.env.example` an, startet den
+Server in einem eigenen Fenster und danach Expo. Im Expo-Fenster die Taste **`w`** öffnet die App im Browser; am iPhone
+den QR-Code mit der Kamera scannen, unter Android in Expo Go (Handy und Laptop im selben WLAN).
+
+Meldet das Skript „Aktualisieren hat nicht geklappt“, startet es mit dem vorhandenen Stand; die Meldung von Git steht
+darüber. Änderungen, die `npm install` an `package-lock.json` macht, verwirft es selbst. Andere eigene Änderungen im
+Ordner zeigt `git status`; wer sie nicht braucht, holt mit `git fetch` und `git reset --hard origin/claude/nightly`
+den Stand von GitHub (das löscht diese Änderungen).
 
 Das Server-Fenster zeigt die Adresse im WLAN, welche KI aktiv ist (bzw. was noch fehlt) und – unter Windows – die
 Firewall-Regel. Fürs iPhone muss die Windows-Firewall die Ports 3000 (Server) und 8081 (Expo) erlauben; einmalig in
