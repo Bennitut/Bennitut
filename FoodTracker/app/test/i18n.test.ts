@@ -93,6 +93,17 @@ describe("Übersetzungen", () => {
       }
     }
   });
+
+  it("nennt im Hinweis unter „Liefern lassen“ den Knopf „Abgehaktes in den Vorrat“ so, wie er heißt", () => {
+    // Ohne Server zeigt „Liefern lassen“ „Bald verfügbar“ und verweist auf den Knopf unter der Einkaufsliste.
+    for (const language of UI_LANGUAGES) {
+      const label = translate(language, "shopping.bookChecked", { n: 0 })
+        .replace(/^\p{Extended_Pictographic}\s*/u, "")
+        .replace(/\s*\(0\)$/, "");
+      assert.ok(label.length > 5, `${language}: Knopf ohne Text`);
+      assert.ok(translate(language, "shopping.deliverSoon").includes(label), `${language}: „${label}“ fehlt im Hinweis`);
+    }
+  });
 });
 
 describe("Sprache und Region", () => {

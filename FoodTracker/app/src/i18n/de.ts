@@ -267,6 +267,7 @@ export const de = {
     useSoon: "⚠️ bald verbrauchen ({days} Tage)",
     deliver: "Liefern lassen",
     order: "Einkauf bestellen",
+    deliverSoon: "Bestellen beim Lieferdienst kommt bald. Bis dahin: abhaken, was im Wagen liegt, und mit „Abgehaktes in den Vorrat“ buchen.",
     orders: "Bestellungen",
     articles: "{date} · {n} Artikel",
     status: {

@@ -267,6 +267,7 @@ export const fr: Dictionary = {
     useSoon: "⚠️ à consommer vite ({days} jours)",
     deliver: "Se faire livrer",
     order: "Commander les courses",
+    deliverSoon: "La livraison à domicile arrive bientôt. En attendant, cochez ce qui est dans votre panier et touchez « Ajouter les articles cochés aux provisions ».",
     orders: "Commandes",
     articles: "{date} · {n} articles",
     status: {

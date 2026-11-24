@@ -1,9 +1,10 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
+import { ComingSoonNote } from "../../components/ComingSoon";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, HeroCard, IconBubble, Muted, ProgressBar, Screen, colors, styles } from "../../components/ui";
 import { CATEGORY_ORDER, CATEGORY_STYLE, ingredientEmoji } from "../../lib/emoji";
-import { api } from "../../lib/api";
+import { api, HAS_SERVER } from "../../lib/api";
 import { weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { today } from "../../lib/pantry";
@@ -28,6 +29,8 @@ export default function ShoppingScreen() {
   const week = plan?.weeks[Math.min(selectedWeek, (plan?.weeks.length ?? 1) - 1)];
 
   useEffect(() => {
+    // Ohne Server gibt es keine Lieferdienste – die Karte zeigt dann „Bald verfügbar“ statt eines Fehlers.
+    if (!HAS_SERVER) return;
     api
       .providers()
       .then((list) => {
@@ -226,17 +229,23 @@ export default function ShoppingScreen() {
 
       {toBuy.length > 0 ? (
         <Card title={t("shopping.deliver")} icon="🚚" tint={colors.accentTint}>
-          <ChipRow>
-            {providers.map((p) => (
-              <Chip key={p.id} label={providerName(p)} selected={providerId === p.id} onPress={() => setProviderId(p.id)} />
-            ))}
-          </ChipRow>
-          {providers
-            .filter((p) => p.id === providerId)
-            .map((p) => (
-              <Muted key={p.id}>{providerDescription(p)}</Muted>
-            ))}
-          <Button label={t("shopping.order")} onPress={placeOrder} loading={loading} disabled={!providerId} />
+          {HAS_SERVER ? (
+            <>
+              <ChipRow>
+                {providers.map((p) => (
+                  <Chip key={p.id} label={providerName(p)} selected={providerId === p.id} onPress={() => setProviderId(p.id)} />
+                ))}
+              </ChipRow>
+              {providers
+                .filter((p) => p.id === providerId)
+                .map((p) => (
+                  <Muted key={p.id}>{providerDescription(p)}</Muted>
+                ))}
+              <Button label={t("shopping.order")} onPress={placeOrder} loading={loading} disabled={!providerId} />
+            </>
+          ) : (
+            <ComingSoonNote text={t("shopping.deliverSoon")} />
+          )}
           <ErrorText message={error} />
         </Card>
       ) : null}

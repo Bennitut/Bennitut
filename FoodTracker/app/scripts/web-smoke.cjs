@@ -2,8 +2,9 @@
 //
 //   npm run web:export                # baut die statische Web-Version nach dist/
 //   npm run web:smoke                 # öffnet jede Seite und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
-//                                     # abhaken, „Abgehaktes in den Vorrat“) → Vorrat durch, danach „Entdecken“ und
-//                                     # Tauschen (zuerst 30 Rezepte, nicht alle Fotos auf einmal)
+//                                     # abhaken, „Abgehaktes in den Vorrat“, „Liefern lassen“ zeigt „Bald verfügbar“)
+//                                     # → Vorrat durch, danach „Entdecken“ und Tauschen (zuerst 30 Rezepte, nicht
+//                                     # alle Fotos auf einmal)
 //   npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe für GitHub Pages (Unterpfad /Bennitut)
 //
 // Den Unterpfad erkennt der Test selbst an den Skript-Pfaden in index.html. Gibt es eine 404.html, verhält sich
@@ -164,6 +165,9 @@ async function main() {
     await tap("🧺 Abgehaktes in den Vorrat (2)");
     await page.getByText("✓ 2 Lebensmittel in den Vorrat gebucht.", { exact: true }).waitFor({ timeout: 5_000 });
     await page.getByText("🧺 Abgehaktes in den Vorrat (0)", { exact: true }).waitFor({ timeout: 5_000 });
+    // Ohne Server: „Liefern lassen“ zeigt „Bald verfügbar“ statt „Keine Verbindung zum Server.“
+    await page.getByText("🚧 Bald verfügbar", { exact: true }).waitFor({ timeout: 5_000 });
+    if (await page.getByText("Keine Verbindung zum Server.", { exact: true }).count()) throw new Error("„Liefern lassen“ zeigt „Keine Verbindung zum Server.“");
     await tap("Vorrat");
     const stocked = () => page.getByText("2 Lebensmittel", { exact: true }).first().waitFor({ timeout: 10_000 });
     await stocked();
