@@ -25,9 +25,9 @@ Kurzanleitung für Tester (für Bio, angepinnten Kommentar oder Antwort auf Nach
 4. Die Daten bleiben im Browser auf dem eigenen Gerät; es wird nichts hochgeladen.
 5. Feedback gern als Kommentar oder Nachricht: Was fehlt, was nervt, welches Gericht passt nicht?
 
-Foto- und Kassenbon-Erkennung, Rezept-Import, Community und Bestellungen beim Lieferdienst brauchen einen Server und
-sind in der Web-Version noch nicht verfügbar (die App zeigt dort „Bald verfügbar“) – in den Beiträgen deshalb nicht
-versprechen.
+Foto- und Kassenbon-Erkennung, Rezept-Import, Übersetzen, KI-Rezepte nach Wunsch, Bewertungen, Anmeldung, Community
+und Bestellungen beim Lieferdienst brauchen einen Server und sind in der Web-Version noch nicht verfügbar (die App
+zeigt dort „Bald verfügbar“ oder blendet sie aus) – in den Beiträgen deshalb nicht versprechen.
 
 ## Beitragstexte
 

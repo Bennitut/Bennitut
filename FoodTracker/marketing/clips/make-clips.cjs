@@ -142,7 +142,8 @@ const CLIPS = [
       await tap(page, page.getByText("Frühstück", { exact: true }).first(), 2000);
       await scroll(page, 520);
       await page.waitForTimeout(1200);
-      await scroll(page, 420);
+      // Nur bis zur Zubereitung: Darunter steht ohne Server der Hinweis „Bald verfügbar“ (Bewerten, KI-Text).
+      await scroll(page, 300);
       await page.waitForTimeout(1200);
       caption("Abhaken – landet im\nErnährungstagebuch");
       await page.goBack();
