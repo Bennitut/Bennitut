@@ -18,8 +18,9 @@ offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz 
 aufgehoben, neue Funktionen sind wieder erlaubt und kommen in den offenen PR #2. (2) Rezeptfotos zuerst – erledigt: die
 vier unklaren Fotos ersetzt bzw. entfernt, Schlagwörter und Beschreibungen aller Fotos sowie die Videotitel vegetarischer
 und veganer Rezepte geprüft, danach der Platzhalter für Rezepte ohne Foto im Plan, unter „Heute“ und im Tausch-Dialog.
-(3) Vorrat: Variante (b), ein Knopf „Abgehaktes in den Vorrat“ – steht als Vorrang unten und ist als Nächstes dran.
-Danach: Promo-Clips 1 und 3 neu aufnehmen, am 25.11. der Tagesbericht für den 24.11., dann Punkt 5, Teil 2.
+(3) Vorrat: Variante (b), ein Knopf „Abgehaktes in den Vorrat“ unter der Einkaufsliste – erledigt (Vorrang unten).
+Als Nächstes: Promo-Clips 1 und 3 neu aufnehmen, am 25.11. der Tagesbericht für den 24.11., dann Punkt 5, Teil 2
+(„Bald verfügbar“ u. a. für Bestellungen – die Web-Version zeigt unter „Liefern lassen“ noch „Keine Verbindung“).
 
 ## Daueraufgabe: Tagesbericht als PDF (Benjamins Wunsch vom 23.11.2026)
 
@@ -29,7 +30,12 @@ committet (vorläufiger Stand), und gab es am Vortag Commits auf `claude/nightly
 `node FoodTracker/reports/make-report.cjs <Vortag>` ausführen, die PDF committen und pushen, im PR unter
 „Tagesberichte“ verlinken und Benjamin mit SendUserFile schicken (in der Benachrichtigung kurz erwähnen).
 
-## Vorrang: Abgehaktes in den Vorrat (Benjamins Entscheidung vom 24.11.2026, Variante b)
+## ✅ Vorrang: Abgehaktes in den Vorrat (Benjamins Entscheidung vom 24.11.2026, Variante b) – erledigt 24.11.2026
+
+24.11.2026: Knopf „🧺 Abgehaktes in den Vorrat (n)“ unter der Einkaufsliste; gebuchte Zeilen tragen „🧺 im Vorrat“.
+Logik in `app/src/lib/shopping.ts` (8 Tests), Store-Aktionen `bookCheckedShopping` und `receiveOrder`, Bestellungen
+merken sich Plan und Woche (`forWeek`). Web-Rauchtest bucht zwei Zeilen; mit lokalem Server und Demo-Lieferdienst
+geprüft: jede Zeile genau einmal im Vorrat.
 
 Direkt nach den Rezeptfotos umsetzen. Unter der Einkaufsliste ein Knopf „Abgehaktes in den Vorrat“: bucht alle
 abgehakten Zeilen der Woche als Packungen × Packungsgröße in den Vorrat (mit Einkaufsdatum, damit die Haltbarkeit
@@ -104,8 +110,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - ✅ **Web-Version hosten:** entschieden 23.11.2026, erledigt 24.11.2026: GitHub Pages unter
   `https://bennitut.github.io/Bennitut/` mit Unterpfad, Manifest-Pfaden, `404.html` und dem Tester-Link in `clips.md`
   vorbereitet. (23.11.2026)
-- **Abgehakte Einkäufe landen nicht im Vorrat:** Nur gelieferte Bestellungen und Kassenbons (beides braucht den
-  Server) buchen in den Vorrat. In der Web-Version bleibt der Vorrat deshalb leer, solange man nicht alles von Hand
+- ✅ **Abgehakte Einkäufe landen nicht im Vorrat:** Nur gelieferte Bestellungen und Kassenbons (beides braucht den
+  Server) buchten in den Vorrat. Erledigt 24.11.2026 mit dem Knopf „Abgehaktes in den Vorrat“ (Vorrang oben). In der Web-Version bleibt der Vorrat deshalb leer, solange man nicht alles von Hand
   einträgt, und „Gegessen“ zieht nichts ab – der Kreislauf Einkauf → Vorrat → Kochen bricht ab. Der Test „Einkaufen
   und Kochen“ zeigt, dass die Mengen aufgehen, wenn man Packungen × Packungsgröße bucht. Benjamin hat am 24.11.2026
   Variante (b) gewählt (Knopf unter der Einkaufsliste) – steht jetzt als Vorrang oben. (24.11.2026)
@@ -163,6 +169,13 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Wikimedia drosselt schnelle Abfragen (HTTP 429, ein paar Sekunden Pause hilft), Flickr-Bilder selbst sind gesperrt,
   Flickr-Seiten mit Titel, Beschreibung und Schlagwörtern aber lesbar. YouTube-Titel kommen über oEmbed; fünf Videos
   antworten dort mit 401 (Einbetten abgeschaltet, Vorschaubild vorhanden – der Link funktioniert). (24.11.2026)
+- **Server ohne CORS:** Der Server schickt keine CORS-Header. Im Browser mit `npx expo start` (Taste `w`, Port 8081)
+  dürften Anfragen an den Server auf Port 3000 deshalb scheitern (nicht ausprobiert; Expo Go ist nicht betroffen).
+  Für eine Web-Version mit Server `hono/cors` für die eigenen Adressen einschalten. Zum Prüfen am 24.11.2026 lief die
+  App deshalb hinter einem kleinen Proxy auf derselben Adresse wie der Server. (24.11.2026)
+- **Web-Export mit `EXPO_PUBLIC_API_URL`:** Metro übernimmt die Variable nur mit `npx expo export --clear`; ohne
+  `--clear` kam am 24.11.2026 der zwischengespeicherte Stand ohne Server heraus (und umgekehrt). Der Pages-Workflow
+  baut in einer frischen Umgebung und ist nicht betroffen. (24.11.2026)
 - **Video bei der Calzone zeigt Cannelloni:** `vg_calzone_spinat` verlinkt „Schnelles Cannelloni mit
   Spinat-Ricotta-Füllung“ – vegetarisch, aber ein anderes Gericht. Bei Gelegenheit ein Calzone-Video suchen. (24.11.2026)
 - **Suche im Tausch-Dialog:** Ohne Einschränkungen passen fast 190 Rezepte; trotz „Mehr anzeigen“ ist das viel Blättern.
