@@ -87,14 +87,16 @@ function blocks(lines) {
 
 const ideaTitle = (item) => plain(item.match(/\*\*(.+?)\*\*/)?.[1] ?? item).replace(/:$/, "");
 
-/** Kurzer Titel eines Teilschritts: kurzes Etikett wie „Server:“ behalten, danach bis „ (“, „: “ oder „. “. */
+/** Kurzer Titel eines Teilschritts: Nummer („1.“) und kurzes Etikett („Server:“) behalten, danach bis „ (“, „: “ oder „. “. */
 function stepTitle(item) {
   const text = plain(item);
-  const label = text.match(/^([^:]{1,12}): /);
-  const rest = label ? text.slice(label[0].length) : text;
+  const number = text.match(/^(\d+\.) /);
+  const body = number ? text.slice(number[0].length) : text;
+  const label = body.match(/^([^:]{1,12}): /);
+  const rest = label ? body.slice(label[0].length) : body;
   const cut = rest.split(/ \(|: |\. /)[0].replace(/\.$/, "");
   const short = cut.length > 90 ? `${cut.slice(0, 89).trimEnd()}…` : cut;
-  return label ? `${label[1]}: ${short}` : short;
+  return `${number ? `${number[1]} ` : ""}${label ? `${label[1]}: ` : ""}${short}`;
 }
 
 function backlog(day, text = fs.readFileSync(BACKLOG, "utf8")) {

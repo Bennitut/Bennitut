@@ -111,6 +111,10 @@ Pro Lauf ein Teilschritt.
 - [x] Beim ersten Anmelden die lokalen Daten übernehmen. – erledigt 26.11.2026: ohne Duplikate.
 - [ ] App: Anmeldebildschirm in fünf Sprachen.
 - [x] Etwas ohne Datum.
+
+## Vorrang 2: Benjamins Antworten (10)
+
+- [x] 1. Impressum **Variante B**: nur noch prüfen. – erledigt 25.11.2026: baut ohne Entwurf.
 `;
 
   it("zeigt erledigte Teilschritte am Tag ihres Datums, mit kurzem Titel", () => {
@@ -120,6 +124,7 @@ Pro Lauf ein Teilschritt.
         title: "Server: Registrierung und Anmeldung mit E-Mail und Passwort",
         text: "POST /api/auth/register und /login, 21 Tests.",
       },
+      { kind: "Vorrang 2, Teilschritt", title: "1. Impressum Variante B", text: "baut ohne Entwurf." },
     ]);
     assert.deepEqual(backlog("2026-11-26", STEPS).done.map((x) => x.title), ["Beim ersten Anmelden die lokalen Daten übernehmen"]);
     assert.deepEqual(backlog("2026-11-24", STEPS).done, []);

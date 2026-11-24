@@ -39,12 +39,19 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
 
 **9.1 Konten**
 
-- [ ] Server: Registrierung und Anmeldung mit E-Mail und Passwort (zusätzlich zu Apple, Google und Dev-Login):
+- [x] Server: Registrierung und Anmeldung mit E-Mail und Passwort (zusätzlich zu Apple, Google und Dev-Login):
   Passwörter mit scrypt aus `node:crypto` (keine nativen Pakete), Mindestlänge 10, Sitzungs-Token mit Ablauf, Abmelden,
   Rate-Limit für Anmeldeversuche, keine Auskunft, ob eine E-Mail schon registriert ist; Dev-Login nur mit
   `ALLOW_DEV_LOGIN=1`. Dazu Passwort ändern, Konto löschen und „Meine Daten exportieren“ (DSGVO). Passwort-Reset per
   E-Mail nur, wenn ein Mail-Dienst konfiguriert ist (optionale `SMTP_*`-Variablen in `.env.example`); sonst den Knopf
-  ausblenden und unter „Ideen und Erkenntnisse“ notieren.
+  ausblenden und unter „Ideen und Erkenntnisse“ notieren. – erledigt 25.11.2026: `POST /api/auth/register` und `/login`
+  (scrypt N = 2¹⁵, r = 8, p = 3, rund 0,2 s pro Prüfung), Sitzungen 30 Tage; Rate-Limit pro IP-Adresse und pro Adresse
+  (auch für Adressen ohne Konto), gleiche Antwort und Rechenzeit für unbekannte Adressen; `POST /api/auth/password`
+  meldet andere Geräte ab; `DELETE /api/auth/me` löscht das Konto mit Tagebuch-Sicherung, geteilten Rezepten,
+  Favoriten, Fotos, Sternen und Meldungen; `GET /api/auth/export` als JSON ohne Passwort-Hash; „Passwort vergessen?“ mit
+  8-stelligem Code (30 Minuten, höchstens 5 Versuche) nur mit `SMTP_*` (nodemailer), `/api/auth/config` meldet es.
+  `ADMIN_EMAILS` macht Passwort-Konten erst mit bestätigter Adresse zum Admin; ohne Namen heißt ein Konto „Nutzer:in“
+  statt des Teils der Adresse vor dem „@“. `TRUST_PROXY=1` hinter einem Proxy. 21 Server-Tests (115).
 - [ ] App: Anmelde- und Registrierungsbildschirm in allen fünf Sprachen, Anmeldung bleibt gespeichert
   (`expo-secure-store` auf dem Handy, localStorage im Web), die App funktioniert weiter ohne Konto; im Profil Passwort
   ändern, Konto löschen und Daten exportieren.
@@ -115,10 +122,12 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
 Nach Vorrang 1 in dieser Reihenfolge; Antwort 3 (kein Mindestalter) und 6 (Kontaktformular) gelten schon beim Bau von
 Vorrang 1.
 
-- [ ] 1. Impressum **Variante B**: Die Texte sind umgestellt (24.11.2026), Benjamins Angaben stehen in
+- [x] 1. Impressum **Variante B**: Die Texte sind umgestellt (24.11.2026), Benjamins Angaben stehen in
   `app/src/legal/angaben.ts` (Commit 69027d1, Rechtstexte-Tests grün). Nur noch prüfen: App und Web-Version zeigen kein
   „Entwurf“ mehr, `npm run web:pages` läuft durch; verbleibende `[[PRÜFEN]]`-Stellen im PR auflisten. Die Angaben
-  nirgends sonst wiederholen.
+  nirgends sonst wiederholen. – erledigt 25.11.2026: `npm run web:pages` baut ohne `--entwurf`, der Rauchtest unter
+  `/Bennitut/` findet Impressum und Datenschutzerklärung vollständig; „Entwurf“ steht nur noch bei Teil B (nur mit
+  Server sichtbar, bis es den Server für andere gibt). Die elf `[[PRÜFEN]]`-Stellen stehen im PR.
 - [ ] 2. Rezeptfotos **Variante (a), selbst ausliefern** – eigener Abschnitt „Vorrang: Rezeptfotos selbst ausliefern“
   unten.
 - [ ] 3. **Kein Mindestalter** (Benjamins Entscheidung, nachdem er die Folgen kannte): Die App bleibt für alle offen,
@@ -581,6 +590,19 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Anthropics Vorgaben für Produkte, die Minderjährige nutzen können
   (https://support.claude.com/en/articles/9307344) – die App hat kein Mindestalter (Vorrang 2, Antwort 3). Vor dem Start
   des Servers für andere prüfen. (25.11.2026)
+- **„Passwort vergessen?“ braucht einen Mail-Dienst:** Ohne `SMTP_HOST` und `SMTP_FROM` in `server/.env` gibt es keinen
+  Code per E-Mail, die App blendet den Knopf dann aus (kommt mit dem App-Teil von 9.1). Wer dann sein Passwort vergisst,
+  kommt nicht mehr ins Konto – ein Admin kann kein Passwort setzen. Kostenlos geht es z. B. mit Gmail und einem
+  App-Passwort (Anleitung in `.env.example`); für viele Nutzer:innen später ein Mail-Dienst mit Gratis-Kontingent.
+  (25.11.2026)
+- **E-Mail-Adresse bei der Registrierung bestätigen:** Ohne Bestätigungs-Mail lässt sich bei der Registrierung nicht
+  ganz verbergen, ob eine Adresse schon ein Konto hat (eine vergebene mit fremdem Passwort ergibt einen Fehler statt
+  eines Kontos) – das Rate-Limit pro IP-Adresse bremst systematisches Ausprobieren. Mit Mail-Dienst: immer „Bitte
+  bestätige deine Adresse“ antworten und erst nach dem Code anlegen; damit wäre auch `ADMIN_EMAILS` ohne den Umweg
+  über „Passwort vergessen?“ sicher. (25.11.2026)
+- **scrypt auf sehr kleinen Servern:** Eine Passwort-Prüfung kostet hier rund 0,2 s und 32 MiB; auf einem Gratis-Server
+  mit 0,1 CPU eher 1–2 s. Falls das stört, die Kosten in `auth/password.ts` senken (alte Hashes werden beim nächsten
+  Anmelden automatisch neu berechnet, `needsRehash`). (25.11.2026)
 - **Sicherung der Historie startet ohne Nachfrage:** Sobald ein Server erreichbar ist, geht das Tagebuch dorthin (so
   gewünscht). Für Benjamins Laptop unkritisch; vor einem Server für andere zusammen mit der Einwilligung für die
   KI-Funktionen fragen und im Profil abschaltbar machen – Ernährungsdaten können Gesundheitsdaten sein (Art. 9 DSGVO,
