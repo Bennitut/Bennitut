@@ -22,7 +22,8 @@ import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetc
 import { openSqlite, type Db } from "./storage/db.js";
 import { MemoryImageStore, isImageKey, type ImageStore } from "./storage/images.js";
 import { migrate } from "./storage/migrations.js";
-import { SyncStore } from "./storage/sync.js";
+import { SyncFullError, SyncStore } from "./storage/sync.js";
+import { IsoTime, UserDataSyncBody, exportUserData, syncUserData } from "./sync/userData.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
 const MediaType = z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -147,12 +148,6 @@ const PhotoBody = z.object({
 });
 
 const Amount = z.number().min(0).max(100_000);
-/** Zeitpunkt in einheitlicher ISO-Form (mit Millisekunden und „Z“), damit Server und App gleich vergleichen. */
-const IsoTime = z
-  .string()
-  .max(40)
-  .refine((s) => !Number.isNaN(Date.parse(s)), "Kein Zeitpunkt")
-  .transform((s) => new Date(s).toISOString());
 const DiaryEntryBody = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().regex(/^\d{2}:\d{2}$/),
@@ -246,7 +241,7 @@ export function createApp({
   const users = new UserStore(db, auth.adminEmails.map((e) => e.toLowerCase()), passwordCost);
   const overrides = new OverrideStore(db);
   const diary = new DiaryStore(db);
-  /** Alles, was App und Server abgleichen (bisher das Tagebuch), in der Tabelle sync_records. */
+  /** Alles, was App und Server abgleichen (Tagebuch, Einstellungen, Plan und Vorrat), in der Tabelle sync_records. */
   const synced = new SyncStore(db);
   /** Katalog inklusive Änderungen der Admins. */
   const catalogRecipes = () => overrides.apply(RECIPES);
@@ -481,6 +476,20 @@ export function createApp({
     }
   });
 
+  // Abgleich von Einstellungen (Profil und Fragebogen), Plan mit Einkaufsliste und Vorrat zwischen den Geräten eines
+  // Kontos (sync/userData.ts, in der App lib/dataSync.ts) – nur mit Konto, ohne bleiben diese Daten auf dem Gerät.
+  app.post("/api/sync", async (c) => {
+    const user = await currentUser(c);
+    if (!user) throw new AuthError(bearer(c) ? "invalid_token" : "unauthorized");
+    const body = UserDataSyncBody.parse(await c.req.json());
+    try {
+      return c.json(await syncUserData(synced, `user:${user.id}`, body));
+    } catch (e) {
+      if (e instanceof SyncFullError) return c.json({ error: "sync_full" }, 413);
+      throw e;
+    }
+  });
+
   // Anmeldung mit Apple oder Google; das Ergebnis ist ein eigenes Sitzungstoken für die App.
   app.post("/api/auth/apple", async (c) => {
     const body = z.object({ identityToken: z.string().min(10).max(5000), fullName: z.string().trim().max(80).optional() }).parse(await c.req.json());
@@ -611,8 +620,8 @@ export function createApp({
   });
 
   /**
-   * Konto löschen (Art. 17 DSGVO) – mit allen Daten auf dem Server: Sicherung des Tagebuchs, geteilte Rezepte,
-   * Favoriten, Fotos, Sterne und Meldungen. Konten mit Passwort bestätigen mit dem Passwort.
+   * Konto löschen (Art. 17 DSGVO) – mit allen Daten auf dem Server: Sicherung des Tagebuchs, Einstellungen, Plan und
+   * Vorrat, geteilte Rezepte, Favoriten, Fotos, Sterne und Meldungen. Konten mit Passwort bestätigen mit dem Passwort.
    */
   app.delete("/api/auth/me", async (c) => {
     const user = await requireUser(c);
@@ -645,6 +654,7 @@ export function createApp({
       exportedAt,
       account: { ...me(user), lastLoginAt: user.lastLoginAt, ...(user.provider === "password" ? { emailVerified: user.emailVerified === true } : {}) },
       diary: await diary.entries(actor),
+      ...(await exportUserData(synced, actor)),
       community: await community.exportFor(actor),
       ...(await feedback.exportFor(actor)),
     });

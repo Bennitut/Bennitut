@@ -1,0 +1,166 @@
+import { z } from "zod";
+import { batches, placeholders, type Queryable } from "../storage/db.js";
+import { SyncStore, type SyncKind, type SyncRecord, type SyncResult } from "../storage/sync.js";
+
+// Abgleich von Profil und Fragebogen, Plan mit Einkaufsliste und Vorrat zwischen den Geräten eines Kontos (Vorrang 1,
+// 9.2 Teil 4; Gegenstück in der App: app/src/lib/dataSync.ts). Gespeichert in der allgemeinen Tabelle sync_records wie
+// das Tagebuch – aber nur mit Konto. Ohne Konto bleiben diese Daten auf dem Gerät: Eine Sicherung unter der Geräte-ID
+// brächte nichts zurück (mit den Daten des Geräts ist auch seine Geräte-ID weg), und Allergien und Körperdaten sind
+// Gesundheitsangaben, die der Server dann ohne Nutzen hätte.
+//
+// Arten und ihre Einträge – je Eintrag gewinnt die neuere Fassung, bei gleichem Zeitpunkt die des Servers:
+//  - „settings“: ein Eintrag „settings“ mit Profil, Fragebogen, Sprache und Region (Einstellungen der App).
+//  - „plan“: „plan“ mit dem Monatsplan und seinen KI-Rezepten; dazu je Häkchen ein kleiner Eintrag, dessen ID den Plan
+//    (Startdatum) nennt: „e:<Start>:<Tag>:<Mahlzeit>“ gegessen, „c:<Start>:<Woche>:<Zutat>“ abgehakt und
+//    „b:<Start>:<Woche>:<Zutat>“ in den Vorrat gebucht. So geht kein Häkchen verloren, wenn zwei Geräte gleichzeitig
+//    abhaken. Häkchen eines anderen Plans als des aktuellen löscht der Server (sie gehören zu einem abgelösten Plan).
+//  - „pantry“: je Vorratsposten (Zutat und Einkaufstag, „<Zutat>@<JJJJ-MM-TT>“) die Menge.
+// Der Server prüft nur die Form (IDs, Größe, ein paar Pflichtfelder), nicht den ganzen Inhalt: Die Daten sieht nur das
+// Konto selbst, und eine neuere App mit zusätzlichen Feldern soll mit einem älteren Server weiter abgleichen können.
+
+/** Zeitpunkt in einheitlicher ISO-Form (mit Millisekunden und „Z“), damit Server und App gleich vergleichen. */
+export const IsoTime = z
+  .string()
+  .max(40)
+  .refine((s) => !Number.isNaN(Date.parse(s)), "Kein Zeitpunkt")
+  .transform((s) => new Date(s).toISOString());
+
+/** Höchstens die größte Revision, die Postgres speichern kann (INTEGER, storage/sync.ts). */
+const Rev = z.number().int().min(0).max(2_147_483_647).default(0);
+
+export const USER_DATA_KINDS = ["settings", "plan", "pantry"] as const;
+export type UserDataKindName = (typeof USER_DATA_KINDS)[number];
+
+interface UserDataKind extends SyncKind {
+  /** Ist das eine zulässige Eintrags-ID dieser Art? */
+  validId: (id: string) => boolean;
+  /** Schema für den Inhalt eines Eintrags (Löschmarken haben keinen). */
+  schema: (id: string) => z.ZodType;
+  /** Höchstens so viele Zeichen JSON pro Eintrag. */
+  maxJson: number;
+}
+
+const DATE = "\\d{4}-\\d{2}-\\d{2}";
+const INGREDIENT = "[a-z0-9_]{1,60}";
+const MARK = new RegExp(`^(?:e:${DATE}:\\d{1,2}:(?:breakfast|lunch|dinner)|[cb]:${DATE}:\\d:${INGREDIENT})$`);
+const POST = new RegExp(`^${INGREDIENT}@${DATE}$`);
+/** Startdatum des Plans, zu dem ein Häkchen gehört („c:2026-11-27:0:reis“ → „2026-11-27“). */
+export const markStart = (id: string) => id.slice(2, 12);
+
+const Settings = z.record(z.string(), z.unknown());
+const Plan = z
+  .object({
+    plan: z.object({ startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), weeks: z.array(z.object({}).passthrough()).min(1).max(8) }).passthrough(),
+    /** Rezepte, die nur in diesem Plan vorkommen (KI-Vorschläge). */
+    recipes: z.array(z.object({ id: z.string().min(1).max(100) }).passthrough()).max(300),
+  })
+  .passthrough();
+const Mark = z.object({}).passthrough();
+const Post = z.object({ amount: z.number().min(0).max(1_000_000) }).passthrough();
+
+/**
+ * Nach Änderungen am Plan: Häkchen, die nicht zum aktuellen Plan des Kontos gehören, entfernen – ohne Löschmarke, die
+ * Geräte verwerfen sie ohnehin, sobald sie den neuen Plan haben. So wächst die Tabelle nicht mit jedem Monat.
+ */
+async function pruneMarks(tx: Queryable, owner: string): Promise<string[]> {
+  const row = await tx.get<{ data: string | null }>("SELECT data FROM sync_records WHERE owner = ? AND kind = ? AND id = ?", [owner, "plan", "plan"]);
+  let start: unknown = null;
+  if (row?.data) start = (JSON.parse(row.data) as { plan?: { startDate?: unknown } }).plan?.startDate ?? null;
+  const marks = await tx.all<{ id: string }>("SELECT id FROM sync_records WHERE owner = ? AND kind = ? AND id <> ?", [owner, "plan", "plan"]);
+  const stale = marks.map((m) => m.id).filter((id) => markStart(id) !== start);
+  for (const batch of batches(stale)) {
+    await tx.run(`DELETE FROM sync_records WHERE owner = ? AND kind = ? AND id IN (${placeholders(batch)})`, [owner, "plan", ...batch]);
+  }
+  return stale;
+}
+
+/**
+ * Die Arten mit ihren Grenzen. Bei allen gewinnt bei gleichem Zeitpunkt der Server (`serverWinsTies`): Was ein Gerät
+ * schon vor dem Abgleich hatte, trägt den Zeitpunkt 0 – so übernimmt ein Konto beim ersten Abgleich, was das erste
+ * Gerät mitbringt, und die weiteren Geräte bekommen dessen Fassung, statt dass jedes seine behält.
+ */
+export const USER_DATA: Record<UserDataKindName, UserDataKind> = {
+  settings: { name: "settings", pageSize: 10, maxRecords: 10, serverWinsTies: true, maxJson: 20_000, validId: (id) => id === "settings", schema: () => Settings },
+  plan: {
+    name: "plan",
+    pageSize: 2000,
+    // Ein Monatsplan hat rund 400 Häkchen (90 Mahlzeiten, je Woche bis zu 40 Zeilen abgehakt und gebucht).
+    maxRecords: 5000,
+    serverWinsTies: true,
+    // Ein Monatsplan für vier Personen hat rund 50 KB.
+    maxJson: 1_000_000,
+    validId: (id) => id === "plan" || MARK.test(id),
+    schema: (id) => (id === "plan" ? Plan : Mark),
+    afterChanges: pruneMarks,
+  },
+  pantry: { name: "pantry", pageSize: 2000, maxRecords: 5000, serverWinsTies: true, maxJson: 500, validId: (id) => POST.test(id), schema: () => Post },
+};
+
+const changeFor = (kind: UserDataKind) =>
+  z.object({ id: z.string().min(1).max(120), updatedAt: IsoTime, data: z.unknown() }).transform((c, ctx): SyncRecord => {
+    if (!kind.validId(c.id)) {
+      ctx.addIssue({ code: "custom", message: `Unbekannte ID für ${kind.name}`, path: ["id"] });
+      return z.NEVER;
+    }
+    if (c.data === null) return { id: c.id, updatedAt: c.updatedAt, data: null };
+    const parsed = kind.schema(c.id).safeParse(c.data);
+    if (!parsed.success) {
+      ctx.addIssue({ code: "custom", message: `Ungültiger Inhalt für ${kind.name}`, path: ["data"] });
+      return z.NEVER;
+    }
+    if (JSON.stringify(parsed.data).length > kind.maxJson) {
+      ctx.addIssue({ code: "custom", message: `Eintrag zu groß für ${kind.name}`, path: ["data"] });
+      return z.NEVER;
+    }
+    return { id: c.id, updatedAt: c.updatedAt, data: parsed.data };
+  });
+
+const kindBody = (kind: UserDataKind) => z.object({ since: Rev, changes: z.array(changeFor(kind)).max(5000).default([]) });
+
+/** Anfrage an POST /api/sync: je Art, ab welcher Revision die App alles kennt, und was sie geändert hat. */
+export const UserDataSyncBody = z.object({
+  kinds: z
+    .object({ settings: kindBody(USER_DATA.settings).optional(), plan: kindBody(USER_DATA.plan).optional(), pantry: kindBody(USER_DATA.pantry).optional() })
+    .strict(),
+});
+export type UserDataSyncRequest = z.infer<typeof UserDataSyncBody>;
+
+export interface UserDataSyncResponse {
+  /** „user:<Konto-ID>“ */
+  owner: string;
+  kinds: Partial<Record<UserDataKindName, SyncResult>>;
+}
+
+/**
+ * Gleicht jede genannte Art ab (je Art eine Transaktion, siehe SyncStore.sync). Wirft SyncFullError, wenn das Konto bei
+ * einer Art zu viele Einträge hätte – die Arten davor sind dann schon gespeichert; die App schickt beim nächsten Mal
+ * alles noch einmal, das schadet nicht.
+ */
+export async function syncUserData(store: SyncStore, owner: string, request: UserDataSyncRequest): Promise<UserDataSyncResponse> {
+  const kinds: UserDataSyncResponse["kinds"] = {};
+  for (const name of USER_DATA_KINDS) {
+    const body = request.kinds[name];
+    if (body) kinds[name] = await store.sync(USER_DATA[name], owner, body.since, body.changes);
+  }
+  return { owner, kinds };
+}
+
+/** Für „Meine Daten exportieren“: Einstellungen, Plan mit Häkchen und Vorrat, wie der Server sie zum Konto hat. */
+export async function exportUserData(store: SyncStore, owner: string) {
+  const [settings, plan, pantry] = await Promise.all([
+    store.records(USER_DATA.settings, owner),
+    store.records(USER_DATA.plan, owner),
+    store.records(USER_DATA.pantry, owner),
+  ]);
+  const current = plan.find((r) => r.id === "plan")?.data as Record<string, unknown> | undefined;
+  // „c:2026-11-27:0:reis“ → „0:reis“ (Woche und Zutat), wie die App die Häkchen speichert.
+  const marks = (type: string) => plan.filter((r) => r.id.startsWith(`${type}:`)).map((r) => r.id.slice(13));
+  return {
+    settings: settings.find((r) => r.id === "settings")?.data ?? null,
+    plan: current ? { ...current, eaten: marks("e"), checked: marks("c"), booked: marks("b") } : null,
+    pantry: pantry.map((r) => {
+      const [ingredientId, addedAt] = r.id.split("@");
+      return { ingredientId, addedAt, amount: (r.data as { amount: number }).amount };
+    }),
+  };
+}

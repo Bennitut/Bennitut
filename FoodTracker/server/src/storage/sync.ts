@@ -1,9 +1,10 @@
 import { batches, type Db, type Queryable } from "./db.js";
 
 // Allgemeine Tabelle für den Abgleich zwischen App und Server (Vorrang 1, 9.2): pro Besitzer („user:<Konto-ID>“ bzw.
-// „device:<Geräte-ID>“) und Art (bisher „diary“ für die Ernährungshistorie; später Plan, Vorrat, eigene Rezepte …)
-// Datensätze mit Eintrags-ID, Revision, Zeitpunkt der letzten Änderung und Inhalt – oder einer Löschmarke (Inhalt
-// NULL), damit Gelöschtes von anderen Geräten nicht zurückkommt. Die Revision zählt pro Besitzer und Art hoch
+// „device:<Geräte-ID>“) und Art („diary“ für die Ernährungshistorie, „settings“, „plan“ und „pantry“ für Einstellungen,
+// Plan und Vorrat eines Kontos – sync/userData.ts; später eigene Rezepte) Datensätze mit Eintrags-ID, Revision,
+// Zeitpunkt der letzten Änderung und Inhalt – oder einer Löschmarke (Inhalt NULL), damit Gelöschtes von anderen
+// Geräten nicht zurückkommt. Die Revision zählt pro Besitzer und Art hoch
 // (sync_revisions); die App merkt sich, bis zu welcher sie alles kennt, und fragt beim nächsten Mal nur nach Neuerem.
 // Gleichzeitige Abgleiche desselben Besitzers laufen nacheinander: SQLite schreibt ohnehin nur in einer Transaktion
 // gleichzeitig, bei Postgres sperrt die Zeile in sync_revisions bis zum Ende der Transaktion.
@@ -23,6 +24,17 @@ export interface SyncKind {
   pageSize: number;
   /** Höchstens so viele Datensätze (mit Löschmarken) pro Besitzer – Schutz vor Missbrauch. */
   maxRecords: number;
+  /**
+   * Bei gleichem Zeitpunkt, aber anderem Inhalt behält der Server seine Fassung und schickt sie zurück, damit die App sie
+   * übernimmt (sonst behielte jede Seite ihre). Für Plan, Vorrat und Einstellungen (sync/userData.ts): Was ein Gerät
+   * schon vor dem Abgleich hatte, trägt dort den Zeitpunkt 0. Beim Tagebuch heißt gleicher Zeitpunkt gleicher Inhalt.
+   */
+  serverWinsTies?: boolean;
+  /**
+   * Nach dem Übernehmen von Änderungen, in derselben Transaktion, z. B. Häkchen eines abgelösten Plans entfernen. Liefert
+   * die IDs der entfernten Datensätze (sie fehlen dann auch in der Antwort).
+   */
+  afterChanges?: (tx: Queryable, owner: string) => Promise<string[]>;
 }
 
 export interface SyncResult<T = unknown> {
@@ -45,6 +57,12 @@ export class SyncFullError extends Error {}
 export function wins(incoming: SyncRecord, current: SyncRecord): boolean {
   if (incoming.updatedAt !== current.updatedAt) return incoming.updatedAt > current.updatedAt;
   return incoming.data === null && current.data !== null;
+}
+
+/** Gleicher Stand: gleicher Zeitpunkt, beide gelöscht bzw. beide nicht – mit `sameContent` auch gleicher Inhalt. */
+function sameVersion(a: SyncRecord, b: SyncRecord, sameContent: boolean): boolean {
+  if (a.updatedAt !== b.updatedAt || (a.data === null) !== (b.data === null)) return false;
+  return !sameContent || JSON.stringify(a.data) === JSON.stringify(b.data);
 }
 
 interface Row {
@@ -133,8 +151,7 @@ export class SyncStore {
       for (const change of changes) {
         const current = applied.get(change.id) ?? stored.get(change.id);
         if (current && !wins(change, current)) {
-          const same = current.updatedAt === change.updatedAt && (current.data === null) === (change.data === null);
-          if (!same) conflicts.set(change.id, current);
+          if (!sameVersion(current, change, kind.serverWinsTies === true)) conflicts.set(change.id, current);
           continue;
         }
         if (!current) {
@@ -145,9 +162,11 @@ export class SyncStore {
         applied.set(change.id, { id: change.id, updatedAt: change.updatedAt, data: change.data, rev: ++rev });
         conflicts.delete(change.id);
       }
+      let removed = new Set<string>();
       if (applied.size > 0) {
         await writeRecords(tx, owner, kind.name, [...applied.values()]);
         await setRevision(tx, owner, kind.name, rev);
+        if (kind.afterChanges) removed = new Set(await kind.afterChanges(tx, owner));
       }
       // Was die App noch nicht kennt: alles nach `since` bis vor dieser Anfrage – das gerade Übernommene hat sie ja.
       const rows = await tx.all<Row>(
@@ -157,7 +176,7 @@ export class SyncStore {
       const more = rows.length > kind.pageSize;
       const page = rows.slice(0, kind.pageSize).map(toStored);
       const inPage = new Set(page.map((r) => r.id));
-      const extra = [...conflicts.values()].filter((r) => !inPage.has(r.id));
+      const extra = [...conflicts.values()].filter((r) => !inPage.has(r.id) && !removed.has(r.id));
       return {
         rev: more ? page[page.length - 1]!.rev : rev,
         changes: [...page, ...extra].map(strip) as SyncRecord<T>[],
