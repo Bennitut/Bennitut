@@ -14,15 +14,16 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 3 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 6 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
 Seit 27.11. gibt es die Speicherschicht (SQLite-Datei oder Postgres mit `DATABASE_URL`, versionierte Migrationen); dort
 liegt alles, was der Server speichert – Konten, Sitzungen, Tagebuch-Sicherung (in einer allgemeinen Tabelle für den
 Abgleich), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und Admin-Änderungen –, die Fotos selbst als Dateien
-im Bildspeicher (`data/photos/`). Als Nächstes 9.2 „Abgleich App ↔ Server“ für Plan, Vorrat, eigene Rezepte und
-Einstellungen. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+im Bildspeicher (`data/photos/`). Seit 27.11., 6 Uhr gleicht die App mit Konto auch **Plan mit Einkaufsliste, Vorrat und
+Essgewohnheiten** zwischen den Geräten ab (9.2 Teil 4). Als Nächstes 9.2 Teil 5: eigene und importierte Rezepte,
+Favoriten und Texte, Fotos eigener Rezepte im Bildspeicher. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -135,11 +136,25 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   eigenen Fotos als data-URI. `community.json`, `feedback.json` und `recipe-overrides.json` übernimmt der Server beim
   Start einmal (gleiche IDs, Fotos als Dateien) und löscht sie. 40 Server-Tests (212, SQLite und pg-mem), 5 App-Tests
   (187); `npm run web:account` prüft den Umzug und die Fotos vom Server im Browser.
-- [ ] Abgleich App ↔ Server wie in 8.2 (Eintrags-ID, Löschmarken, Zeitstempel), jetzt für alle genannten Daten; offline
-  weiter nutzbar, Abgleich sobald verbunden. Tabelle `sync_records` und `SyncStore` stehen seit Teil 2 (je Art ein eigener
-  Name, eigene Grenzen). Wie beim Tagebuch geht beim ersten Abgleich mit einem Konto alles vom Gerät
-  hoch (Rest von 9.1 „lokale Daten ins Konto“, ohne Duplikate); bei Einzelstücken wie Plan und Einstellungen gewinnt
-  die neuere Fassung.
+- [x] Abgleich App ↔ Server wie in 8.2 (Eintrags-ID, Löschmarken, Zeitstempel) für Einstellungen (Profil und
+  Fragebogen), Plan mit Einkaufsliste und Vorrat (Teil 4); offline weiter nutzbar, Abgleich sobald verbunden. Wie beim
+  Tagebuch geht beim ersten Abgleich mit einem Konto alles vom Gerät hoch (Rest von 9.1 „lokale Daten ins Konto“, ohne
+  Duplikate); bei Einzelstücken wie Plan und Einstellungen gewinnt die neuere Fassung. – erledigt 27.11.2026:
+  `POST /api/sync` nur mit Konto (`server/src/sync/userData.ts`, Arten `settings`, `plan`, `pantry` in `sync_records`;
+  ohne Konto bleibt alles auf dem Gerät – Gesundheitsangaben, und eine Sicherung unter der Geräte-ID brächte nichts
+  zurück). Häkchen (gegessen, abgehakt, gebucht) als eigene Einträge mit dem Startdatum des Plans in der ID, damit zwei
+  Geräte nichts überschreiben; Häkchen abgelöster Pläne löscht der Server. Je Eintrag die neuere Fassung, bei gleichem
+  Zeitpunkt die des Servers (`serverWinsTies`); Daten von vor dem Abgleich tragen den Zeitpunkt 0, so gelten beim ersten
+  Abgleich Plan und Einstellungen des ersten Geräts. App: `lib/dataSync.ts` leitet die Einträge aus dem Zustand ab, jede
+  Änderung läuft über `update` in `store.tsx` und bekommt einen Zeitpunkt; Abgleich beim Start, nach der Anmeldung, nach
+  Änderungen, beim Öffnen des Profils und beim Zurückkehren in die App. Profil: Zeile zum Abgleich; Plan: „Schon ein
+  Konto? Anmelden“ vor dem Fragebogen. Export und „Konto löschen“ mit Plan, Vorrat und Essgewohnheiten; Datenschutz B7.
+  13 Server-Tests (226), 13 App-Tests (200), `npm run web:account` prüft zwei Browser mit einem Konto.
+- [ ] Eigene und importierte Rezepte, Favoriten (samt gespeicherten Community-Rezepten), übersetzte und mit KI
+  verbesserte Texte abgleichen (Teil 5), nach demselben Muster (`lib/dataSync.ts`, neue Art im Server). Fotos eigener
+  Rezepte gehören nicht in die Datenbank: beim Abgleich in den Bildspeicher (dem Konto zugeordnet, Pfad statt data-URI,
+  vorher verkleinern), auf dem Gerät weiter offline sichtbar. Dabei „Kopie eines geteilten Rezepts behält den Pfad zum
+  Foto“ (unten) lösen. Eigene Fotos der Galerie mit „Nur ich“ ebenfalls.
 - [ ] Server-Adresse: `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie bisher der
   Laptop im WLAN. Dabei die Abgleich-Marken an die Datenbank binden (unter „Ideen und Erkenntnisse“: „Neuer Server,
   alte Abgleich-Marken“).
@@ -484,6 +499,33 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
+- ✅ **Test der Meldungen manchmal rot:** „übernimmt beim Anmelden Fotos, Sterne und Meldungen des Geräts“ schlug
+  zufällig fehl – zwei Meldungen in derselben Millisekunde hatten denselben Zeitpunkt, dann entschied die zufällige ID.
+  (27.11.2026) Erledigt 27.11.2026: `server/src/storage/clock.ts` vergibt streng steigende Zeitpunkte für neue Zeilen.
+- ✅ **Häkchen der Einkaufsliste im Browser ohne Zustand:** react-native-web 0.21 übergeht `accessibilityState`; die
+  Zeilen hatten kein `aria-checked`, Screenreader sagten nie „angehakt“. (27.11.2026) Erledigt 27.11.2026 mit
+  `aria-checked` bzw. `aria-expanded` in `shopping.tsx`.
+- **Chips melden ihren Zustand im Browser nicht:** `Chip` in `components/ui.tsx` nutzt `accessibilityState={{ selected,
+  disabled }}` – im Browser wirkungslos (siehe oben). Auf `aria-selected`/`aria-disabled` umstellen und danach alle
+  Rauchtests laufen lassen (Playwright behandelt `aria-disabled` als „nicht anklickbar“). (27.11.2026)
+- **Vorrat auf zwei Geräten ohne Verbindung:** Je Vorratsposten gilt die zuletzt geänderte Menge. Kocht man auf zwei
+  Geräten offline aus demselben Posten, fehlt danach ein Abzug (bzw. ein Nachzählen geht verloren). Für eine Person mit
+  einem Handy selten; falls nötig, Abzüge als Buchungen (je Buchung ein Eintrag) statt des Stands abgleichen. (27.11.2026)
+- **Sprache und Region gelten mit Konto auf allen Geräten:** Sie stehen in den Einstellungen und werden mit abgeglichen
+  (stellt man am iPhone zum Testen Englisch ein, ist auch der Laptop danach englisch). Falls Benjamin das pro Gerät will:
+  `language` und `region` in `recordsOf` weglassen und beim Übernehmen behalten. (27.11.2026)
+- **Textfelder zeigen nach einem Abgleich den alten Text:** Wünsche im Plan und Anzeigename im Profil sind
+  unkontrollierte Felder (`defaultValue`); kommt ein neuer Wert von einem anderen Gerät, steht im offenen Feld bis zum
+  nächsten Öffnen der alte – tippt man dann weiter, gilt wieder der alte Text plus Eingabe. Kontrolliert machen oder mit
+  `key` neu aufbauen, wenn der Wert von außen kommt. (27.11.2026)
+- **Bestellungen werden nicht abgeglichen:** `orders` (Demo-Lieferdienst) bleiben auf dem Gerät; was eine Bestellung in
+  den Vorrat bucht, gleicht der Vorrat ab, und „in den Vorrat gebucht“ verhindert doppeltes Buchen auch auf anderen
+  Geräten. Mit einem echten Lieferdienst neu ansehen. (27.11.2026)
+- **Löschmarken des Vorrats wachsen:** Jeder aufgebrauchte Vorratsposten bleibt als Löschmarke (auf dem Server und im
+  Abgleich-Stand der App, je etwa 40 Byte) – im Jahr einige Hundert. Bei Bedarf Löschmarken nach einigen Monaten
+  aufräumen (Server: nur, wenn kein Gerät mehr so weit zurückliegt). Häkchen alter Pläne räumen Server und App schon
+  auf. (27.11.2026)
+
 - ✅ **Web-Version hosten:** entschieden 23.11.2026, erledigt 24.11.2026: GitHub Pages unter
   `https://bennitut.github.io/Bennitut/` mit Unterpfad, Manifest-Pfaden, `404.html` und dem Tester-Link in `clips.md`
   vorbereitet. (23.11.2026)
@@ -635,8 +677,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   den Platzhalter; nach einem Umzug ohne den Ordner `data/photos/` oder wenn die Autorin das Rezept zurückzieht, bleibt
   das Bild leer (teilt man die Kopie selbst, bekommt sie eine eigene Bilddatei). Mit dem Abgleich eigener Rezepte (9.2)
   lösen: Fotos eigener Rezepte ebenfalls in den Bildspeicher, dem Konto zugeordnet. (27.11.2026)
-- **Neuer Server, alte Abgleich-Marken:** Die App merkt sich beim Tagebuch nur Besitzer und Revision, nicht, welcher
-  Server bzw. welche Datenbank. Zieht der Server auf eine neue, leere Datenbank um (z. B. vom Laptop zu Render mit Neon)
+- **Neuer Server, alte Abgleich-Marken:** Die App merkt sich beim Tagebuch (seit 9.2 Teil 4 auch bei Plan, Vorrat und
+  Einstellungen, `lib/dataSync.ts`) nur Besitzer und Revision, nicht, welcher Server bzw. welche Datenbank. Zieht der Server auf eine neue, leere Datenbank um (z. B. vom Laptop zu Render mit Neon)
   oder bekommt die App eine andere Server-Adresse, schicken Geräte, die schon abgeglichen hatten, nur noch ihre neuen
   Änderungen – die neue Datenbank hätte nur einen Teil der Historie, und ein neues Gerät bekäme nicht alles (auf den
   Geräten selbst bleibt alles). Lösung mit 9.2 „Server-Adresse“: Der Server nennt beim Abgleich eine zufällige Kennung
@@ -759,7 +801,8 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Sicherung der Historie startet ohne Nachfrage:** Sobald ein Server erreichbar ist, geht das Tagebuch dorthin (so
   gewünscht). Für Benjamins Laptop unkritisch; vor einem Server für andere zusammen mit der Einwilligung für die
   KI-Funktionen fragen und im Profil abschaltbar machen – Ernährungsdaten können Gesundheitsdaten sein (Art. 9 DSGVO,
-  im Datenschutz-Entwurf B6 als `[[PRÜFEN]]`). (24.11.2026)
+  im Datenschutz-Entwurf B6 als `[[PRÜFEN]]`). (24.11.2026) Seit 27.11.2026 gilt dasselbe für den Abgleich von
+  Essgewohnheiten (Unverträglichkeiten, Körperdaten), Plan und Vorrat mit dem Konto (B7) – beides zusammen lösen.
 - **Eigene Fotos füllen den Speicher:** Eigene Rezeptfotos stehen als data-URI (je etwa 60–120 KB) im übrigen Zustand;
   im Browser (localStorage, meist etwa 5 MB pro Adresse) ist nach einigen Dutzend Fotos Schluss. Seit 8.2 erscheint
   dann ein Hinweis, und das Tagebuch ist nicht betroffen, aber Plan und Vorrat werden nicht mehr gespeichert. Lösung:
