@@ -14,9 +14,10 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 25.11.2026 (früh):** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit Konten,
+**Stand 26.11.2026 (abends):** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit Konten,
 dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
-Teilschritt in der Reihenfolge 9.1 bis 9.5. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+Teilschritt in der Reihenfolge 9.1 bis 9.5. Konten mit E-Mail und Passwort gibt es seit 25.11. im Server und seit 26.11.
+in der App; als Nächstes kommen die lokalen Daten beim ersten Anmelden ins Konto. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -52,14 +53,22 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
   8-stelligem Code (30 Minuten, höchstens 5 Versuche) nur mit `SMTP_*` (nodemailer), `/api/auth/config` meldet es.
   `ADMIN_EMAILS` macht Passwort-Konten erst mit bestätigter Adresse zum Admin; ohne Namen heißt ein Konto „Nutzer:in“
   statt des Teils der Adresse vor dem „@“. `TRUST_PROXY=1` hinter einem Proxy. 21 Server-Tests (115).
-- [ ] App: Anmelde- und Registrierungsbildschirm in allen fünf Sprachen, Anmeldung bleibt gespeichert
+- [x] App: Anmelde- und Registrierungsbildschirm in allen fünf Sprachen, Anmeldung bleibt gespeichert
   (`expo-secure-store` auf dem Handy, localStorage im Web), die App funktioniert weiter ohne Konto; im Profil Passwort
-  ändern, Konto löschen und Daten exportieren.
+  ändern, Konto löschen und Daten exportieren. – erledigt 26.11.2026: Anmelden und Registrieren mit E-Mail und Passwort
+  (`components/PasswordSignIn.tsx`) samt „Passwort vergessen?“ mit Code (nur mit Mail-Dienst); Adresse und Passwortlänge
+  werden vor dem Absenden wie im Server geprüft, Fehler nennen Wartezeit bzw. Mindestlänge; bei der Registrierung der
+  Hinweis zur Zustimmung eines Elternteils und ein Link zur Datenschutzerklärung. Sitzung unter eigenem Schlüssel
+  (`lib/session.ts`: Schlüsselbund bzw. Keystore über `expo-secure-store`, im Browser localStorage; Umzug aus dem übrigen
+  Zustand, der kein Token mehr enthält). Karte „Konto verwalten“ im Profil: Passwort ändern, „Meine Daten exportieren“,
+  Konto löschen mit Rückfrage direkt in der Karte (kein `Alert`, das im Browser nichts zeigt). 15 App-Tests (174);
+  `npm run web:account` spielt alles im Browser mit echtem Server durch.
 - [ ] Beim ersten Anmelden die lokalen Daten des Geräts ins Konto übernehmen, ohne Duplikate.
 - [ ] Kein Mindestalter (Vorrang 2, Antwort 3): keine Altersabfrage, aber bei der Registrierung und vor der ersten
   Nutzung der KI-Funktionen der Hinweis, dass Kinder unter 14 und – für Gesundheitsdaten wie Allergien oder das
   Ernährungstagebuch – Minderjährige unter 18 nur mit Zustimmung eines Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8
-  und 9 DSGVO).
+  und 9 DSGVO). Stand 26.11.2026: Bei der Registrierung steht der Hinweis (fünf Sprachen, `ParentalNotice`); offen ist
+  er vor der ersten Nutzung der KI-Funktionen – zusammen mit der Einwilligung („Ideen und Erkenntnisse“).
 
 **9.2 Dauerhafte Speicherung**
 
@@ -86,7 +95,9 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
   die Tunnel-Adresse, mit geheimem Schlüssel) – als Option vorsehen. Klar abgrenzen, was Benjamin selbst tun muss.
 - [ ] Sicherheit: nur über HTTPS, Rate-Limits, Größenbegrenzung für Uploads, keine Geheimnisse im Repo, Logs ohne
   Passwörter, Tokens oder E-Mail-Adressen; Datenschutz-Entwurf um Konten, Speicherung, Hosting-Anbieter und Reel-Import
-  ergänzen.
+  ergänzen. Dabei B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` nachziehen: Dort stehen bisher
+  nur Apple und Google, und „Konto löschen“ fehle – jetzt E-Mail und Passwort (nur scrypt-Prüfwert, Code zum
+  Zurücksetzen per Mail-Dienst), Export und Löschen im Profil, die Sitzung im Schlüsselbund bzw. in localStorage.
 
 **9.4 Import von Instagram-Reels, TikTok und YouTube Shorts**
 
@@ -535,6 +546,18 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   `m_putenschnitzel_natur` (Kartoffelpfanne mit Bohnen, ohne Pute), `v_raeuchertofu_broetchen` (Keto-Avocado-Brötchen),
   `w_rind_madras` (veganes Madras-Curry statt Rind), `m_lachs_ruehrei_brot` (Krabbenrührei statt Lachs). Bei der
   Daueraufgabe „Videos je Sprache“ (Teil „de, wo es fehlt“) zusammen mit der Calzone ersetzen. (24.11.2026)
+- **Nach „Konto löschen“ geht die Historie wieder in die Sicherung pro Gerät:** Ohne Konto sichert die App das Tagebuch
+  automatisch unter der Geräte-ID (so gewünscht, 8.2). Wer sein Konto löscht, damit seine Daten vom Server verschwinden,
+  hat die Historie danach also wieder dort, nur unter der Geräte-ID. Zusammen mit „Sicherung der Historie startet ohne
+  Nachfrage“ lösen: Sicherung abschaltbar machen und beim Löschen mit ausschalten. (26.11.2026)
+- **Anmeldung in Expo Go auf dem Gerät ungeprüft:** `expo-secure-store` ist in Expo Go enthalten, die Bundles für iOS
+  und Android bauen, und im Browser ist alles getestet – auf iPhone und Android aber nicht. Benjamin im PR gebeten:
+  anmelden, Expo Go ganz schließen, wieder öffnen → noch angemeldet. (26.11.2026)
+- **„Passwort vergessen?“ mit echter Mail ungeprüft:** Der Konto-Test im Browser geht bis zum falschen Code (die Mail
+  geht dort ins Leere), den richtigen Code prüfen die Server-Tests. Mit einem Gmail-App-Passwort in `server/.env` einmal
+  von Hand ausprobieren. (26.11.2026)
+- **Mail mit dem Code duzt auf Französisch:** Die App siezt auf Französisch („vous“), die Mail zum Zurücksetzen duzt
+  („ton mot de passe“, `server/src/mail/mailer.ts`). Bei Gelegenheit angleichen. (26.11.2026)
 - **Admin-Änderungen frieren die Videos eines Rezepts ein:** `applyOverrides` ersetzt `media` als Ganzes. Speichert ein
   Admin ein Katalogrezept, erscheinen später ergänzte Videos in anderen Sprachen bei diesem Rezept nicht. Erst mit Server
   und Admin-Konten relevant; Lösung: im Patch nur geänderte Medien speichern oder Katalogvideos beim Anwenden ergänzen.
@@ -575,9 +598,11 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   2.0–4.0, 2 × CC0/gemeinfrei); Urheber:in und Lizenz müssen sichtbar bleiben. Vorher die Größe messen – für die
   Web-Version unkritisch, in der App wird das Paket größer. Benjamin hat am 24.11.2026 Variante (a) gewählt – steht
   jetzt als Vorrang oben. (24.11.2026)
-- **Konto löschen fehlt:** App und Server können ein Konto anlegen und abmelden, aber nicht löschen. Vor dem Start der
+- ✅ **Konto löschen fehlt:** App und Server können ein Konto anlegen und abmelden, aber nicht löschen. Vor dem Start der
   Anmeldung nötig – Recht auf Löschung (Art. 17 DSGVO); auch Apple verlangt für Apps mit Konten eine Löschfunktion in
-  der App (vor dem Einreichen in den App-Review-Richtlinien nachlesen). Steht jetzt in Vorrang 1 (9.1). (24.11.2026)
+  der App (vor dem Einreichen in den App-Review-Richtlinien nachlesen). (24.11.2026) Erledigt 26.11.2026: im Server seit
+  25.11., in der App unter 👤 Profil → „Konto verwalten“ → „Konto löschen“ (Konten mit Passwort bestätigen es mit dem
+  Passwort).
 - **Einwilligung vor KI-Funktionen:** Mit Server gehen Fotos, Rezepttexte und Wünsche an Anthropic; Wünsche und Fotos
   können Gesundheitsangaben enthalten (Art. 9 DSGVO: ausdrückliche Einwilligung). Vor der ersten Nutzung einmal fragen,
   im Profil widerrufbar machen (in Österreich willigen Kinder ab 14 selbst ein, bei Gesundheitsdaten laut herrschender
@@ -591,7 +616,7 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   (https://support.claude.com/en/articles/9307344) – die App hat kein Mindestalter (Vorrang 2, Antwort 3). Vor dem Start
   des Servers für andere prüfen. (25.11.2026)
 - **„Passwort vergessen?“ braucht einen Mail-Dienst:** Ohne `SMTP_HOST` und `SMTP_FROM` in `server/.env` gibt es keinen
-  Code per E-Mail, die App blendet den Knopf dann aus (kommt mit dem App-Teil von 9.1). Wer dann sein Passwort vergisst,
+  Code per E-Mail, die App blendet den Knopf dann aus (seit dem App-Teil von 9.1). Wer dann sein Passwort vergisst,
   kommt nicht mehr ins Konto – ein Admin kann kein Passwort setzen. Kostenlos geht es z. B. mit Gmail und einem
   App-Passwort (Anleitung in `.env.example`); für viele Nutzer:innen später ein Mail-Dienst mit Gratis-Kontingent.
   (25.11.2026)
