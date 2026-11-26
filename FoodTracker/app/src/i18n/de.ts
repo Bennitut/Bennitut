@@ -68,6 +68,7 @@ export const de = {
     last_admin: "Der letzte Admin kann nicht entfernt werden.",
     cannot_block_self: "Du kannst dich nicht selbst sperren.",
     photo_limit: "Für dieses Rezept sind schon genug Fotos hochgeladen.",
+    invalid_image: "Das Foto ließ sich nicht lesen. Bitte ein anderes wählen (JPEG, PNG oder WebP).",
     network: "Keine Verbindung zum Server.",
     internal: "Etwas ist schiefgelaufen. Bitte später erneut versuchen.",
     invalid_request: "Die Eingaben sind unvollständig oder ungültig.",

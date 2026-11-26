@@ -28,6 +28,7 @@ import type {
 import { aiConsentHeaders, type AiConsent } from "./aiConsent";
 import type { DeviceClaim } from "./deviceClaim";
 import type { DiarySyncRequest, DiarySyncResponse } from "./diary";
+import { resolveImageUri } from "./serverImages";
 import type { ServerHealth } from "./serverStatus";
 
 /**
@@ -50,6 +51,12 @@ function serverUrl(): string | null {
 export const BASE_URL = serverUrl();
 /** Ob es überhaupt einen Server gibt; sonst zeigen Server-Funktionen „Bald verfügbar“ statt eines Fehlers. */
 export const HAS_SERVER = BASE_URL !== null;
+
+/** Adresse zum Anzeigen eines Bildes – Fotos aus dem Bildspeicher des Servers mit dessen Adresse (lib/serverImages.ts). */
+export const imageUrl = (uri: string | undefined) => resolveImageUri(uri, BASE_URL);
+/** Fotos der Galerie kommen als Pfad im Bildspeicher; die App zeigt sie mit der Adresse des Servers. */
+const withImageUrl = (photo: RecipePhoto): RecipePhoto => ({ ...photo, uri: imageUrl(photo.uri) ?? photo.uri });
+const withImageUrls = (photos: RecipePhoto[]) => photos.map(withImageUrl);
 
 export type ImageMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
 export interface ImagePayload {
@@ -200,16 +207,17 @@ export const api = {
 
   ratings: () => request<Record<string, RatingSummary>>("/api/recipes/ratings"),
 
-  topPhotos: () => request<Record<string, RecipePhoto>>("/api/recipes/top-photos"),
+  topPhotos: async () =>
+    Object.fromEntries(Object.entries(await request<Record<string, RecipePhoto>>("/api/recipes/top-photos")).map(([id, p]) => [id, withImageUrl(p)])),
 
   rateRecipe: (recipeId: string, stars: number) => post<RatingSummary>(`/api/recipes/${encodeURIComponent(recipeId)}/rating`, { stars }),
 
-  photos: (recipeId: string) => request<RecipePhoto[]>(`/api/recipes/${encodeURIComponent(recipeId)}/photos`),
+  photos: async (recipeId: string) => withImageUrls(await request<RecipePhoto[]>(`/api/recipes/${encodeURIComponent(recipeId)}/photos`)),
 
-  addPhoto: (recipeId: string, authorName: string, uri: string) =>
-    post<RecipePhoto>(`/api/recipes/${encodeURIComponent(recipeId)}/photos`, { authorName, uri }),
+  addPhoto: async (recipeId: string, authorName: string, uri: string) =>
+    withImageUrl(await post<RecipePhoto>(`/api/recipes/${encodeURIComponent(recipeId)}/photos`, { authorName, uri })),
 
-  ratePhoto: (photoId: string, stars: number) => post<RecipePhoto>(`/api/photos/${photoId}/rating`, { stars }),
+  ratePhoto: async (photoId: string, stars: number) => withImageUrl(await post<RecipePhoto>(`/api/photos/${photoId}/rating`, { stars })),
 
   deletePhoto: (photoId: string) => request<void>(`/api/photos/${photoId}`, { method: "DELETE" }),
 
@@ -249,7 +257,7 @@ export const api = {
   adminUpdateUser: (id: string, patch: { role?: Role; blocked?: boolean }) => send<Account>("PATCH", `/api/admin/users/${id}`, patch),
   flags: () => request<FlagSummary[]>("/api/recipes/flags"),
   resolveFlags: (recipeId: string) => send<{ resolved: number }>("DELETE", `/api/admin/flags/${encodeURIComponent(recipeId)}`),
-  adminPhotos: () => request<RecipePhoto[]>("/api/admin/photos"),
+  adminPhotos: async () => withImageUrls(await request<RecipePhoto[]>("/api/admin/photos")),
   adminDeletePhoto: (id: string) => send<void>("DELETE", `/api/admin/photos/${id}`),
   adminDeleteCommunity: (id: string) => send<void>("DELETE", `/api/admin/community/${id}`),
   overrides: () => request<Record<string, RecipeOverride>>("/api/recipes/overrides"),

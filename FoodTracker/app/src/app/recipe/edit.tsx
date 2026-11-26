@@ -4,7 +4,7 @@ import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { IngredientPicker } from "../../components/IngredientPicker";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, Field, Screen, colors, styles } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
-import { api } from "../../lib/api";
+import { api, imageUrl } from "../../lib/api";
 import { CATALOG_VIDEO_LANGUAGES } from "../../lib/catalog";
 import { newId } from "../../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../../lib/photos";
@@ -161,7 +161,10 @@ export default function RecipeEditorScreen() {
       </Card>
 
       <Card title={t("editor.photo")} icon="📷">
-        {photo ? <Image source={{ uri: photo.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 10 }} resizeMode="cover" /> : null}
+        {/* Kopie eines geteilten Rezepts: Das Foto liegt im Bildspeicher des Servers, gespeichert bleibt der Pfad. */}
+        {photo && imageUrl(photo.uri) ? (
+          <Image source={{ uri: imageUrl(photo.uri) }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 10 }} resizeMode="cover" />
+        ) : null}
         <View style={styles.chipRow}>
           <Button label={t("scan.takePhoto")} variant="secondary" onPress={() => pickPhoto("camera")} />
           <Button label={t("editor.addPhoto")} variant="secondary" onPress={() => pickPhoto("library")} />

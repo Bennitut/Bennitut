@@ -68,6 +68,7 @@ export const es: Dictionary = {
     last_admin: "No se puede quitar al último admin.",
     cannot_block_self: "No puedes bloquearte a ti mismo/a.",
     photo_limit: "Esta receta ya tiene suficientes fotos.",
+    invalid_image: "No se pudo leer la foto. Elige otra (JPEG, PNG o WebP).",
     network: "No se puede conectar con el servidor.",
     internal: "Algo ha fallado. Inténtalo más tarde.",
     invalid_request: "Faltan datos o no son válidos.",

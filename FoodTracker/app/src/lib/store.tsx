@@ -3,7 +3,7 @@ import { getLocales } from "expo-localization";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isUILanguage, regionFromCode } from "../i18n";
 import { readAiConsent, type AiConsent } from "./aiConsent";
-import { ApiError, HAS_SERVER, api, setAiConsent as setApiAiConsent, setAuthToken, setDeviceId } from "./api";
+import { ApiError, BASE_URL, HAS_SERVER, api, setAiConsent as setApiAiConsent, setAuthToken, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
 import { claimedAnything, needsDeviceClaim, type DeviceClaim } from "./deviceClaim";
 import { addEntry, emptyDiary, loadDiary, removeEntry, saveDiary, syncDiary, type DiaryState } from "./diary";
@@ -11,6 +11,7 @@ import { importDiaryJson, type ImportResult } from "./history";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import { withStoredTexts } from "./recipeText";
 import { loadSession, sessionWriter, type Session } from "./session";
+import { resolveImage } from "./serverImages";
 import { sessionStore } from "./sessionStore";
 import { checkedToBook, deliveryToBook } from "./shopping";
 import type {
@@ -692,7 +693,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (own) return { uri: own.uri };
         const top = topPhotos[recipe.id];
         if (top) return { uri: top.uri, credit: top.authorName || undefined };
-        return recipe.media?.image;
+        // Fotos geteilter Rezepte liegen im Bildspeicher des Servers (Pfad statt data-URI, lib/serverImages.ts).
+        return resolveImage(recipe.media?.image, BASE_URL);
       },
       ratingAverages: () =>
         Object.fromEntries(Object.entries(state.ratings).filter(([, r]) => r.count > 0).map(([id, r]) => [id, r.avg])),
