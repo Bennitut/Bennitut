@@ -28,7 +28,10 @@ describe("Startmeldung des Servers", () => {
 
   it("nennt, wo die Daten liegen", () => {
     const base = { port: 3000, addresses: [], ai: { provider: null, model: null, state: "not_configured" } as const, ollama: OLLAMA, envFile: null, platform: "linux" as const };
-    expect(startupMessage({ ...base, storage: "SQLite-Datei data/foodtracker.db" })).toContain("Daten:               SQLite-Datei data/foodtracker.db");
+    const text = startupMessage({ ...base, storage: "SQLite-Datei data/foodtracker.db", photos: "Ordner data/photos" });
+    expect(text).toContain("Daten:               SQLite-Datei data/foodtracker.db");
+    expect(text).toContain("Fotos:               Ordner data/photos");
     expect(startupMessage(base)).not.toContain("Daten:");
+    expect(startupMessage(base)).not.toContain("Fotos:");
   });
 });

@@ -1,4 +1,4 @@
-import type { Db, Queryable } from "./db.js";
+import { batches, type Db, type Queryable } from "./db.js";
 
 // Allgemeine Tabelle für den Abgleich zwischen App und Server (Vorrang 1, 9.2): pro Besitzer („user:<Konto-ID>“ bzw.
 // „device:<Geräte-ID>“) und Art (bisher „diary“ für die Ernährungshistorie; später Plan, Vorrat, eigene Rezepte …)
@@ -62,19 +62,6 @@ const toStored = (r: Row): StoredSyncRecord => ({
   data: r.data === null ? null : (JSON.parse(r.data) as unknown),
 });
 const strip = ({ rev: _rev, ...record }: StoredSyncRecord): SyncRecord => record;
-
-/**
- * Viele IDs bzw. Zeilen in Paketen fester Größe: wenige Rundreisen zur Datenbank (wichtig bei Postgres im Netz) und
- * nur eine Handvoll verschiedener Anweisungen, die SQLite zwischenspeichert (storage/db.ts).
- */
-const BATCH_SIZES = [200, 50, 10, 1];
-function* batches<T>(items: readonly T[]): Generator<T[]> {
-  for (let i = 0; i < items.length; ) {
-    const size = BATCH_SIZES.find((s) => s <= items.length - i)!;
-    yield items.slice(i, i + size);
-    i += size;
-  }
-}
 
 async function readRecords(q: Queryable, owner: string, kind: string, ids: readonly string[]): Promise<Map<string, StoredSyncRecord>> {
   const found = new Map<string, StoredSyncRecord>();

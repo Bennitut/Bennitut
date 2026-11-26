@@ -75,6 +75,77 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    version: 3,
+    name: "Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und Admin-Änderungen",
+    // Wer etwas getan hat, steht in author bzw. actor wie bisher in den JSON-Dateien: „user:<Konto-ID>“ oder die
+    // Geräte-ID ohne Konto. Fotos liegen im Bildspeicher (storage/images.ts), hier nur ihr Schlüssel (image_key).
+    up: [
+      // Geteilte Rezepte: das Rezept als JSON, dazu Name (für die Suche) und das eigene Foto im Bildspeicher.
+      `CREATE TABLE community_recipes (
+        id TEXT PRIMARY KEY,
+        author TEXT NOT NULL,
+        author_name TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        recipe TEXT NOT NULL,
+        image_key TEXT
+      )`,
+      "CREATE INDEX community_recipes_by_author ON community_recipes (author)",
+      // Favoriten („Likes“) für geteilte Rezepte.
+      `CREATE TABLE community_likes (
+        recipe_id TEXT NOT NULL REFERENCES community_recipes (id) ON DELETE CASCADE,
+        actor TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (recipe_id, actor)
+      )`,
+      "CREATE INDEX community_likes_by_actor ON community_likes (actor)",
+      // Öffentliche Fotos in der Galerie eines Rezepts (Katalog, eigene und Community-Rezepte).
+      `CREATE TABLE recipe_photos (
+        id TEXT PRIMARY KEY,
+        recipe_id TEXT NOT NULL,
+        author TEXT NOT NULL,
+        author_name TEXT NOT NULL,
+        image_key TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      "CREATE INDEX recipe_photos_by_recipe ON recipe_photos (recipe_id)",
+      "CREATE INDEX recipe_photos_by_author ON recipe_photos (author)",
+      `CREATE TABLE photo_ratings (
+        photo_id TEXT NOT NULL REFERENCES recipe_photos (id) ON DELETE CASCADE,
+        actor TEXT NOT NULL,
+        stars INTEGER NOT NULL,
+        PRIMARY KEY (photo_id, actor)
+      )`,
+      "CREATE INDEX photo_ratings_by_actor ON photo_ratings (actor)",
+      // Sterne für Rezepte; das Rezept kann im Katalog, in der Community oder nur auf einem Gerät liegen.
+      `CREATE TABLE recipe_ratings (
+        recipe_id TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        stars INTEGER NOT NULL,
+        PRIMARY KEY (recipe_id, actor)
+      )`,
+      "CREATE INDEX recipe_ratings_by_actor ON recipe_ratings (actor)",
+      // „Problem melden“.
+      `CREATE TABLE recipe_flags (
+        id TEXT PRIMARY KEY,
+        recipe_id TEXT NOT NULL,
+        author TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        note TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      "CREATE INDEX recipe_flags_by_recipe ON recipe_flags (recipe_id)",
+      "CREATE INDEX recipe_flags_by_author ON recipe_flags (author)",
+      // Änderungen von Admins an Katalogrezepten (admin/recipePatch.ts), die geänderten Felder als JSON.
+      `CREATE TABLE recipe_overrides (
+        recipe_id TEXT PRIMARY KEY,
+        patch TEXT NOT NULL,
+        updated_by TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 /** Die Datenbank wurde schon von einer neueren Server-Fassung umgebaut – lieber nicht starten als Daten verderben. */

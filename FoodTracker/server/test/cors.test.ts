@@ -8,7 +8,7 @@ import { isAllowedOrigin, normalizeOrigins } from "../src/http/cors.js";
 const noAi = new Ai({ hasAnthropicKey: false, ollama: { url: "http://ollama.test", model: "gemma4:e4b", numCtx: 1024, timeoutMs: 1000 } }, async () => {
   throw new TypeError("offline");
 });
-const app = createApp({ communityFile: null, ai: noAi, corsOrigins: ["https://bennitut.github.io/Bennitut/"] });
+const app = createApp({ ai: noAi, corsOrigins: ["https://bennitut.github.io/Bennitut/"] });
 
 const preflight = (origin: string, path = "/api/plan") =>
   app.request(path, {

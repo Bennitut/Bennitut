@@ -29,7 +29,6 @@ interface Sent {
 
 function setup(options: { mailer?: Mailer | null; limits?: Partial<AuthLimits>; db?: Db } = {}) {
   const app = createApp({
-    communityFile: null,
     db: options.db,
     auth: { appleAudiences: [], googleAudiences: [], adminEmails: ["chefin@example.com"], allowDevLogin: true },
     ai: noAi,

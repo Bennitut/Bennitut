@@ -1,63 +1,58 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import type { Db } from "../storage/db.js";
 import type { Recipe } from "../types.js";
 import { applyOverrides, type RecipeOverride, type RecipePatch } from "./recipePatch.js";
 
 export { applyOverrides, type RecipeOverride, type RecipePatch };
 
-/** Änderungen von Admins an Katalogrezepten, in einer JSON-Datei gespeichert. */
+interface Row {
+  recipe_id: string;
+  patch: string;
+  updated_by: string;
+  updated_at: string;
+}
+
+const UPSERT =
+  "INSERT INTO recipe_overrides (recipe_id, patch, updated_by, updated_at) VALUES (?, ?, ?, ?) " +
+  "ON CONFLICT (recipe_id) DO UPDATE SET patch = excluded.patch, updated_by = excluded.updated_by, updated_at = excluded.updated_at";
+export const INSERT_OVERRIDE = "INSERT INTO recipe_overrides (recipe_id, patch, updated_by, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING";
+
+/**
+ * Änderungen von Admins an Katalogrezepten in der Datenbank (Tabelle recipe_overrides, Migration 3). Bis 27.11.2026
+ * lagen sie in `data/recipe-overrides.json` (Umzug in storage/legacy.ts).
+ */
 export class OverrideStore {
-  private overrides: Record<string, RecipeOverride> = {};
+  constructor(private readonly db: Db) {}
 
-  constructor(private readonly file: string | null) {
-    if (!file) return;
-    try {
-      this.overrides = JSON.parse(readFileSync(file, "utf8")) as Record<string, RecipeOverride>;
-    } catch {
-      // Noch keine Datei: leer starten.
-    }
+  async all(): Promise<Record<string, RecipeOverride>> {
+    const rows = await this.db.all<Row>("SELECT recipe_id, patch, updated_by, updated_at FROM recipe_overrides ORDER BY recipe_id");
+    return Object.fromEntries(rows.map((r) => [r.recipe_id, { patch: JSON.parse(r.patch) as RecipePatch, updatedBy: r.updated_by, updatedAt: r.updated_at }]));
   }
 
-  all(): Record<string, RecipeOverride> {
-    return this.overrides;
-  }
-
-  set(recipeId: string, patch: RecipePatch, userName: string): RecipeOverride {
-    const entry = { patch: { ...this.overrides[recipeId]?.patch, ...patch }, updatedBy: userName, updatedAt: new Date().toISOString() };
-    this.overrides[recipeId] = entry;
-    this.save();
-    return entry;
+  /** Ergänzt die schon geänderten Felder um `patch` (was dort steht, gewinnt). */
+  async set(recipeId: string, patch: RecipePatch, userName: string): Promise<RecipeOverride> {
+    return this.db.transaction(async (tx) => {
+      const current = await tx.get<Row>("SELECT patch FROM recipe_overrides WHERE recipe_id = ?", [recipeId]);
+      const entry: RecipeOverride = {
+        patch: { ...(current ? (JSON.parse(current.patch) as RecipePatch) : {}), ...patch },
+        updatedBy: userName,
+        updatedAt: new Date().toISOString(),
+      };
+      await tx.run(UPSERT, [recipeId, JSON.stringify(entry.patch), entry.updatedBy, entry.updatedAt]);
+      return entry;
+    });
   }
 
   /** Beim Löschen eines Admin-Kontos: dessen Namen aus „zuletzt geändert von“ entfernen. */
-  anonymize(userName: string) {
-    let changed = false;
-    for (const entry of Object.values(this.overrides)) {
-      if (entry.updatedBy === userName) {
-        entry.updatedBy = "Gelöschtes Konto";
-        changed = true;
-      }
-    }
-    if (changed) this.save();
+  async anonymize(userName: string): Promise<void> {
+    await this.db.run("UPDATE recipe_overrides SET updated_by = ? WHERE updated_by = ?", ["Gelöschtes Konto", userName]);
   }
 
-  remove(recipeId: string): boolean {
-    if (!this.overrides[recipeId]) return false;
-    delete this.overrides[recipeId];
-    this.save();
-    return true;
+  async remove(recipeId: string): Promise<boolean> {
+    return (await this.db.run("DELETE FROM recipe_overrides WHERE recipe_id = ?", [recipeId])) > 0;
   }
 
   /** Katalog mit allen Änderungen; ausgeblendete Rezepte fallen weg. */
-  apply(recipes: Recipe[]): Recipe[] {
-    return applyOverrides(recipes, this.overrides);
-  }
-
-  private save() {
-    if (!this.file) return;
-    mkdirSync(dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(this.overrides));
-    renameSync(tmp, this.file);
+  async apply(recipes: Recipe[]): Promise<Recipe[]> {
+    return applyOverrides(recipes, await this.all());
   }
 }

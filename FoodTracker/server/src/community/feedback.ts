@@ -1,38 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { batches, placeholders, type Db, type Queryable } from "../storage/db.js";
+import { decodeDataUri, imageUri, newImageKey, toDataUri, type ImageStore } from "../storage/images.js";
 
 export const FLAG_REASONS = ["text", "amounts", "image", "other"] as const;
 export type FlagReason = (typeof FLAG_REASONS)[number];
 
-interface Photo {
-  id: string;
-  recipeId: string;
-  authorId: string;
-  authorName: string;
-  /** Bild als data-URI (in der App verkleinert). */
-  uri: string;
-  createdAt: string;
-  /** Sterne (1–5) je Geräte-ID. */
-  ratings: Record<string, number>;
-}
-
-interface Flag {
-  id: string;
-  recipeId: string;
-  authorId: string;
-  reason: FlagReason;
-  note: string;
-  createdAt: string;
-}
-
-interface Data {
-  photos: Photo[];
-  recipeRatings: Record<string, Record<string, number>>;
-  flags: Flag[];
-}
-
-/** Antwort an Clients: ohne fremde Geräte-IDs. */
+/** Antwort an Clients: ohne fremde Geräte-IDs. `uri` ist der Pfad im Bildspeicher (/api/images/…). */
 export interface PhotoView {
   id: string;
   recipeId: string;
@@ -59,116 +32,181 @@ export interface FlagSummary {
   lastAt: string;
 }
 
-const MAX_PHOTOS_PER_RECIPE = 40;
-const MAX_PHOTOS_PER_DEVICE_AND_RECIPE = 5;
-
-function summary(ratings: Record<string, number>, deviceId: string): RatingView {
-  const values = Object.values(ratings);
-  const sum = values.reduce((a, b) => a + b, 0);
-  return { avg: values.length ? Math.round((sum / values.length) * 10) / 10 : 0, count: values.length, mine: ratings[deviceId] ?? null };
+interface PhotoRow {
+  id: string;
+  recipe_id: string;
+  author: string;
+  author_name: string;
+  image_key: string;
+  created_at: string;
 }
 
+/** Anzahl und Summe der Sterne, dazu die eigenen (null = nicht bewertet). */
+interface Stats {
+  count: number;
+  sum: number;
+  mine: number | null;
+}
+
+const PHOTO_COLUMNS = "id, recipe_id, author, author_name, image_key, created_at";
+const MAX_PHOTOS_PER_RECIPE = 40;
+const MAX_PHOTOS_PER_DEVICE_AND_RECIPE = 5;
+const NO_STATS: Stats = { count: 0, sum: 0, mine: null };
+
+const summary = (s: Stats): RatingView => ({ avg: s.count ? Math.round((s.sum / s.count) * 10) / 10 : 0, count: s.count, mine: s.mine });
+
 /** Sortierwert mit Vorannahme von 3,5 Sternen, damit ein einzelnes 5-Sterne-Foto nicht sofort ganz oben steht. */
-const score = (ratings: Record<string, number>) => {
-  const values = Object.values(ratings);
-  return (values.reduce((a, b) => a + b, 0) + 3.5 * 2) / (values.length + 2);
-};
+const score = (s: Stats) => (s.sum + 3.5 * 2) / (s.count + 2);
 
-/**
- * Fotos, Bewertungen und Fehlermeldungen zu Rezepten in einer JSON-Datei.
- * Für den Betrieb mit vielen Nutzer:innen gehört das in eine Datenbank mit Bildspeicher.
- */
-export class FeedbackStore {
-  private data: Data = { photos: [], recipeRatings: {}, flags: [] };
+const UPSERT_PHOTO_RATING =
+  "INSERT INTO photo_ratings (photo_id, actor, stars) VALUES (?, ?, ?) ON CONFLICT (photo_id, actor) DO UPDATE SET stars = excluded.stars";
+const UPSERT_RECIPE_RATING =
+  "INSERT INTO recipe_ratings (recipe_id, actor, stars) VALUES (?, ?, ?) ON CONFLICT (recipe_id, actor) DO UPDATE SET stars = excluded.stars";
+export const INSERT_PHOTO = `INSERT INTO recipe_photos (${PHOTO_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?)`;
 
-  constructor(private readonly file: string | null) {
-    if (!file) return;
-    try {
-      this.data = { ...this.data, ...(JSON.parse(readFileSync(file, "utf8")) as Partial<Data>) };
-    } catch {
-      // Noch keine Datei: leer starten.
+/** Bilder erst nach der Transaktion löschen: Scheitert sie, bleibt alles, wie es war. */
+async function deleteImages(images: ImageStore, keys: readonly string[]) {
+  for (const key of keys) await images.delete(key).catch(() => undefined);
+}
+
+/** Sterne aller Fotos in `photoIds` (für `actor` auch die eigenen). */
+async function photoStats(q: Queryable, photoIds: readonly string[], actor: string): Promise<Map<string, Stats>> {
+  const stats = new Map<string, Stats>();
+  for (const batch of batches([...new Set(photoIds)])) {
+    const rows = await q.all<{ photo_id: string; actor: string; stars: number | string }>(
+      `SELECT photo_id, actor, stars FROM photo_ratings WHERE photo_id IN (${placeholders(batch)})`,
+      batch,
+    );
+    for (const r of rows) {
+      const s = stats.get(r.photo_id) ?? { count: 0, sum: 0, mine: null };
+      s.count++;
+      s.sum += Number(r.stars);
+      if (r.actor === actor) s.mine = Number(r.stars);
+      stats.set(r.photo_id, s);
     }
   }
+  return stats;
+}
 
-  photos(recipeId: string, deviceId: string): PhotoView[] {
-    return this.data.photos
-      .filter((p) => p.recipeId === recipeId)
-      .sort((a, b) => score(b.ratings) - score(a.ratings) || b.createdAt.localeCompare(a.createdAt))
-      .map((p) => this.photoView(p, deviceId));
+/**
+ * Fotos, Sterne und Meldungen zu Rezepten in der Datenbank (Tabellen recipe_photos, photo_ratings, recipe_ratings und
+ * recipe_flags, Migration 3), die Fotos selbst im Bildspeicher (storage/images.ts). Bis 27.11.2026 lag alles samt Fotos
+ * als data-URI in `data/feedback.json` (Umzug in storage/legacy.ts). `actor` ist „user:<Konto-ID>“ oder die Geräte-ID.
+ */
+export class FeedbackStore {
+  constructor(
+    private readonly db: Db,
+    private readonly images: ImageStore,
+  ) {}
+
+  async photos(recipeId: string, actor: string): Promise<PhotoView[]> {
+    const rows = await this.db.all<PhotoRow>(`SELECT ${PHOTO_COLUMNS} FROM recipe_photos WHERE recipe_id = ? ORDER BY created_at, id`, [recipeId]);
+    const stats = await photoStats(this.db, rows.map((r) => r.id), actor);
+    const of = (r: PhotoRow) => stats.get(r.id) ?? NO_STATS;
+    return rows
+      .sort((a, b) => score(of(b)) - score(of(a)) || b.created_at.localeCompare(a.created_at))
+      .map((r) => this.photoView(r, of(r), actor));
   }
 
   /** Bestbewertetes Foto je Rezept (mindestens eine Bewertung mit Schnitt ab 4 Sternen). */
-  topPhotos(deviceId: string): Record<string, PhotoView> {
-    const top: Record<string, PhotoView> = {};
-    for (const p of this.data.photos) {
-      const s = summary(p.ratings, deviceId);
-      if (s.count === 0 || s.avg < 4) continue;
-      const current = top[p.recipeId];
-      if (!current || score(p.ratings) > (current.avg * current.count + 7) / (current.count + 2)) top[p.recipeId] = this.photoView(p, deviceId);
+  async topPhotos(actor: string): Promise<Record<string, PhotoView>> {
+    const rated = await this.db.all<{ photo_id: string; n: number | string; total: number | string }>(
+      "SELECT photo_id, COUNT(*) AS n, SUM(stars) AS total FROM photo_ratings GROUP BY photo_id",
+    );
+    const candidates = rated.filter((r) => Number(r.n) > 0 && summary({ count: Number(r.n), sum: Number(r.total), mine: null }).avg >= 4);
+    const rows: PhotoRow[] = [];
+    for (const batch of batches(candidates.map((r) => r.photo_id))) {
+      rows.push(...(await this.db.all<PhotoRow>(`SELECT ${PHOTO_COLUMNS} FROM recipe_photos WHERE id IN (${placeholders(batch)})`, batch)));
     }
-    return top;
+    rows.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+    const stats = await photoStats(this.db, rows.map((r) => r.id), actor);
+    const best = new Map<string, { row: PhotoRow; stats: Stats }>();
+    for (const row of rows) {
+      const s = stats.get(row.id) ?? NO_STATS;
+      const current = best.get(row.recipe_id);
+      if (!current || score(s) > score(current.stats)) best.set(row.recipe_id, { row, stats: s });
+    }
+    return Object.fromEntries([...best].map(([recipeId, b]) => [recipeId, this.photoView(b.row, b.stats, actor)]));
   }
 
-  addPhoto(deviceId: string, recipeId: string, authorName: string, uri: string): PhotoView | "limit" {
-    const forRecipe = this.data.photos.filter((p) => p.recipeId === recipeId);
-    if (forRecipe.length >= MAX_PHOTOS_PER_RECIPE || forRecipe.filter((p) => p.authorId === deviceId).length >= MAX_PHOTOS_PER_DEVICE_AND_RECIPE) {
+  /** Neues Foto aus einer data-URI; "invalid", wenn es kein JPEG, PNG oder WebP ist, "limit" bei zu vielen Fotos. */
+  async addPhoto(actor: string, recipeId: string, authorName: string, uri: string): Promise<PhotoView | "limit" | "invalid"> {
+    const image = decodeDataUri(uri);
+    if (!image) return "invalid";
+    const row: PhotoRow = { id: randomUUID(), recipe_id: recipeId, author: actor, author_name: authorName, image_key: newImageKey(image.type), created_at: new Date().toISOString() };
+    // Erst das Bild, dann der Eintrag (in der Transaktion nichts Langsames); klappt der Eintrag nicht, kommt das Bild weg.
+    await this.images.put(row.image_key, image);
+    let added: boolean;
+    try {
+      added = await this.db.transaction(async (tx) => {
+        const authors = await tx.all<{ author: string }>("SELECT author FROM recipe_photos WHERE recipe_id = ?", [recipeId]);
+        if (authors.length >= MAX_PHOTOS_PER_RECIPE || authors.filter((a) => a.author === actor).length >= MAX_PHOTOS_PER_DEVICE_AND_RECIPE) return false;
+        await tx.run(INSERT_PHOTO, [row.id, row.recipe_id, row.author, row.author_name, row.image_key, row.created_at]);
+        return true;
+      });
+    } catch (e) {
+      await deleteImages(this.images, [row.image_key]);
+      throw e;
+    }
+    if (!added) {
+      await deleteImages(this.images, [row.image_key]);
       return "limit";
     }
-    const photo: Photo = { id: randomUUID(), recipeId, authorId: deviceId, authorName, uri, createdAt: new Date().toISOString(), ratings: {} };
-    this.data.photos.push(photo);
-    this.save();
-    return this.photoView(photo, deviceId);
+    return this.photoView(row, NO_STATS, actor);
   }
 
-  ratePhoto(deviceId: string, photoId: string, stars: number): PhotoView | undefined {
-    const photo = this.data.photos.find((p) => p.id === photoId);
-    if (!photo) return undefined;
-    // Eigene Fotos kann man nicht selbst hochbewerten.
-    if (photo.authorId !== deviceId) photo.ratings[deviceId] = stars;
-    this.save();
-    return this.photoView(photo, deviceId);
+  async ratePhoto(actor: string, photoId: string, stars: number): Promise<PhotoView | undefined> {
+    return this.db.transaction(async (tx) => {
+      const photo = await tx.get<PhotoRow>(`SELECT ${PHOTO_COLUMNS} FROM recipe_photos WHERE id = ?`, [photoId]);
+      if (!photo) return undefined;
+      // Eigene Fotos kann man nicht selbst hochbewerten.
+      if (photo.author !== actor) await tx.run(UPSERT_PHOTO_RATING, [photoId, actor, stars]);
+      return this.photoView(photo, (await photoStats(tx, [photoId], actor)).get(photoId) ?? NO_STATS, actor);
+    });
   }
 
   /** Nur wer das Foto hochgeladen hat, darf es löschen. */
-  removePhoto(deviceId: string, photoId: string): boolean {
-    const before = this.data.photos.length;
-    this.data.photos = this.data.photos.filter((p) => !(p.id === photoId && p.authorId === deviceId));
-    if (this.data.photos.length === before) return false;
-    this.save();
-    return true;
+  removePhoto(actor: string, photoId: string): Promise<boolean> {
+    return this.removePhotosWhere("id = ? AND author = ?", [photoId, actor]);
   }
 
   /** Für Admins: neueste Fotos aller Rezepte zur Kontrolle. */
-  recentPhotos(deviceId: string, limit = 60): PhotoView[] {
-    return [...this.data.photos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit).map((p) => this.photoView(p, deviceId));
+  async recentPhotos(actor: string, limit = 60): Promise<PhotoView[]> {
+    const rows = await this.db.all<PhotoRow>(`SELECT ${PHOTO_COLUMNS} FROM recipe_photos ORDER BY created_at DESC, id DESC LIMIT ?`, [limit]);
+    const stats = await photoStats(this.db, rows.map((r) => r.id), actor);
+    return rows.map((r) => this.photoView(r, stats.get(r.id) ?? NO_STATS, actor));
   }
 
   /** Für Admins: beliebiges Foto entfernen. */
-  removePhotoAsAdmin(photoId: string): boolean {
-    const before = this.data.photos.length;
-    this.data.photos = this.data.photos.filter((p) => p.id !== photoId);
-    if (this.data.photos.length === before) return false;
-    this.save();
-    return true;
+  removePhotoAsAdmin(photoId: string): Promise<boolean> {
+    return this.removePhotosWhere("id = ?", [photoId]);
   }
 
-  photoCount(authorId: string): number {
-    return this.data.photos.filter((p) => p.authorId === authorId).length;
+  /** Fotos je Konto bzw. Gerät – für Nutzerverzeichnis und Admin-Bereich. */
+  async photoCountsByAuthor(): Promise<Map<string, number>> {
+    const rows = await this.db.all<{ author: string; n: number | string }>("SELECT author, COUNT(*) AS n FROM recipe_photos GROUP BY author");
+    return new Map(rows.map((r) => [r.author, Number(r.n)]));
   }
 
-  /** Für „Meine Daten exportieren“: eigene Fotos, vergebene Sterne und Meldungen. */
-  exportFor(actor: string) {
+  /** Für „Meine Daten exportieren“: eigene Fotos (als data-URI, damit die Datei vollständig ist), Sterne und Meldungen. */
+  async exportFor(actor: string) {
+    const rows = await this.db.all<PhotoRow>(`SELECT ${PHOTO_COLUMNS} FROM recipe_photos WHERE author = ? ORDER BY created_at, id`, [actor]);
+    const photos = [];
+    for (const r of rows) {
+      const image = await this.images.get(r.image_key);
+      photos.push({ id: r.id, recipeId: r.recipe_id, uri: image ? toDataUri(image) : null, authorName: r.author_name, createdAt: r.created_at });
+    }
+    const photoRatings = await this.db.all<{ photo_id: string; stars: number | string }>("SELECT photo_id, stars FROM photo_ratings WHERE actor = ? ORDER BY photo_id", [actor]);
+    const recipeRatings = await this.db.all<{ recipe_id: string; stars: number | string }>("SELECT recipe_id, stars FROM recipe_ratings WHERE actor = ? ORDER BY recipe_id", [actor]);
+    const flags = await this.db.all<{ recipe_id: string; reason: FlagReason; note: string; created_at: string }>(
+      "SELECT recipe_id, reason, note, created_at FROM recipe_flags WHERE author = ? ORDER BY created_at, id",
+      [actor],
+    );
     return {
-      photos: this.data.photos
-        .filter((p) => p.authorId === actor)
-        .map(({ id, recipeId, uri, authorName, createdAt }) => ({ id, recipeId, uri, authorName, createdAt })),
-      photoRatings: Object.fromEntries(this.data.photos.filter((p) => actor in p.ratings).map((p) => [p.id, p.ratings[actor]!])),
-      recipeRatings: Object.fromEntries(
-        Object.entries(this.data.recipeRatings)
-          .filter(([, ratings]) => actor in ratings)
-          .map(([recipeId, ratings]) => [recipeId, ratings[actor]!]),
-      ),
-      flags: this.data.flags.filter((f) => f.authorId === actor).map(({ recipeId, reason, note, createdAt }) => ({ recipeId, reason, note, createdAt })),
+      photos,
+      photoRatings: Object.fromEntries(photoRatings.map((r) => [r.photo_id, Number(r.stars)])),
+      recipeRatings: Object.fromEntries(recipeRatings.map((r) => [r.recipe_id, Number(r.stars)])),
+      flags: flags.map((f) => ({ recipeId: f.recipe_id, reason: f.reason, note: f.note, createdAt: f.created_at })),
     };
   }
 
@@ -178,115 +216,155 @@ export class FeedbackStore {
    * haben keinen Zeitpunkt, und eine Person bewertet bzw. meldet jedes Rezept einmal). Eigene Fotos bleiben auch danach
    * ohne eigene Sterne. Liefert, wie viele Fotos, Sterne und Meldungen übernommen wurden.
    */
-  transferActor(from: string, to: string): { photos: number; ratings: number; flags: number } {
-    const moved = { photos: 0, ratings: 0, flags: 0 };
-    if (from === to) return moved;
-    let changed = false;
-    const take = (ratings: Record<string, number>, allowed: boolean) => {
-      if (!(from in ratings)) return;
-      const stars = ratings[from]!;
-      delete ratings[from];
-      changed = true;
-      if (allowed && !(to in ratings)) {
-        ratings[to] = stars;
-        moved.ratings++;
+  async transferActor(from: string, to: string): Promise<{ photos: number; ratings: number; flags: number }> {
+    if (from === to) return { photos: 0, ratings: 0, flags: 0 };
+    return this.db.transaction(async (tx) => {
+      const moved = { photos: 0, ratings: 0, flags: 0 };
+      moved.photos = await tx.run("UPDATE recipe_photos SET author = ? WHERE author = ?", [to, from]);
+
+      // Sterne für Fotos: übernehmen, wo das Konto noch keine vergeben hat – außer für eigene Fotos des Kontos.
+      const ratedByAccount = new Set((await tx.all<{ photo_id: string }>("SELECT photo_id FROM photo_ratings WHERE actor = ?", [to])).map((r) => r.photo_id));
+      const fromPhotoRatings = await tx.all<{ photo_id: string; author: string }>(
+        "SELECT r.photo_id, p.author FROM photo_ratings r JOIN recipe_photos p ON p.id = r.photo_id WHERE r.actor = ?",
+        [from],
+      );
+      for (const r of fromPhotoRatings) {
+        if (r.author === to || ratedByAccount.has(r.photo_id)) {
+          await tx.run("DELETE FROM photo_ratings WHERE photo_id = ? AND actor = ?", [r.photo_id, from]);
+        } else {
+          await tx.run("UPDATE photo_ratings SET actor = ? WHERE photo_id = ? AND actor = ?", [to, r.photo_id, from]);
+          moved.ratings++;
+        }
       }
-    };
-    for (const p of this.data.photos) {
-      if (p.authorId === from) {
-        p.authorId = to;
-        moved.photos++;
-        changed = true;
-      }
-      take(p.ratings, p.authorId !== to);
       // Ein Foto des Geräts, das das Konto schon bewertet hatte, ist jetzt ein eigenes.
-      if (p.authorId === to && to in p.ratings) {
-        delete p.ratings[to];
-        changed = true;
+      const ownRated = await tx.all<{ photo_id: string }>(
+        "SELECT r.photo_id FROM photo_ratings r JOIN recipe_photos p ON p.id = r.photo_id WHERE r.actor = ? AND p.author = ?",
+        [to, to],
+      );
+      for (const r of ownRated) await tx.run("DELETE FROM photo_ratings WHERE photo_id = ? AND actor = ?", [r.photo_id, to]);
+
+      // Sterne für Rezepte.
+      const recipesRated = new Set((await tx.all<{ recipe_id: string }>("SELECT recipe_id FROM recipe_ratings WHERE actor = ?", [to])).map((r) => r.recipe_id));
+      for (const { recipe_id } of await tx.all<{ recipe_id: string }>("SELECT recipe_id FROM recipe_ratings WHERE actor = ?", [from])) {
+        if (recipesRated.has(recipe_id)) {
+          await tx.run("DELETE FROM recipe_ratings WHERE recipe_id = ? AND actor = ?", [recipe_id, from]);
+        } else {
+          await tx.run("UPDATE recipe_ratings SET actor = ? WHERE recipe_id = ? AND actor = ?", [to, recipe_id, from]);
+          moved.ratings++;
+        }
       }
-    }
-    for (const ratings of Object.values(this.data.recipeRatings)) take(ratings, true);
-    const flagged = new Set(this.data.flags.filter((f) => f.authorId === to).map((f) => f.recipeId));
-    this.data.flags = this.data.flags.filter((f) => {
-      if (f.authorId !== from) return true;
-      changed = true;
-      if (flagged.has(f.recipeId)) return false;
-      f.authorId = to;
-      flagged.add(f.recipeId);
-      moved.flags++;
-      return true;
+
+      // Meldungen: je Rezept eine; hat das Konto das Rezept schon gemeldet, gilt seine.
+      const flagged = new Set((await tx.all<{ recipe_id: string }>("SELECT recipe_id FROM recipe_flags WHERE author = ?", [to])).map((r) => r.recipe_id));
+      for (const f of await tx.all<{ id: string; recipe_id: string }>("SELECT id, recipe_id FROM recipe_flags WHERE author = ? ORDER BY created_at, id", [from])) {
+        if (flagged.has(f.recipe_id)) {
+          await tx.run("DELETE FROM recipe_flags WHERE id = ?", [f.id]);
+        } else {
+          await tx.run("UPDATE recipe_flags SET author = ? WHERE id = ?", [to, f.id]);
+          flagged.add(f.recipe_id);
+          moved.flags++;
+        }
+      }
+      return moved;
     });
-    if (changed) this.save();
-    return moved;
   }
 
-  /** Beim Löschen eines Kontos: eigene Fotos, vergebene Sterne und Meldungen entfernen. */
-  removeActor(actor: string) {
-    this.data.photos = this.data.photos.filter((p) => p.authorId !== actor);
-    for (const p of this.data.photos) delete p.ratings[actor];
-    for (const ratings of Object.values(this.data.recipeRatings)) delete ratings[actor];
-    this.data.flags = this.data.flags.filter((f) => f.authorId !== actor);
-    this.save();
+  /** Beim Löschen eines Kontos: eigene Fotos (samt Bilddateien), vergebene Sterne und Meldungen entfernen. */
+  async removeActor(actor: string): Promise<void> {
+    const keys = await this.db.transaction(async (tx) => {
+      const own = await tx.all<{ id: string; image_key: string }>("SELECT id, image_key FROM recipe_photos WHERE author = ?", [actor]);
+      await deletePhotoRatings(tx, own.map((r) => r.id));
+      await tx.run("DELETE FROM recipe_photos WHERE author = ?", [actor]);
+      await tx.run("DELETE FROM photo_ratings WHERE actor = ?", [actor]);
+      await tx.run("DELETE FROM recipe_ratings WHERE actor = ?", [actor]);
+      await tx.run("DELETE FROM recipe_flags WHERE author = ?", [actor]);
+      return own.map((r) => r.image_key);
+    });
+    await deleteImages(this.images, keys);
   }
 
-  rateRecipe(deviceId: string, recipeId: string, stars: number): RatingView {
-    const ratings = (this.data.recipeRatings[recipeId] ??= {});
-    ratings[deviceId] = stars;
-    this.save();
-    return summary(ratings, deviceId);
+  async rateRecipe(actor: string, recipeId: string, stars: number): Promise<RatingView> {
+    return this.db.transaction(async (tx) => {
+      await tx.run(UPSERT_RECIPE_RATING, [recipeId, actor, stars]);
+      const rows = await tx.all<{ actor: string; stars: number | string }>("SELECT actor, stars FROM recipe_ratings WHERE recipe_id = ?", [recipeId]);
+      return summary({ count: rows.length, sum: rows.reduce((a, r) => a + Number(r.stars), 0), mine: stars });
+    });
   }
 
-  recipeRatings(deviceId: string): Record<string, RatingView> {
-    return Object.fromEntries(Object.entries(this.data.recipeRatings).map(([id, ratings]) => [id, summary(ratings, deviceId)]));
+  async recipeRatings(actor: string): Promise<Record<string, RatingView>> {
+    const all = await this.db.all<{ recipe_id: string; n: number | string; total: number | string }>(
+      "SELECT recipe_id, COUNT(*) AS n, SUM(stars) AS total FROM recipe_ratings GROUP BY recipe_id",
+    );
+    const mine = new Map(
+      (await this.db.all<{ recipe_id: string; stars: number | string }>("SELECT recipe_id, stars FROM recipe_ratings WHERE actor = ?", [actor])).map((r) => [r.recipe_id, Number(r.stars)]),
+    );
+    return Object.fromEntries(all.map((r) => [r.recipe_id, summary({ count: Number(r.n), sum: Number(r.total), mine: mine.get(r.recipe_id) ?? null })]));
   }
 
-  flag(deviceId: string, recipeId: string, reason: FlagReason, note: string) {
-    this.data.flags.push({ id: randomUUID(), recipeId, authorId: deviceId, reason, note, createdAt: new Date().toISOString() });
-    this.save();
+  async flag(actor: string, recipeId: string, reason: FlagReason, note: string): Promise<void> {
+    await this.db.run("INSERT INTO recipe_flags (id, recipe_id, author, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?)", [
+      randomUUID(),
+      recipeId,
+      actor,
+      reason,
+      note,
+      new Date().toISOString(),
+    ]);
   }
 
   /** Meldungen zu einem Rezept als erledigt entfernen. */
-  resolveFlags(recipeId: string): number {
-    const before = this.data.flags.length;
-    this.data.flags = this.data.flags.filter((f) => f.recipeId !== recipeId);
-    this.save();
-    return before - this.data.flags.length;
+  resolveFlags(recipeId: string): Promise<number> {
+    return this.db.run("DELETE FROM recipe_flags WHERE recipe_id = ?", [recipeId]);
   }
 
   /** Gemeldete Rezepte zum späteren Verbessern, die häufigsten zuerst. */
-  flagSummary(): FlagSummary[] {
+  async flagSummary(): Promise<FlagSummary[]> {
+    const flags = await this.db.all<{ recipe_id: string; reason: FlagReason; note: string; created_at: string }>(
+      "SELECT recipe_id, reason, note, created_at FROM recipe_flags ORDER BY created_at, id",
+    );
     const byRecipe = new Map<string, FlagSummary>();
-    for (const f of this.data.flags) {
-      const entry = byRecipe.get(f.recipeId) ?? { recipeId: f.recipeId, count: 0, reasons: {}, notes: [], lastAt: f.createdAt };
+    for (const f of flags) {
+      const entry = byRecipe.get(f.recipe_id) ?? { recipeId: f.recipe_id, count: 0, reasons: {}, notes: [], lastAt: f.created_at };
       entry.count++;
       entry.reasons[f.reason] = (entry.reasons[f.reason] ?? 0) + 1;
+      // Die neuesten Notizen zuerst, höchstens zehn.
       if (f.note) entry.notes = [f.note, ...entry.notes].slice(0, 10);
-      if (f.createdAt > entry.lastAt) entry.lastAt = f.createdAt;
-      byRecipe.set(f.recipeId, entry);
+      if (f.created_at > entry.lastAt) entry.lastAt = f.created_at;
+      byRecipe.set(f.recipe_id, entry);
     }
     return [...byRecipe.values()].sort((a, b) => b.count - a.count || b.lastAt.localeCompare(a.lastAt));
   }
 
-  private photoView(p: Photo, deviceId: string): PhotoView {
-    const s = summary(p.ratings, deviceId);
-    return {
-      id: p.id,
-      recipeId: p.recipeId,
-      uri: p.uri,
-      authorName: p.authorName,
-      createdAt: p.createdAt,
-      avg: s.avg,
-      count: s.count,
-      myRating: s.mine,
-      mine: p.authorId === deviceId,
-    };
+  private async removePhotosWhere(where: string, params: string[]): Promise<boolean> {
+    const key = await this.db.transaction(async (tx) => {
+      const row = await tx.get<{ id: string; image_key: string }>(`SELECT id, image_key FROM recipe_photos WHERE ${where}`, params);
+      if (!row) return undefined;
+      await deletePhotoRatings(tx, [row.id]);
+      await tx.run("DELETE FROM recipe_photos WHERE id = ?", [row.id]);
+      return row.image_key;
+    });
+    if (!key) return false;
+    await deleteImages(this.images, [key]);
+    return true;
   }
 
-  private save() {
-    if (!this.file) return;
-    mkdirSync(dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(this.data));
-    renameSync(tmp, this.file);
+  private photoView(p: PhotoRow, s: Stats, actor: string): PhotoView {
+    const { avg, count, mine } = summary(s);
+    return {
+      id: p.id,
+      recipeId: p.recipe_id,
+      uri: imageUri(p.image_key),
+      authorName: p.author_name,
+      createdAt: p.created_at,
+      avg,
+      count,
+      myRating: mine,
+      mine: p.author === actor,
+    };
   }
+}
+
+/** Sterne dieser Fotos löschen (vor dem Foto selbst – die Datenbank verlangt es so). */
+async function deletePhotoRatings(tx: Queryable, photoIds: readonly string[]) {
+  for (const batch of batches(photoIds)) await tx.run(`DELETE FROM photo_ratings WHERE photo_id IN (${placeholders(batch)})`, batch);
 }

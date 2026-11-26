@@ -20,6 +20,7 @@ import { RateLimiter, clientIp } from "./http/rateLimit.js";
 import { resetMail, type Mailer } from "./mail/mailer.js";
 import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetchPost.js";
 import { openSqlite, type Db } from "./storage/db.js";
+import { MemoryImageStore, isImageKey, type ImageStore } from "./storage/images.js";
 import { migrate } from "./storage/migrations.js";
 import { SyncStore } from "./storage/sync.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
@@ -209,10 +210,8 @@ const PasswordField = z.string().max(4 * PASSWORD_MAX_LENGTH);
 const EmailField = z.string().trim().max(254);
 
 export function createApp({
-  communityFile,
-  feedbackFile = null,
   db = openSqlite(":memory:"),
-  overridesFile = null,
+  images = new MemoryImageStore(),
   auth = NO_AUTH,
   ai = new Ai(aiSettingsFromEnv()),
   corsOrigins = [],
@@ -221,14 +220,14 @@ export function createApp({
   authLimits = defaultAuthLimits(),
   trustProxy = false,
 }: {
-  communityFile: string | null;
-  feedbackFile?: string | null;
   /**
-   * Datenbank für Konten, Sitzungen und die Sicherung der Ernährungshistorie (storage/db.ts: SQLite-Datei oder
+   * Datenbank für alles, was der Server speichert: Konten, Sitzungen, Sicherung der Ernährungshistorie, Community-Rezepte,
+   * Favoriten, Fotos (ohne die Bilder selbst), Sterne, Meldungen und Admin-Änderungen (storage/db.ts: SQLite-Datei oder
    * Postgres); fehlende Migrationen führt der Server vor der ersten Anfrage aus. Ohne Angabe nur im Speicher (Tests).
    */
   db?: Db;
-  overridesFile?: string | null;
+  /** Bildspeicher für Fotos (storage/images.ts, Ordner data/photos/); ohne Angabe nur im Speicher (Tests). */
+  images?: ImageStore;
   auth?: AuthConfig;
   /** Claude oder Ollama (siehe ai/provider.ts); ohne Angabe aus der Umgebung bzw. server/.env. */
   ai?: Ai;
@@ -241,11 +240,11 @@ export function createApp({
   authLimits?: AuthLimits;
   /** Hinter einem Proxy (Cloudflare Tunnel, Render …): IP-Adresse aus dessen Header nehmen (TRUST_PROXY=1). */
   trustProxy?: boolean;
-}) {
-  const community = new CommunityStore(communityFile);
-  const feedback = new FeedbackStore(feedbackFile);
+} = {}) {
+  const community = new CommunityStore(db, images);
+  const feedback = new FeedbackStore(db, images);
   const users = new UserStore(db, auth.adminEmails.map((e) => e.toLowerCase()), passwordCost);
-  const overrides = new OverrideStore(overridesFile);
+  const overrides = new OverrideStore(db);
   const diary = new DiaryStore(db);
   /** Alles, was App und Server abgleichen (bisher das Tagebuch), in der Tabelle sync_records. */
   const synced = new SyncStore(db);
@@ -322,12 +321,27 @@ export function createApp({
   /** Lebenszeichen und welche KI gerade nutzbar ist (Profilzeile in der App). */
   app.get("/api/health", async (c) => c.json({ ok: true, ai: await ai.status() }));
 
-  app.get("/api/catalog", (c) =>
+  app.get("/api/catalog", async (c) =>
     c.json({
       ingredients: INGREDIENTS,
-      recipes: catalogRecipes().map((r) => ({ ...r, diet: recipeDiet(r, ingredientById) })),
+      recipes: (await catalogRecipes()).map((r) => ({ ...r, diet: recipeDiet(r, ingredientById) })),
     }),
   );
+
+  /**
+   * Fotos aus dem Bildspeicher (Galerie der Rezepte, Fotos geteilter Rezepte) – öffentlich wie die Galerie selbst. Unter
+   * einem Schlüssel liegt immer dasselbe Bild, deshalb darf der Browser es lange zwischenspeichern.
+   */
+  app.get("/api/images/:key", async (c) => {
+    const key = c.req.param("key");
+    const image = isImageKey(key) ? await images.get(key) : undefined;
+    if (!image) return c.json({ error: "not_found" }, 404);
+    return c.body(image.bytes, 200, {
+      "Content-Type": image.type,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    });
+  });
 
   app.post("/api/analyze/meal", async (c) => {
     const body = ImageBody.parse(await c.req.json());
@@ -352,7 +366,7 @@ export function createApp({
     const extraRecipes = preferences ? await generateRecipes(ai, preferences, 8, language) : [];
     const plan = planMonth({
       request,
-      recipes: [...catalogRecipes(), ...recipes.map(asRecipe), ...extraRecipes],
+      recipes: [...(await catalogRecipes()), ...recipes.map(asRecipe), ...extraRecipes],
       ingredients: ingredientById,
       startDate,
     });
@@ -364,7 +378,7 @@ export function createApp({
     const body = Preferences.extend({ mealType: MealType.optional(), recipes: z.array(RecipeBody).max(500).default([]) }).parse(
       await c.req.json(),
     );
-    const ids = [...catalogRecipes(), ...body.recipes.map(asRecipe)]
+    const ids = [...(await catalogRecipes()), ...body.recipes.map(asRecipe)]
       .filter((r) => (!body.mealType || r.mealTypes.includes(body.mealType)) && matchesPreferences(r, body, ingredientById))
       .map((r) => r.id);
     return c.json({ recipeIds: [...new Set(ids)] });
@@ -391,16 +405,16 @@ export function createApp({
   });
 
   // Bewertungen, Fotos und Meldungen zu Rezepten (Katalog, eigene und Community).
-  app.get("/api/recipes/ratings", async (c) => c.json(feedback.recipeRatings(await actorId(c))));
+  app.get("/api/recipes/ratings", async (c) => c.json(await feedback.recipeRatings(await actorId(c))));
 
-  app.get("/api/recipes/top-photos", async (c) => c.json(feedback.topPhotos(await actorId(c))));
+  app.get("/api/recipes/top-photos", async (c) => c.json(await feedback.topPhotos(await actorId(c))));
 
   app.get("/api/recipes/flags", async (c) => {
     await requireAdmin(c);
-    return c.json(feedback.flagSummary());
+    return c.json(await feedback.flagSummary());
   });
 
-  app.get("/api/recipes/overrides", (c) => c.json(overrides.all()));
+  app.get("/api/recipes/overrides", async (c) => c.json(await overrides.all()));
 
   app.post("/api/recipes/improve", async (c) => {
     const body = z
@@ -418,32 +432,35 @@ export function createApp({
 
   app.post("/api/recipes/:id/rating", async (c) => {
     const { stars } = Stars.parse(await c.req.json());
-    return c.json(feedback.rateRecipe(await actorId(c), RecipeIdParam.parse(c.req.param("id")), stars));
+    return c.json(await feedback.rateRecipe(await actorId(c), RecipeIdParam.parse(c.req.param("id")), stars));
   });
 
-  app.get("/api/recipes/:id/photos", async (c) => c.json(feedback.photos(RecipeIdParam.parse(c.req.param("id")), await actorId(c))));
+  app.get("/api/recipes/:id/photos", async (c) => c.json(await feedback.photos(RecipeIdParam.parse(c.req.param("id")), await actorId(c))));
 
   app.post("/api/recipes/:id/photos", async (c) => {
     const body = PhotoBody.parse(await c.req.json());
     const user = await currentUser(c);
     const actor = user ? `user:${user.id}` : deviceId(c);
-    const photo = feedback.addPhoto(actor, RecipeIdParam.parse(c.req.param("id")), user?.name ?? body.authorName, body.uri);
-    return photo === "limit" ? c.json({ error: "photo_limit" }, 429) : c.json(photo, 201);
+    const photo = await feedback.addPhoto(actor, RecipeIdParam.parse(c.req.param("id")), user?.name ?? body.authorName, body.uri);
+    if (photo === "limit") return c.json({ error: "photo_limit" }, 429);
+    // Kein JPEG, PNG oder WebP (die ersten Bytes zählen, nicht die Angabe in der data-URI).
+    if (photo === "invalid") return c.json({ error: "invalid_image" }, 400);
+    return c.json(photo, 201);
   });
 
   app.post("/api/photos/:id/rating", async (c) => {
     const { stars } = Stars.parse(await c.req.json());
-    const photo = feedback.ratePhoto(await actorId(c), c.req.param("id"), stars);
+    const photo = await feedback.ratePhoto(await actorId(c), c.req.param("id"), stars);
     return photo ? c.json(photo) : c.json({ error: "not_found" }, 404);
   });
 
   app.delete("/api/photos/:id", async (c) =>
-    feedback.removePhoto(await actorId(c), c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
+    (await feedback.removePhoto(await actorId(c), c.req.param("id"))) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
   );
 
   app.post("/api/recipes/:id/flags", async (c) => {
     const body = z.object({ reason: z.enum(FLAG_REASONS), note: z.string().trim().max(500).default("") }).parse(await c.req.json());
-    feedback.flag(await actorId(c), RecipeIdParam.parse(c.req.param("id")), body.reason, body.note);
+    await feedback.flag(await actorId(c), RecipeIdParam.parse(c.req.param("id")), body.reason, body.note);
     return c.body(null, 204);
   });
 
@@ -590,7 +607,7 @@ export function createApp({
       if (e instanceof DiaryFullError) return c.json({ error: "diary_full" }, 413);
       throw e;
     }
-    return c.json({ ...community.transferActor(device, actor), ...feedback.transferActor(device, actor), diary: diaryEntries });
+    return c.json({ ...(await community.transferActor(device, actor)), ...(await feedback.transferActor(device, actor)), diary: diaryEntries });
   });
 
   /**
@@ -607,10 +624,10 @@ export function createApp({
       await countingFailures(key, () => users.checkPassword(user.id, body.password ?? ""));
     }
     const actor = `user:${user.id}`;
-    community.removeActor(actor);
-    feedback.removeActor(actor);
+    await community.removeActor(actor);
+    await feedback.removeActor(actor);
     await synced.remove(actor);
-    if (user.role === "admin") overrides.anonymize(user.name);
+    if (user.role === "admin") await overrides.anonymize(user.name);
     await users.delete(user.id);
     return c.body(null, 204);
   });
@@ -628,8 +645,8 @@ export function createApp({
       exportedAt,
       account: { ...me(user), lastLoginAt: user.lastLoginAt, ...(user.provider === "password" ? { emailVerified: user.emailVerified === true } : {}) },
       diary: await diary.entries(actor),
-      community: community.exportFor(actor),
-      ...feedback.exportFor(actor),
+      community: await community.exportFor(actor),
+      ...(await feedback.exportFor(actor)),
     });
   });
 
@@ -659,26 +676,26 @@ export function createApp({
   });
 
   /** Nutzerverzeichnis für angemeldete Nutzer:innen – ohne E-Mail-Adressen. */
+  /** Wie viele Fotos und Rezepte jedes Konto geteilt hat (für Nutzerverzeichnis und Admin-Bereich). */
+  const sharedCounts = async () => {
+    const [photos, recipes] = await Promise.all([feedback.photoCountsByAuthor(), community.countsByAuthor()]);
+    return (u: User) => ({ photos: photos.get(`user:${u.id}`) ?? 0, recipes: recipes.get(`user:${u.id}`) ?? 0 });
+  };
+
   app.get("/api/users", async (c) => {
     await requireUser(c);
+    const counts = await sharedCounts();
     return c.json(
-      (await users.list(c.req.query("q") ?? ""))
-        .filter((u) => !u.blocked)
-        .map((u) => ({ ...UserStore.toPublic(u), photos: feedback.photoCount(`user:${u.id}`), recipes: community.count(`user:${u.id}`) })),
+      (await users.list(c.req.query("q") ?? "")).filter((u) => !u.blocked).map((u) => ({ ...UserStore.toPublic(u), ...counts(u) })),
     );
   });
 
   // Admin-Bereich: Nutzer, Meldungen, Fotos, Community und Katalogrezepte verwalten.
   app.get("/api/admin/users", async (c) => {
     await requireAdmin(c);
+    const counts = await sharedCounts();
     return c.json(
-      (await users.list(c.req.query("q") ?? "")).map((u) => ({
-        ...me(u),
-        blocked: u.blocked,
-        lastLoginAt: u.lastLoginAt,
-        photos: feedback.photoCount(`user:${u.id}`),
-        recipes: community.count(`user:${u.id}`),
-      })),
+      (await users.list(c.req.query("q") ?? "")).map((u) => ({ ...me(u), blocked: u.blocked, lastLoginAt: u.lastLoginAt, ...counts(u) })),
     );
   });
 
@@ -693,22 +710,22 @@ export function createApp({
 
   app.delete("/api/admin/flags/:recipeId", async (c) => {
     await requireAdmin(c);
-    return c.json({ resolved: feedback.resolveFlags(c.req.param("recipeId")) });
+    return c.json({ resolved: await feedback.resolveFlags(c.req.param("recipeId")) });
   });
 
   app.get("/api/admin/photos", async (c) => {
     await requireAdmin(c);
-    return c.json(feedback.recentPhotos(await actorId(c)));
+    return c.json(await feedback.recentPhotos(await actorId(c)));
   });
 
   app.delete("/api/admin/photos/:id", async (c) => {
     await requireAdmin(c);
-    return feedback.removePhotoAsAdmin(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
+    return (await feedback.removePhotoAsAdmin(c.req.param("id"))) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
   });
 
   app.delete("/api/admin/community/:id", async (c) => {
     await requireAdmin(c);
-    return community.removeAsAdmin(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
+    return (await community.removeAsAdmin(c.req.param("id"))) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
   });
 
   app.put("/api/admin/recipes/:id", async (c) => {
@@ -719,32 +736,33 @@ export function createApp({
       .partial()
       .extend({ hidden: z.boolean().optional() })
       .parse(await c.req.json());
-    return c.json(overrides.set(id, patch as Parameters<typeof overrides.set>[1], admin.name));
+    return c.json(await overrides.set(id, patch as Parameters<typeof overrides.set>[1], admin.name));
   });
 
   app.delete("/api/admin/recipes/:id", async (c) => {
     await requireAdmin(c);
-    return overrides.remove(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
+    return (await overrides.remove(c.req.param("id"))) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
   });
 
   app.get("/api/community/recipes", async (c) => {
     const sort = c.req.query("sort") === "new" ? "new" : "popular";
-    return c.json(community.list(await actorId(c), { sort, query: c.req.query("q") ?? "" }));
+    return c.json(await community.list(await actorId(c), { sort, query: c.req.query("q") ?? "" }));
   });
 
+  /** Ein eigenes Foto des Rezepts (data-URI) kommt in den Bildspeicher; im Rezept steht danach sein Pfad. */
   app.post("/api/community/recipes", async (c) => {
     const body = z.object({ authorName: z.string().trim().min(1).max(40), recipe: RecipeBody }).parse(await c.req.json());
     const user = await currentUser(c);
-    return c.json(community.publish(user ? `user:${user.id}` : deviceId(c), user?.name ?? body.authorName, asRecipe(body.recipe)), 201);
+    return c.json(await community.publish(user ? `user:${user.id}` : deviceId(c), user?.name ?? body.authorName, asRecipe(body.recipe)), 201);
   });
 
   app.post("/api/community/recipes/:id/like", async (c) => {
-    const view = community.toggleLike(await actorId(c), c.req.param("id"));
+    const view = await community.toggleLike(await actorId(c), c.req.param("id"));
     return view ? c.json(view) : c.json({ error: "not_found" }, 404);
   });
 
   app.delete("/api/community/recipes/:id", async (c) =>
-    community.remove(await actorId(c), c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
+    (await community.remove(await actorId(c), c.req.param("id"))) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
   );
 
   app.get("/api/delivery/providers", (c) =>

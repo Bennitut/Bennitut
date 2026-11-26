@@ -18,7 +18,6 @@ const noAi = new Ai({ hasAnthropicKey: false, ollama: { url: "http://ollama.test
 const dir = mkdtempSync(join(tmpdir(), "foodtracker-diary-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const app = createApp({
-  communityFile: null,
   auth: { appleAudiences: [], googleAudiences: [], adminEmails: [], allowDevLogin: true },
   ai: noAi,
 });

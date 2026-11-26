@@ -7,7 +7,6 @@ const noAi = new Ai({ hasAnthropicKey: false, ollama: { url: "http://ollama.test
   throw new TypeError("offline");
 });
 const app = createApp({
-  communityFile: null,
   auth: { appleAudiences: ["host.exp.Exponent"], googleAudiences: [], adminEmails: ["chefin@example.com"], allowDevLogin: true },
   ai: noAi,
 });

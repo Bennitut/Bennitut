@@ -43,6 +43,8 @@ export function startupMessage(input: {
   mail?: boolean;
   /** Wo Konten und Sitzungen liegen (Db.description), z. B. „SQLite-Datei data/foodtracker.db“. */
   storage?: string;
+  /** Wo die Fotos liegen (ImageStore.description), z. B. „Ordner data/photos“. */
+  photos?: string;
 }): string {
   const { port, addresses } = input;
   const lines = [
@@ -61,6 +63,7 @@ export function startupMessage(input: {
             : "  E-Mail:              nicht eingerichtet – „Passwort vergessen?“ ist ausgeblendet (SMTP_* in server/.env).",
         ]),
     ...(input.storage ? [`  Daten:               ${input.storage}`] : []),
+    ...(input.photos ? [`  Fotos:               ${input.photos}`] : []),
     `  Einstellungen:       ${input.envFile ?? "keine server/.env (Vorlage: server/.env.example)"}`,
   ];
   if (input.platform === "win32") {

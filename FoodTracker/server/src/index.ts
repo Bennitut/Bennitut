@@ -6,7 +6,8 @@ import { createApp } from "./app.js";
 import { mailerFromEnv } from "./mail/mailer.js";
 import { lanAddresses, startupMessage } from "./startInfo.js";
 import { openDatabase, type Db } from "./storage/db.js";
-import { importLegacyDiary, importLegacyUsers } from "./storage/legacy.js";
+import { DirectoryImageStore } from "./storage/images.js";
+import { importLegacyCommunity, importLegacyDiary, importLegacyFeedback, importLegacyOverrides, importLegacyUsers } from "./storage/legacy.js";
 import { migrate } from "./storage/migrations.js";
 
 /** Kommagetrennte Liste aus einer Umgebungsvariable. */
@@ -29,7 +30,12 @@ try {
   process.exit(1);
 }
 
-// Einmaliger Umzug aus den JSON-Dateien älterer Fassungen (storage/legacy.ts): Konten, Sicherung der Ernährungshistorie.
+// Fotos (Galerie der Rezepte, Fotos geteilter Rezepte) als Dateien in diesem Ordner, in der Datenbank nur ihr Schlüssel.
+const photosDir = process.env.PHOTOS_DIR?.trim() || "data/photos";
+const images = new DirectoryImageStore(photosDir);
+
+// Einmaliger Umzug aus den JSON-Dateien älterer Fassungen (storage/legacy.ts): Konten, Sicherung der
+// Ernährungshistorie, Community-Rezepte, Fotos mit Sternen und Meldungen, Admin-Änderungen an Katalogrezepten.
 const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 const usersFile = process.env.USERS_FILE?.trim() || "data/users.json";
 try {
@@ -57,14 +63,48 @@ try {
 } catch (e) {
   console.error(`Sicherung der Ernährungshistorie aus ${diaryDir} konnte nicht übernommen werden (${(e as Error).message}). Die Dateien bleiben liegen.`);
 }
+const skipped = (count: number) => (count ? ` (${n(count, "Eintrag", "Einträge")} gab es schon oder war unlesbar)` : "");
+const communityFile = process.env.COMMUNITY_FILE?.trim() || "data/community.json";
+try {
+  const moved = await importLegacyCommunity(db, images, communityFile);
+  if (moved) {
+    console.log(
+      `Community-Rezepte aus ${communityFile} in die Datenbank übernommen: ${n(moved.recipes, "Rezept", "Rezepte")} mit ` +
+        `${n(moved.likes, "Favorit", "Favoriten")}, ${n(moved.images, "Foto", "Fotos")} jetzt als Datei in ${photosDir}${skipped(moved.skipped)}. Die alte Datei ist gelöscht.`,
+    );
+  }
+} catch (e) {
+  console.error(`Community-Rezepte aus ${communityFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+}
+const feedbackFile = process.env.FEEDBACK_FILE?.trim() || "data/feedback.json";
+try {
+  const moved = await importLegacyFeedback(db, images, feedbackFile);
+  if (moved) {
+    console.log(
+      `Fotos, Sterne und Meldungen aus ${feedbackFile} in die Datenbank übernommen: ${n(moved.photos, "Foto", "Fotos")} (jetzt als Datei in ` +
+        `${photosDir}), ${n(moved.ratings, "Bewertung", "Bewertungen")}, ${n(moved.flags, "Meldung", "Meldungen")}${skipped(moved.skipped)}. Die alte Datei ist gelöscht.`,
+    );
+  }
+} catch (e) {
+  console.error(`Fotos, Sterne und Meldungen aus ${feedbackFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+}
+const overridesFile = process.env.OVERRIDES_FILE?.trim() || "data/recipe-overrides.json";
+try {
+  const moved = await importLegacyOverrides(db, overridesFile);
+  if (moved) {
+    console.log(
+      `Admin-Änderungen an Katalogrezepten aus ${overridesFile} in die Datenbank übernommen: ${n(moved.recipes, "Rezept", "Rezepte")}${skipped(moved.skipped)}. Die alte Datei ist gelöscht.`,
+    );
+  }
+} catch (e) {
+  console.error(`Admin-Änderungen aus ${overridesFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+}
 
 const ai = new Ai(aiSettingsFromEnv());
 const mailer = mailerFromEnv();
 const app = createApp({
-  communityFile: process.env.COMMUNITY_FILE ?? "data/community.json",
-  feedbackFile: process.env.FEEDBACK_FILE ?? "data/feedback.json",
   db,
-  overridesFile: process.env.OVERRIDES_FILE ?? "data/recipe-overrides.json",
+  images,
   auth: {
     appleAudiences: list(process.env.APPLE_BUNDLE_IDS ?? "host.exp.Exponent"),
     googleAudiences: list(process.env.GOOGLE_CLIENT_IDS),
@@ -88,6 +128,7 @@ const server = serve({ fetch: app.fetch, port }, async () => {
       platform: process.platform,
       mail: mailer !== null,
       storage: db.description,
+      photos: images.description,
     }),
   );
   if (process.env.ALLOW_DEV_LOGIN === "1") console.log("\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN.");

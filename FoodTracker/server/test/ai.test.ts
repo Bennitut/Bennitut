@@ -196,7 +196,7 @@ describe("Ollama", () => {
 });
 
 describe("KI-Endpunkte", () => {
-  const offline = () => createApp({ communityFile: null, ai: new Ai(settings(), fakeOllama({ models: null }).fetchFn) });
+  const offline = () => createApp({ ai: new Ai(settings(), fakeOllama({ models: null }).fetchFn) });
   /** Wie die App: mit Einwilligung (`consent: null` = ohne Header, wie eine ältere App oder nach dem Widerruf). */
   const post = (app: ReturnType<typeof createApp>, path: string, body: unknown, consent: string | null = String(AI_CONSENT_VERSION)) =>
     app.request(path, {
@@ -229,7 +229,7 @@ describe("KI-Endpunkte", () => {
     quiet();
     // Die KI wäre bereit und würde antworten – ohne Einwilligung darf sie keine Anfrage sehen.
     const ollama = fakeOllama({ chat: () => reply(TRANSLATED) });
-    const app = createApp({ communityFile: null, ai: new Ai(settings(), ollama.fetchFn) });
+    const app = createApp({ ai: new Ai(settings(), ollama.fetchFn) });
     for (const consent of [null, "", "0", "abc", "1.5", "-1", " "]) {
       for (const [path, body] of AI_REQUESTS) {
         const res = await post(app, path, body, consent);
@@ -270,7 +270,7 @@ describe("KI-Endpunkte", () => {
 
   it("melden in /api/health, welche KI aktiv ist", async () => {
     expect(await (await offline().request("/api/health")).json()).toEqual({ ok: true, ai: { provider: null, model: null, state: "not_configured" } });
-    const app = createApp({ communityFile: null, ai: new Ai(settings(), fakeOllama().fetchFn) });
+    const app = createApp({ ai: new Ai(settings(), fakeOllama().fetchFn) });
     expect(await (await app.request("/api/health")).json()).toEqual({ ok: true, ai: { provider: "ollama", model: "gemma4:e4b", state: "ready" } });
   });
 
@@ -290,7 +290,7 @@ describe("KI-Endpunkte", () => {
       },
     };
     const ollama = fakeOllama({ chat: () => reply(draft) });
-    const app = createApp({ communityFile: null, ai: new Ai(settings(), ollama.fetchFn) });
+    const app = createApp({ ai: new Ai(settings(), ollama.fetchFn) });
     const res = await post(app, "/api/recipes/import", { caption: "Kartoffelsalat: 600 g Kartoffeln …", language: "de" });
     expect(res.status).toBe(200);
     const { recipe } = await res.json();

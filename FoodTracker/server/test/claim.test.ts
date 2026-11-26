@@ -33,7 +33,6 @@ const ownRecipe = {
 
 function setup() {
   const app = createApp({
-    communityFile: null,
     auth: { appleAudiences: [], googleAudiences: [], adminEmails: [], allowDevLogin: false },
     ai: noAi,
     passwordCost: FAST,

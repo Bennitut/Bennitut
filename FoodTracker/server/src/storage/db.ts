@@ -49,6 +49,22 @@ export function toPostgresPlaceholders(sql: string): string {
   return out;
 }
 
+/**
+ * Viele IDs bzw. Zeilen in Paketen fester Größe: wenige Rundreisen zur Datenbank (wichtig bei Postgres im Netz) und
+ * nur eine Handvoll verschiedener Anweisungen, die SQLite zwischenspeichert.
+ */
+const BATCH_SIZES = [200, 50, 10, 1];
+export function* batches<T>(items: readonly T[]): Generator<T[]> {
+  for (let i = 0; i < items.length; ) {
+    const size = BATCH_SIZES.find((s) => s <= items.length - i)!;
+    yield items.slice(i, i + size);
+    i += size;
+  }
+}
+
+/** „?, ?, ?“ für eine Liste in IN (…). */
+export const placeholders = (items: readonly unknown[]) => items.map(() => "?").join(", ");
+
 /** Zeilen als gewöhnliche Objekte (node:sqlite liefert Objekte ohne Prototyp). */
 const plain = <T>(row: unknown): T => ({ ...(row as object) }) as T;
 
