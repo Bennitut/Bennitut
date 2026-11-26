@@ -25,6 +25,7 @@ import type {
   Role,
   ShoppingItem,
 } from "./types";
+import type { DeviceClaim } from "./deviceClaim";
 import type { DiarySyncRequest, DiarySyncResponse } from "./diary";
 import type { ServerHealth } from "./serverStatus";
 
@@ -217,6 +218,8 @@ export const api = {
   deleteAccount: (password: string | undefined) => send<void>("DELETE", "/api/auth/me", password === undefined ? {} : { password }),
   /** „Meine Daten exportieren“: alles, was der Server zum Konto speichert. */
   exportAccount: () => request<Record<string, unknown>>("/api/auth/export"),
+  /** Nach der Anmeldung: Was dieses Gerät ohne Konto auf dem Server hat, gehört danach dem Konto (lib/deviceClaim.ts). */
+  claimDevice: () => post<DeviceClaim>("/api/auth/claim-device", {}),
   loginApple: (identityToken: string, fullName: string | undefined) => post<Login>("/api/auth/apple", { identityToken, fullName }),
   loginGoogle: (idToken: string) => post<Login>("/api/auth/google", { idToken }),
   loginDev: (name: string, email: string | undefined) => post<Login>("/api/auth/dev", { name, email }),

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { isUILanguage, regionFromCode } from "../i18n";
 import { ApiError, HAS_SERVER, api, setAuthToken, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
+import { claimedAnything, needsDeviceClaim, type DeviceClaim } from "./deviceClaim";
 import { addEntry, emptyDiary, loadDiary, removeEntry, saveDiary, syncDiary, type DiaryState } from "./diary";
 import { importDiaryJson, type ImportResult } from "./history";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
@@ -69,6 +70,11 @@ interface PersistedState {
   ratings: Record<string, RatingSummary>;
   /** Änderungen der Admins an Katalogrezepten (zuletzt geladener Stand, gilt auch offline). */
   catalogOverrides: Record<string, RecipeOverride>;
+  /**
+   * Konto, in das die Daten dieses Geräts auf dem Server zuletzt übernommen wurden (lib/deviceClaim.ts); null =
+   * abgemeldet bzw. noch nicht übernommen.
+   */
+  claimedFor: string | null;
   settings: Settings;
 }
 
@@ -123,6 +129,7 @@ function initialState(): PersistedState {
     myPhotos: [],
     ratings: {},
     catalogOverrides: {},
+    claimedFor: null,
     settings: defaultSettings(),
   };
 }
@@ -220,6 +227,8 @@ interface Store extends PersistedState {
   catalog: typeof baseCatalog;
   /** Anmelden (Konto und Token speichern) bzw. mit null abmelden. */
   setAuth: (auth: Session | null) => void;
+  /** Was nach der Anmeldung vom Gerät ins Konto übernommen wurde – nur wenn etwas dabei war, nur in dieser Sitzung. */
+  deviceClaim: DeviceClaim | null;
   isAdmin: boolean;
   /** Lädt die Änderungen der Admins an Katalogrezepten neu. */
   refreshOverrides: () => Promise<void>;
@@ -280,6 +289,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [storageIssues, setStorageIssues] = useState<StorageIssues>({ diary: null, state: false });
   const [syncState, setSyncState] = useState<"idle" | "syncing" | "offline">("idle");
   const [syncRequest, setSyncRequest] = useState(0);
+  const [deviceClaim, setDeviceClaim] = useState<DeviceClaim | null>(null);
   // Speichern: was darf geschrieben werden (nach einem Lesefehler nichts, damit nichts überschrieben wird), was steht
   // schon im Speicher, und das Tagebuch vom alten Speicherort, bis es unter dem eigenen Schlüssel gespeichert ist.
   const persist = useRef({
@@ -408,6 +418,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (retry) clearTimeout(retry);
     };
   }, [ready, owner, pendingCount, syncedOwner, syncRequest]);
+
+  // Nach jeder Anmeldung einmal: Was dieses Gerät ohne Konto auf dem Server hat (Fotos, Sterne, geteilte Rezepte,
+  // Favoriten, Meldungen, Sicherung des Tagebuchs), gehört danach dem Konto (lib/deviceClaim.ts). Ohne Verbindung beim
+  // nächsten Start noch einmal. setAuth setzt `claimedFor` zurück, damit auch kommt, was ohne Konto dazukam.
+  const accountId = session?.user.id ?? null;
+  useEffect(() => {
+    if (!ready || !HAS_SERVER || !needsDeviceClaim(accountId, state.claimedFor)) return;
+    let current = true;
+    api.claimDevice().then(
+      (claim) => {
+        if (!current) return;
+        setState((s) => ({ ...s, claimedFor: accountId }));
+        if (!claimedAnything(claim)) return;
+        setDeviceClaim(claim);
+        // Die übernommenen Sterne und Fotos zählen jetzt als „meine“.
+        Promise.all([api.ratings(), api.topPhotos()])
+          .then(([ratings, top]) => {
+            setState((s) => ({ ...s, ratings }));
+            setTopPhotos(top);
+          })
+          .catch(() => {});
+      },
+      () => {
+        // Kein Server, abgelaufene Sitzung o. Ä.: beim nächsten Start bzw. nach der nächsten Anmeldung noch einmal.
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [ready, accountId, state.claimedFor]);
 
   // Bewertungen, Galerie-Fotos, Admin-Änderungen und Konto einmal beim Start laden;
   // ohne Server gilt der gespeicherte Stand.
@@ -614,11 +654,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateMyPhoto: (id, patch) => setState((s) => ({ ...s, myPhotos: s.myPhotos.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       removeMyPhoto: (id) => setState((s) => ({ ...s, myPhotos: s.myPhotos.filter((p) => p.id !== id) })),
       auth: session,
+      deviceClaim,
       setAuth: (auth) => {
         setAuthToken(auth?.token ?? null);
         setSession(auth);
-        // Der Kontoname wird auch als Anzeigename für geteilte Rezepte genutzt.
-        if (auth) setState((s) => (s.settings.displayName ? s : { ...s, settings: { ...s.settings, displayName: auth.user.name } }));
+        setDeviceClaim(null);
+        setState((s) => ({
+          ...s,
+          // Nach jeder An- und Abmeldung übernimmt die nächste Anmeldung, was das Gerät dann ohne Konto hat.
+          claimedFor: null,
+          // Der Kontoname wird auch als Anzeigename für geteilte Rezepte genutzt.
+          settings: auth && !s.settings.displayName ? { ...s.settings, displayName: auth.user.name } : s.settings,
+        }));
       },
       isAdmin: session?.user.role === "admin",
       refreshOverrides: async () => {
@@ -642,7 +689,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ratingAverages: () =>
         Object.fromEntries(Object.entries(state.ratings).filter(([, r]) => r.count > 0).map(([id, r]) => [id, r.avg])),
     };
-  }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, owner, refreshDiary]);
+  }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, owner, refreshDiary, deviceClaim]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

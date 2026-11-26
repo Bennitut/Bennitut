@@ -4,7 +4,8 @@
 //   npm run web:account               # baut die Web-Version für diesen Server (dist-account/), startet ihn und
 //                                     # spielt durch: Umzug der Anmeldung aus einer älteren Version (Token danach
 //                                     # nicht mehr im übrigen Zustand), Fehler vor dem Absenden (Adresse, kurzes Passwort), Hinweis zur
-//                                     # Zustimmung eines Elternteils, Registrieren, Anmeldung bleibt nach dem Neuladen
+//                                     # Zustimmung eines Elternteils, Registrieren (Sterne, die das Gerät ohne Konto
+//                                     # vergeben hat, gehören danach dem Konto), Anmeldung bleibt nach dem Neuladen
 //                                     # (eigener Schlüssel, nicht im übrigen Zustand), Passwort ändern (falsch/richtig),
 //                                     # Abmelden, Anmelden mit altem und neuem Passwort, „Passwort vergessen?“ bis zum
 //                                     # falschen Code, „Meine Daten exportieren“, Konto löschen (falsch/richtig)
@@ -167,10 +168,24 @@ async function main() {
     await see("Das Passwort braucht mindestens 10 Zeichen.", "Passwortlänge vor dem Absenden");
     step("Fehler vor dem Absenden und Hinweis zur Zustimmung eines Elternteils");
 
+    // Vor der Registrierung hat das Gerät ohne Konto ein Rezept bewertet – danach gehören die Sterne dem neuen Konto.
+    const { deviceId } = await page.evaluate(() => JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}"));
+    const rated = await fetch(`${API}/api/recipes/shakshuka/rating`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Device-Id": deviceId ?? "" },
+      body: JSON.stringify({ stars: 4 }),
+    });
+    if (!rated.ok) failures.push(`Bewerten ohne Konto: HTTP ${rated.status}`);
+
     await field("Passwort").fill(first);
     await button("Konto anlegen").click();
     await see("Angemeldet als Nachtschicht", "nach der Registrierung");
     await see("über E-Mail", "Anmeldeart");
+    await see("gehört jetzt zu deinem Konto", "Hinweis nach der Übernahme der Gerätedaten");
+    const token = await page.evaluate(() => JSON.parse(localStorage.getItem("foodtracker.session.v1") ?? "{}").token);
+    const ratings = await (await fetch(`${API}/api/recipes/ratings`, { headers: { "X-Device-Id": deviceId ?? "", Authorization: `Bearer ${token}` } })).json();
+    if (ratings.shakshuka?.mine !== 4) failures.push(`Sterne ohne Konto nicht im Konto: ${JSON.stringify(ratings.shakshuka)}`);
+    step("Gerätedaten beim Registrieren ins Konto übernommen (Sterne ohne Konto gehören dem Konto, Hinweis im Profil)");
     await page.reload({ waitUntil: "networkidle" });
     await see("Angemeldet als Nachtschicht", "nach dem Neuladen");
     const storage = await page.evaluate(() => ({ session: localStorage.getItem("foodtracker.session.v1"), state: localStorage.getItem("foodtracker/state/v2") }));

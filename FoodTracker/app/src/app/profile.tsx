@@ -23,7 +23,7 @@ const BAR_LEGEND: Record<"day" | "week" | "month", TKey> = { day: "history.barsD
 const DAYS_PAGE = 30;
 
 export default function ProfileScreen() {
-  const { settings, updateSettings, diary, diaryState, importDiary, diarySync, refreshDiary, auth, setAuth, isAdmin } = useStore();
+  const { settings, updateSettings, diary, diaryState, importDiary, diarySync, refreshDiary, auth, setAuth, isAdmin, deviceClaim } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
   const [range, setRange] = useState<HistoryRange>(7);
@@ -145,6 +145,7 @@ export default function ProfileScreen() {
             <Muted>
               {auth.user.email ?? ""} {t("account.via", { provider: providerName(auth.user.provider, t("account.providerEmail")) })}
             </Muted>
+            {deviceClaim ? <Text style={styles.text}>{t("account.deviceClaimed")}</Text> : null}
             <Button label={t("account.directory")} variant="secondary" onPress={() => router.push("/users")} />
             {isAdmin ? <Button label={t("account.adminArea")} onPress={() => router.push("/admin")} /> : null}
             <Button
