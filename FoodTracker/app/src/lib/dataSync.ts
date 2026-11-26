@@ -298,7 +298,8 @@ export function applyRemote<S extends SyncedState>(state: S, kind: DataKind, rec
   let changed = false;
   for (const record of sorted) {
     const time = typeof record.updatedAt === "string" ? Date.parse(record.updatedAt) : NaN;
-    if (typeof record.id !== "string" || !Number.isFinite(time) || (record.data !== null && record.data === undefined)) continue;
+    // Ohne Inhalt (undefined) ist es weder Eintrag noch Löschmarke.
+    if (typeof record.id !== "string" || !Number.isFinite(time) || record.data === undefined) continue;
     const local = k.at[record.id];
     if (local !== undefined && time < local) continue;
     const next = applyRecord(kind, data, record, k);
