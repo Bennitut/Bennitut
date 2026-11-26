@@ -133,24 +133,39 @@ Auftragsverarbeitung (Art. 28 DSGVO) mit dem Hoster]]. Er protokolliert [[ANGABE
 Zeitpunkt, aufgerufene Adresse, Fehlermeldungen]] und löscht die Protokolle nach [[ANGABE: Frist]].
 
 Mit jeder Anfrage schickt FoodTracker die zufällige Geräte-Kennung aus Abschnitt 2. Sie enthält keinen Namen und
-dient dazu, Favoriten, Bewertungen, eigene Fotos und geteilte Rezepte deinem Gerät zuzuordnen.
+dient dazu, Favoriten, Bewertungen, eigene Fotos und geteilte Rezepte deinem Gerät zuzuordnen – bis du dich anmeldest,
+dann gehören sie deinem Konto (B2).
 
 Für den Monatsplan mit Wünschen schickt FoodTracker deine Planungsangaben an den Server (Ernährungsweise,
 Unverträglichkeiten, Speiseregeln, Abneigungen, Kalorien pro Person, Mahlzeiten, Vorrat, Favoriten); der Server
 rechnet den Plan und speichert diese Angaben nicht.
 
-### B2. Konto (freiwillig, Anmeldung mit Apple oder Google)
+### B2. Konto (freiwillig)
 
-FoodTracker funktioniert auch ohne Konto. Meldest du dich mit Apple oder Google an, speichert der Server: den Anbieter,
-deine Kennung beim Anbieter, die E-Mail-Adresse, die der Anbieter übermittelt (bei Apple auf Wunsch eine
-Weiterleitungsadresse), deinen Namen, deine Rolle, ob das Konto gesperrt ist, sowie Zeitpunkt der Registrierung und
-der letzten Anmeldung. Von Sitzungen speichert er nur einen Prüfwert des Sitzungsschlüssels; eine Sitzung gilt 30
-Tage. Im Nutzerverzeichnis sehen andere angemeldete Nutzer:innen deinen Namen, deine Rolle, seit wann du dabei bist
-und wie viele Fotos und Rezepte du geteilt hast – nicht deine E-Mail-Adresse. Admins sehen im Admin-Bereich
-zusätzlich E-Mail-Adresse und letzte Anmeldung.
+FoodTracker funktioniert auch ohne Konto. Für ein Konto meldest du dich mit E-Mail-Adresse und Passwort oder mit Apple
+bzw. Google an. Der Server speichert: die Anmeldeart, deine E-Mail-Adresse (bei Apple auf Wunsch eine
+Weiterleitungsadresse), bei Apple und Google deine Kennung beim Anbieter, deinen Namen, deine Rolle, ob das Konto
+gesperrt ist, sowie Zeitpunkt der Registrierung und der letzten Anmeldung. Dein Passwort speichert er nicht, nur einen
+Prüfwert (scrypt), mit dem er es bei der Anmeldung prüft. Für „Passwort vergessen?“ schickt er einen Code an deine
+E-Mail-Adresse [[ANGABE: Mail-Dienst, über den der Server sendet, z. B. Gmail]] und speichert davon höchstens 30
+Minuten lang nur einen Prüfwert. Von Sitzungen speichert er nur einen Prüfwert des Sitzungsschlüssels; eine Sitzung gilt
+30 Tage. Auf deinem Gerät liegt die Anmeldung im Schlüsselbund bzw. Keystore, im Browser in localStorage.
 
-Rechtsgrundlage: Bereitstellung des gewünschten Kontos (Art. 6 Abs. 1 lit. b DSGVO). [[ANGABE: Speicherdauer und
-„Konto löschen“ – die Funktion fehlt noch in App und Server.]]
+Meldest du dich an, gehört dem Konto danach auch, was dieses Gerät vorher ohne Konto auf dem Server gespeichert hat:
+Fotos, Sterne, geteilte Rezepte, Favoriten, Meldungen und die Sicherung deines Tagebuchs (B4, B6). Die Sicherung unter
+der Geräte-Kennung wird dabei gelöscht.
+
+Im Nutzerverzeichnis sehen andere angemeldete Nutzer:innen deinen Namen, deine Rolle, seit wann du dabei bist und wie
+viele Fotos und Rezepte du geteilt hast – nicht deine E-Mail-Adresse. Admins sehen im Admin-Bereich zusätzlich
+E-Mail-Adresse und letzte Anmeldung.
+
+Im Profil unter „Konto verwalten“ kannst du dein Passwort ändern, alles, was der Server zu deinem Konto speichert, als
+Datei herunterladen („Meine Daten exportieren“) und dein Konto löschen – mit allem, was der Server dazu speichert
+(Sicherung des Tagebuchs, geteilte Rezepte, Favoriten, Fotos, Sterne und Meldungen). Auf deinem Gerät bleibt dabei
+alles erhalten.
+
+Rechtsgrundlage: Bereitstellung des gewünschten Kontos (Art. 6 Abs. 1 lit. b DSGVO). Speicherdauer: bis du dein Konto
+löschst.
 
 ### B3. KI-Funktionen
 
@@ -206,7 +221,8 @@ Demo-Lieferdienst ohne echte Lieferung.]]
 Sobald FoodTracker einen Server erreicht, sichert es dein Tagebuch dort automatisch: Tag und Uhrzeit, Name des
 Gerichts, Kalorien, Eiweiß, Kohlenhydrate und Fett, woher der Eintrag stammt (Foto, Plan, von Hand) und wann er
 zuletzt geändert wurde. Bist du angemeldet, gehört die Sicherung zu deinem Konto – so kommt deine Historie auf einem
-neuen Gerät oder nach dem Löschen der Browserdaten zurück –, sonst zur zufälligen Geräte-Kennung aus Abschnitt 2.
+neuen Gerät oder nach dem Löschen der Browserdaten zurück –, sonst zur zufälligen Geräte-Kennung aus Abschnitt 2. Meldest
+du dich an, wandert die Sicherung der Geräte-Kennung in dein Konto (B2).
 Löschst du einen Eintrag, löscht FoodTracker ihn auch auf dem Server; dort bleibt nur eine Löschmarke (Kennung des
 Eintrags und Zeitpunkt, ohne Inhalt), damit er von deinen anderen Geräten nicht zurückkommt.
 
@@ -219,7 +235,7 @@ Laptop unkritisch, vor einem Server für andere klären.]]
 Rechtsgrundlage: [[ENTSCHEIDUNG: Bereitstellung der gewünschten Sicherung (Art. 6 Abs. 1 lit. b DSGVO) oder – wenn
 die Einträge als Gesundheitsdaten gelten – deine ausdrückliche Einwilligung (Art. 6 Abs. 1 lit. a und Art. 9 Abs. 2
 lit. a DSGVO), siehe oben.]] Speicherdauer: [[ANGABE: z. B. bis du dein Konto löschst bzw. bis … nach der letzten
-Nutzung einer Geräte-Kennung – „Konto löschen“ fehlt noch, siehe B2.]]
+Nutzung einer Geräte-Kennung]]
 
 Unabhängig vom Server kannst du deine Historie im Profil jederzeit als Datei speichern und wieder importieren
 (Abschnitt 2).

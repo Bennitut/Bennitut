@@ -16,7 +16,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Historie sichern** | Das Tagebuch wird nie automatisch gelöscht und liegt in einem eigenen Speicher (auch wenn Fotos den übrigen Speicher füllen; scheitert das Speichern, erscheint ein Hinweis). Mit Server wird es automatisch gesichert – mit Konto kommt es auf einem neuen Gerät oder nach dem Löschen der Browserdaten zurück. Ohne Server und Konto: Export als Tabelle (CSV) oder Sicherung (JSON) und Import ohne Duplikate. |
 | **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos – je Sprache eines; die App zeigt nur Videos in der gewählten Sprache und sucht sonst auf YouTube in dieser Sprache. Dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
-| **Konten & Rollen** | Konto mit E-Mail und Passwort oder Anmeldung mit Apple bzw. Google (optional – die App funktioniert auch anonym); Passwort ändern, Konto mit allen Daten löschen, Daten exportieren (im Server fertig, in der App folgt es). Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
+| **Konten & Rollen** | Konto mit E-Mail und Passwort oder Anmeldung mit Apple bzw. Google (optional – die App funktioniert auch anonym); Passwort ändern, Konto mit allen Daten löschen, Daten exportieren (im Profil unter „Konto verwalten“). Was das Gerät vorher ohne Konto auf dem Server hatte (Fotos, Sterne, geteilte Rezepte, Favoriten, Meldungen, Sicherung des Tagebuchs), gehört nach dem Anmelden dem Konto – ohne Doppeltes. Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
 | **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
 | **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
@@ -198,15 +198,16 @@ vom alten Speicherort, gesperrter Schlüsselbund; Passwortlänge genau wie im Se
 vielen Versuchen).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
 die Sicherung des Tagebuchs und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
-Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash).
+Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash,
+Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
 abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal),
 prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen, und zuletzt die
 Ernährungshistorie (Umzug in den eigenen Speicher, „Alles“, Export, Import nach gelöschten Browserdaten, Hinweis bei
 vollem Speicher) und „Impressum & Datenschutz“ (Link oben auf jeder Seite, „Entwurf“, solange Angaben fehlen); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 `npm run web:account` baut die Web-Version für einen Server auf Port 3917, startet ihn mit leeren Daten und spielt im
-Browser durch: Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren, Anmeldung nach dem
-Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
+Browser durch: Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren (Sterne, die das
+Gerät vorher ohne Konto vergeben hat, gehören danach dem Konto), Anmeldung nach dem Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
 Daten exportieren“ und Konto löschen.
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
@@ -249,6 +250,14 @@ dem Server löschen, mit Passwort bestätigt), `GET /api/auth/export` („Meine 
 gibt es nur mit einem Mail-Dienst (`SMTP_*` in `server/.env`, Beispiel Gmail in `.env.example`); `GET /api/auth/config`
 meldet, ob er eingerichtet ist. Hinter einem Proxy (Cloudflare Tunnel, Render) `TRUST_PROXY=1` setzen, damit die
 Grenzen pro IP-Adresse greifen.
+
+**Was das Gerät ohne Konto hatte, kommt mit:** Nach jeder Anmeldung ruft die App einmal `POST /api/auth/claim-device`
+auf. Fotos, Sterne, geteilte Rezepte, Favoriten und Meldungen der Geräte-ID gehören danach dem Konto, die Sicherung des
+Tagebuchs unter der Geräte-ID wandert ins Konto und ist dort danach weg. Nichts doppelt: Hat das Konto dasselbe Rezept
+oder Foto schon bewertet, favorisiert oder gemeldet, gilt seine Fassung; im Tagebuch gewinnt wie beim Abgleich die
+neuere Fassung. Plan, Vorrat und eigene Rezepte liegen bisher nur auf dem Gerät; sie kommen mit dem Abgleich aller
+Daten ins Konto (Vorrang 1, 9.2 in `BACKLOG.md`). Die Geräte-ID besteht nur aus Buchstaben, Ziffern, „-“ und „_“ –
+der Server lehnt andere ab, damit sich kein Gerät als Konto (`user:<id>`) ausgeben kann.
 
 Der Server liest außerdem diese Umgebungsvariablen:
 
