@@ -60,9 +60,10 @@ FoodTracker/
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
-    ├── src/diary/        Sicherung der Ernährungshistorie (eine Datei pro Konto bzw. Gerät unter data/diary/)
+    ├── src/diary/        Sicherung der Ernährungshistorie (in der Datenbank, pro Konto bzw. Gerät)
     ├── src/storage/      Speicherschicht: SQLite-Datei (data/foodtracker.db) oder Postgres (DATABASE_URL),
-    │                     versionierte Migrationen, einmaliger Umzug aus den JSON-Dateien älterer Fassungen
+    │                     versionierte Migrationen, Tabelle für den Abgleich mit der App (sync.ts), einmaliger
+    │                     Umzug aus den JSON-Dateien älterer Fassungen
     ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und
     │                     Kochvideos je Sprache (videos/de.ts … es.ts, geprüft per YouTube-oEmbed)
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
@@ -207,7 +208,9 @@ gleicher Header und gleiche Fassung wie im Server, Texte für jede KI-Funktion i
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem die Speicherschicht mit SQLite und mit Postgres (pg-mem,
 eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig: Migrationen, Konten und Sitzungen,
 gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
-die Sicherung des Tagebuchs und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
+die Sicherung des Tagebuchs (ebenfalls auf beiden Datenbanken: Seiten, neuere Fassung gewinnt, Grenze ohne halbe
+Änderungen, viele Einträge in Paketen, gleichzeitige Abgleiche, Übernahme ins Konto, Umzug aus `data/diary/` mit
+denselben Revisionen) und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
 Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash,
 Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt) und dass ohne
 Einwilligung keine Anfrage an die KI geht (`403 ai_consent_required` für jede KI-Funktion, Eingaben werden vorher
@@ -218,9 +221,9 @@ prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine F
 Ernährungshistorie (Umzug in den eigenen Speicher, „Alles“, Export, Import nach gelöschten Browserdaten, Hinweis bei
 vollem Speicher) und „Impressum & Datenschutz“ (Link oben auf jeder Seite, „Entwurf“, solange Angaben fehlen); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 `npm run web:account` baut die Web-Version für einen Server auf Port 3917, startet ihn mit leeren Daten und spielt im
-Browser durch: Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren (Sterne, die das
-Gerät vorher ohne Konto vergeben hat, gehören danach dem Konto), Anmeldung nach dem Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
-Daten exportieren“ und Konto löschen; danach die Einwilligung vor der KI („Nicht jetzt“ schickt nichts, „Einverstanden“
+Browser durch: Umzug einer Tagebuch-Sicherung aus `data/diary/` beim Start, Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren (Sterne, die das
+Gerät vorher ohne Konto vergeben hat, und sein Tagebuch gehören danach dem Konto), Anmeldung nach dem Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
+Daten exportieren“ (mit Tagebuch) und Konto löschen (danach ist auch das Tagebuch des Kontos weg); danach die Einwilligung vor der KI („Nicht jetzt“ schickt nichts, „Einverstanden“
 schickt mit Einwilligung, danach keine Frage mehr, der Server lehnt Anfragen ohne ab, Widerruf im Profil, Abschnitt
 „Mindestalter“ in der Datenschutzerklärung).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
@@ -292,14 +295,13 @@ und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
 - Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → „Anmelden
   oder registrieren“ die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
 
-Konten, Sitzungen und Codes zum Zurücksetzen liegen in der Datenbank (nächster Abschnitt), Admin-Änderungen an Rezepten
-in `data/recipe-overrides.json`, die Sicherung der Ernährungshistorie in `data/diary/` (eine Datei pro Konto bzw.
-Geräte-ID, `DIARY_DIR`).
+Konten, Sitzungen, Codes zum Zurücksetzen und die Sicherung der Ernährungshistorie liegen in der Datenbank (nächster
+Abschnitt), Admin-Änderungen an Rezepten in `data/recipe-overrides.json`.
 
 ## Datenbank
 
-Konten und Sitzungen speichert der Server in einer Datenbank (`src/storage/`); nach und nach kommen alle Daten dazu
-(Vorrang 1, 9.2 in `BACKLOG.md`):
+Konten, Sitzungen und die Sicherung der Ernährungshistorie speichert der Server in einer Datenbank (`src/storage/`); nach
+und nach kommen alle Daten dazu (Vorrang 1, 9.2 in `BACKLOG.md`):
 
 - **Ohne Einstellung** eine Datei auf dem eigenen Rechner: `server/data/foodtracker.db` (SQLite, in Node.js ab 22.13
   eingebaut – nichts zu installieren, keine nativen Pakete; anderer Ort mit `DATABASE_FILE`). Übersteht auch ein hart
@@ -311,9 +313,16 @@ Konten und Sitzungen speichert der Server in einer Datenbank (`src/storage/`); n
 - **Migrationen:** Beim Start legt der Server fehlende Tabellen an (`src/storage/migrations.ts`, gemerkt in
   `schema_migrations`). Hat eine neuere Fassung die Datenbank schon umgebaut, startet eine ältere nicht, statt Daten zu
   verderben. Dasselbe SQL läuft auf SQLite und Postgres.
+- **Abgleich mit der App:** Was App und Server abgleichen, steht in einer gemeinsamen Tabelle `sync_records` – pro Besitzer
+  (`user:<Konto-ID>` bzw. `device:<Geräte-ID>`), Art (bisher `diary`; Plan, Vorrat und eigene Rezepte sollen folgen) und
+  Eintrags-ID mit Revision, Zeitpunkt der letzten Änderung und Inhalt als JSON oder einer Löschmarke. Die Revision zählt
+  pro Besitzer und Art hoch (`sync_revisions`); die App fragt nur nach dem, was nach ihrer letzten Revision kam.
+  Gleichzeitige Abgleiche desselben Besitzers laufen nacheinander (bei Postgres sperrt die Zeile in `sync_revisions`).
 - **Umzug:** Liegt noch die Konten-Datei älterer Fassungen (`data/users.json`) da, übernimmt der Server sie beim Start
   einmal – mit denselben Konto-IDs (daran hängen Tagebuch-Sicherung und Fotos) und den noch gültigen Anmeldungen – und
-  löscht sie danach.
+  löscht sie danach. Ebenso die Sicherung der Ernährungshistorie aus `data/diary/` (eine Datei pro Konto bzw. Gerät,
+  anderer Ort mit `DIARY_DIR`): mit denselben Revisionen, damit Geräte, die schon abgeglichen haben, nichts verpassen;
+  unlesbare Dateien bleiben liegen, die Startmeldung nennt sie.
 - **Grenze:** Eine SQLite-Datei gehört genau einem laufenden Server.
 
 ## Instagram und TikTok
@@ -340,8 +349,8 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 
 ## Grenzen dieser Version
 
-- Konten und Sitzungen liegen in der Datenbank (SQLite oder Postgres); Community-Rezepte, Fotos, Bewertungen, Meldungen,
-  Admin-Änderungen und die Tagebuch-Sicherung noch in JSON-Dateien – sie ziehen als Nächstes um (Fotos dann als Dateien
+- Konten, Sitzungen und die Tagebuch-Sicherung liegen in der Datenbank (SQLite oder Postgres); Community-Rezepte, Fotos,
+  Bewertungen, Meldungen und Admin-Änderungen noch in JSON-Dateien – sie ziehen als Nächstes um (Fotos dann als Dateien
   bzw. in einen Bildspeicher, nicht in die Datenbank). Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
 - Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
