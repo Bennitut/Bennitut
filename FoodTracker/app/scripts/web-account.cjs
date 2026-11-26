@@ -8,7 +8,10 @@
 //                                     # vergeben hat, gehören danach dem Konto), Anmeldung bleibt nach dem Neuladen
 //                                     # (eigener Schlüssel, nicht im übrigen Zustand), Passwort ändern (falsch/richtig),
 //                                     # Abmelden, Anmelden mit altem und neuem Passwort, „Passwort vergessen?“ bis zum
-//                                     # falschen Code, „Meine Daten exportieren“, Konto löschen (falsch/richtig);
+//                                     # falschen Code; Fragebogen, Monatsplan und zwei gebuchte Zeilen kommen in einem
+//                                     # frischen Browser (Hinweis „Anmelden“ im Plan) mit dem Konto zurück, eine dort
+//                                     # abgehakte Zeile kommt im ersten an; „Meine Daten exportieren“ (mit Plan und
+//                                     # Vorrat), Konto löschen (falsch/richtig);
 //                                     # dabei die Sicherung des Tagebuchs in der Datenbank (Umzug einer Datei aus
 //                                     # data/diary/ beim Start, Eintrag vom Gerät landet im Konto, im Export und ist
 //                                     # nach dem Löschen weg); vorher der Umzug von Community-Rezepten, Fotos mit
@@ -406,14 +409,100 @@ async function main() {
     await see("Angemeldet als Nachtschicht", "neues Passwort");
     step("Anmelden mit dem neuen Passwort");
 
+    // Plan, Einkaufsliste, Vorrat und Essgewohnheiten mit dem Konto (lib/dataSync.ts): hier anlegen, dann in einem
+    // frischen Browser (wie nach gelöschten Browserdaten) anmelden – alles ist wieder da, Häkchen gehen in beide Richtungen.
+    page.on("response", (r) => r.url().endsWith("/api/sync") && r.status() !== 200 && r.status() !== 401 && failures.push(`Abgleich von Plan und Vorrat: HTTP ${r.status()}`));
+    const tapOn = async (p, text) => {
+      await p.getByText(text, { exact: true }).last().click();
+      await p.waitForTimeout(300);
+    };
+    const currentToken = () => page.evaluate(() => JSON.parse(localStorage.getItem("foodtracker.session.v1") ?? "{}").token);
+    const dataOf = async (bearerToken) => {
+      const res = await fetch(`${API}/api/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${bearerToken}` },
+        body: JSON.stringify({ kinds: { settings: { since: 0 }, plan: { since: 0 }, pantry: { since: 0 } } }),
+      });
+      return res.ok ? (await res.json()).kinds : {};
+    };
+    const marksOn = (kinds, prefix) => (kinds.plan?.changes ?? []).filter((r) => r.id.startsWith(prefix) && r.data).length;
+    const waitForServer = async (ready) => {
+      let kinds = {};
+      for (let i = 0; i < 60; i++) {
+        kinds = await dataOf(await currentToken());
+        if (ready(kinds)) return kinds;
+        await page.waitForTimeout(250);
+      }
+      return kinds;
+    };
+    await page.goto(`${site}/plan`, { waitUntil: "networkidle" });
+    if (await page.getByText("Du nutzt FoodTracker schon auf einem anderen Gerät?", { exact: false }).count()) failures.push("Hinweis „Anmelden“ im Plan, obwohl angemeldet");
+    await tapOn(page, "Fragen beantworten");
+    for (let i = 0; i < 5; i++) await tapOn(page, "Weiter");
+    await tapOn(page, "Monatsplan erstellen");
+    await page.getByText(/^Woche 1/).first().waitFor({ timeout: 60_000 });
+    await tapOn(page, "Einkauf");
+    await page.getByText(/Einkauf Woche 1/).first().waitFor({ timeout: 10_000 });
+    await page.getByRole("checkbox").nth(0).click();
+    await page.getByRole("checkbox").nth(1).click();
+    await tapOn(page, "🧺 Abgehaktes in den Vorrat (2)");
+    await see("✓ 2 Lebensmittel in den Vorrat gebucht.", "Abgehaktes in den Vorrat");
+    const onServer = await waitForServer((k) => k.settings?.changes?.length === 1 && marksOn(k, "c:") === 2 && marksOn(k, "b:") === 2 && (k.pantry?.changes ?? []).filter((r) => r.data).length === 2);
+    if (onServer.settings?.changes?.[0]?.data?.onboarded !== true) failures.push(`Essgewohnheiten nicht im Konto: ${JSON.stringify(onServer.settings)}`);
+    if (!(onServer.plan?.changes ?? []).some((r) => r.id === "plan" && r.data?.plan?.weeks?.length === 4)) failures.push("Monatsplan nicht im Konto");
+    if (marksOn(onServer, "c:") !== 2 || marksOn(onServer, "b:") !== 2) failures.push(`Häkchen nicht im Konto: ${JSON.stringify((onServer.plan?.changes ?? []).map((r) => r.id).filter((id) => id !== "plan"))}`);
+    if ((onServer.pantry?.changes ?? []).filter((r) => r.data).length !== 2) failures.push(`Vorrat nicht im Konto: ${JSON.stringify(onServer.pantry)}`);
+    step("Fragebogen, Monatsplan, zwei abgehakte und gebuchte Zeilen: Essgewohnheiten, Plan, Häkchen und Vorrat im Konto");
+
+    // Frischer Browser ohne gespeicherte Daten: Im Plan der Hinweis „Anmelden“, danach sind Plan, Häkchen und Vorrat da.
+    const freshContext = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT" });
+    const other = await freshContext.newPage();
+    other.on("pageerror", (e) => failures.push(`JavaScript-Fehler (zweiter Browser): ${e.message}`));
+    await other.goto(`${site}/plan`, { waitUntil: "networkidle" });
+    await other.getByText("Du nutzt FoodTracker schon auf einem anderen Gerät?", { exact: false }).first().waitFor({ timeout: 10_000 });
+    await other.getByRole("button", { name: "Anmelden", exact: true }).click();
+    await other.waitForURL(/\/login$/);
+    await other.getByLabel("E-Mail", { exact: true }).fill(email);
+    await other.getByLabel("Passwort", { exact: true }).fill(second);
+    await other.getByRole("button", { name: "Anmelden", exact: true }).last().click();
+    await other.getByText(/^Woche 1/).first().waitFor({ timeout: 15_000 });
+    await tapOn(other, "Einkauf");
+    await other.getByText(/Einkauf Woche 1/).first().waitFor({ timeout: 10_000 });
+    const otherRows = other.getByRole("checkbox");
+    await other.getByText(/^2 von \d+ im Wagen$/).first().waitFor({ timeout: 5_000 });
+    if (!(await otherRows.nth(0).isChecked()) || !(await otherRows.nth(1).isChecked())) failures.push("Abgehakte Zeilen fehlen im zweiten Browser");
+    await other.getByText("🧺 Abgehaktes in den Vorrat (0)", { exact: true }).waitFor({ timeout: 5_000 });
+    // Dort eine dritte Zeile abhaken – der erste Browser bekommt sie beim nächsten Start.
+    await otherRows.nth(2).click();
+    await tapOn(other, "Vorrat");
+    await other.getByText("2 Lebensmittel", { exact: true }).first().waitFor({ timeout: 10_000 });
+    await other.goto(`${site}/profile`, { waitUntil: "networkidle" });
+    await other.getByText("sind auf allen deinen Geräten gleich", { exact: false }).first().waitFor({ timeout: 15_000 });
+    await waitForServer((k) => marksOn(k, "c:") === 3);
+    await freshContext.close();
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByText(/Einkauf Woche 1/).first().waitFor({ timeout: 10_000 });
+    try {
+      await page.getByText(/^3 von \d+ im Wagen$/).first().waitFor({ timeout: 15_000 });
+    } catch {
+      failures.push("Im zweiten Browser abgehakte Zeile fehlt im ersten");
+    }
+    if (!(await page.getByRole("checkbox").nth(2).isChecked())) failures.push("Dritte Zeile im ersten Browser nicht als angehakt markiert");
+    step("Frischer Browser: Hinweis „Anmelden“ im Plan, danach Plan, Häkchen und Vorrat da; Häkchen von dort kommt im ersten an");
+    await page.goto(`${site}/profile`, { waitUntil: "networkidle" });
+    await see("Angemeldet als Nachtschicht", "zurück im Profil");
+
     const [download] = await Promise.all([page.waitForEvent("download"), button("📦 Meine Daten exportieren").click()]);
     const exported = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
     if (!/^foodtracker-konto-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename())) failures.push(`Dateiname ${download.suggestedFilename()}`);
     if (exported.format !== "foodtracker-account-export" || exported.account?.email !== email) failures.push("Export ohne Konto");
     if (JSON.stringify(exported).includes("scrypt$")) failures.push("Export enthält den Passwort-Hash");
     if (!exported.diary?.some((e) => e.id === "e2e-tagebuch-1" && e.title === "Kaspressknödel")) failures.push(`Export ohne Tagebuch: ${JSON.stringify(exported.diary)}`);
+    if (exported.settings?.onboarded !== true || exported.plan?.checked?.length !== 3 || exported.plan?.booked?.length !== 2 || exported.pantry?.length !== 2) {
+      failures.push(`Export ohne Essgewohnheiten, Plan oder Vorrat: ${JSON.stringify({ settings: !!exported.settings, checked: exported.plan?.checked, pantry: exported.pantry })}`);
+    }
     await see("gespeichert (Downloads)", "Export");
-    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash, mit Tagebuch");
+    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash, mit Tagebuch, Essgewohnheiten, Plan und Vorrat");
 
     await button("🗑️ Konto löschen").click();
     await see("Das lässt sich nicht rückgängig machen.", "Rückfrage");
@@ -424,13 +513,13 @@ async function main() {
     await button("Konto endgültig löschen").click();
     await see("Dein Konto ist gelöscht.", "Konto löschen");
     if (accountsWith(path.join(dataDir, "foodtracker.db"), email) !== 0) failures.push("Konto steht nach dem Löschen noch auf dem Server");
-    if (syncRecordsOf(path.join(dataDir, "foodtracker.db"), `user:${account.id}`) !== 0) failures.push("Tagebuch des Kontos steht nach dem Löschen noch auf dem Server");
+    if (syncRecordsOf(path.join(dataDir, "foodtracker.db"), `user:${account.id}`) !== 0) failures.push("Tagebuch, Plan oder Vorrat des Kontos stehen nach dem Löschen noch auf dem Server");
     await button("Anmelden oder registrieren").click();
     await field("E-Mail").fill(email);
     await field("Passwort").fill(second);
     await button("Anmelden").last().click();
     await see("E-Mail-Adresse oder Passwort stimmt nicht.", "Anmelden nach dem Löschen");
-    step("Konto löschen (falsch, dann richtig), danach keine Anmeldung und kein Tagebuch des Kontos mehr");
+    step("Konto löschen (falsch, dann richtig), danach keine Anmeldung und weder Tagebuch noch Plan oder Vorrat des Kontos mehr");
 
     // Einwilligung vor den KI-Funktionen: Ohne „Einverstanden“ geht keine KI-Anfrage an den Server.
     const improveRequests = [];
