@@ -14,11 +14,12 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 26.11.2026 (spätabends):** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 26.11.2026, 22 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. Konten mit E-Mail und Passwort gibt es seit 25.11. im Server und seit 26.11.
-in der App, seit 26.11. abends kommt beim Anmelden mit ins Konto, was das Gerät ohne Konto auf dem Server hatte. Als
-Nächstes der Hinweis vor der ersten Nutzung der KI-Funktionen (letzter Punkt von 9.1), dann 9.2. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+in der App, seit 26.11. abends kommt beim Anmelden mit ins Konto, was das Gerät ohne Konto auf dem Server hatte, und
+seit 26.11. spätabends fragt die App vor der ersten KI-Funktion um Erlaubnis (mit dem Eltern-Hinweis, kein
+Mindestalter) – damit ist 9.1 fertig. Als Nächstes 9.2 (Speicherschicht im Server). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -75,11 +76,18 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
   bisher nur auf dem Gerät – sie kommen mit 9.2 (Abgleich aller Daten) nach demselben Muster ins Konto. Dabei eine
   Sicherheitslücke geschlossen (Geräte-ID „user:<Konto-ID>“, unter „Ideen und Erkenntnisse“). 9 Server-Tests (124),
   2 App-Tests (176), `npm run web:account` prüft die Übernahme im Browser.
-- [ ] Kein Mindestalter (Vorrang 2, Antwort 3): keine Altersabfrage, aber bei der Registrierung und vor der ersten
+- [x] Kein Mindestalter (Vorrang 2, Antwort 3): keine Altersabfrage, aber bei der Registrierung und vor der ersten
   Nutzung der KI-Funktionen der Hinweis, dass Kinder unter 14 und – für Gesundheitsdaten wie Allergien oder das
   Ernährungstagebuch – Minderjährige unter 18 nur mit Zustimmung eines Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8
-  und 9 DSGVO). Stand 26.11.2026: Bei der Registrierung steht der Hinweis (fünf Sprachen, `ParentalNotice`); offen ist
-  er vor der ersten Nutzung der KI-Funktionen – zusammen mit der Einwilligung („Ideen und Erkenntnisse“).
+  und 9 DSGVO). Bei der Registrierung steht der Hinweis seit 26.11.2026 (fünf Sprachen, `ParentalNotice`). – erledigt
+  26.11.2026: Vor der ersten KI-Funktion (Mahlzeit, Kassenbon, Import, Übersetzen, „Text mit KI verbessern“, Wünsche im
+  Plan) fragt ein Dialog um Erlaubnis: was diese Funktion an wen schickt (Claude von Anthropic oder ein Modell auf dem
+  Server), ausdrückliche Einwilligung für Gesundheitsangaben, Eltern-Hinweis, Widerruf im Profil (Karte
+  „KI-Funktionen“). „Nicht jetzt“ schickt nichts, Wünsche im Plan entfallen dann mit Hinweis. Die App verschickt
+  KI-Anfragen nur mit Einwilligung (`lib/aiConsent.ts`, `components/AiConsent.tsx`) und nennt dem Server die Fassung im
+  Header `X-AI-Consent`; ohne antwortet er mit 403 `ai_consent_required`, bevor etwas an die KI geht
+  (`server/src/ai/consent.ts`). Datenschutz B3 und „Mindestalter“ ohne Platzhalter. 3 Server-Tests (127), 6 App-Tests
+  (182), `npm run web:account` spielt Dialog, Widerruf und Server-Ablehnung im Browser durch.
 
 **9.2 Dauerhafte Speicherung**
 
@@ -124,7 +132,9 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
 - [ ] Server bei einem hochgeladenen Video: mit ffmpeg Ton und einige Standbilder; Transkription über eine austauschbare
   Stelle (Whisper lokal, z. B. über transformers.js auf der CPU, oder ein Whisper-Server unter `WHISPER_URL`; Wahl im PR
   begründen); eingeblendeten Text über das Bildmodell der KI-Stelle; daraus mit demselben Zod-Schema ein Rezept. Ohne KI
-  `ai_not_configured`. Als Hintergrundauftrag mit Statusabfrage und Fortschritt in der App.
+  `ai_not_configured`. Als Hintergrundauftrag mit Statusabfrage und Fortschritt in der App. Weil dann Video bzw. Ton
+  an die KI gehen: Einwilligungstext (`aiConsent.sendsImport`, B3) erweitern und die Fassung erhöhen (siehe „Fassung
+  der Einwilligung erhöhen“).
 - [ ] Quelle und Link im importierten Rezept speichern; das hochgeladene Video nach der Auswertung löschen. Tests mit
   kurzen, selbst erzeugten Testvideos (ffmpeg `testsrc`, Stille oder Sprachsynthese) und nachgebauten KI-Antworten.
 
@@ -154,12 +164,15 @@ Vorrang 1.
   Server sichtbar, bis es den Server für andere gibt). Die elf `[[PRÜFEN]]`-Stellen stehen im PR.
 - [ ] 2. Rezeptfotos **Variante (a), selbst ausliefern** – eigener Abschnitt „Vorrang: Rezeptfotos selbst ausliefern“
   unten.
-- [ ] 3. **Kein Mindestalter** (Benjamins Entscheidung, nachdem er die Folgen kannte): Die App bleibt für alle offen,
+- [x] 3. **Kein Mindestalter** (Benjamins Entscheidung, nachdem er die Folgen kannte): Die App bleibt für alle offen,
   auch Konto und KI-Funktionen. Keine Altersgrenze und keine Altersprüfung, aber der Hinweis, dass Kinder unter 14 und –
   für Gesundheitsdaten wie Allergien oder das Ernährungstagebuch – Minderjährige unter 18 nur mit Zustimmung eines
   Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8 und 9 DSGVO). Die Platzhalter zum Mindestalter in `docs/recht/` und
   `app/src/legal/texte.ts` entsprechend ersetzen; Teil B der Datenschutzerklärung, Registrierung (9.1) und die
-  Einwilligung vor den KI-Funktionen folgen dem.
+  Einwilligung vor den KI-Funktionen folgen dem. – erledigt 26.11.2026: Abschnitt „Mindestalter“ der
+  Datenschutzerklärung (nur mit Server) sagt „kein Mindestalter“ samt Eltern-Hinweis, B3 beschreibt die Einwilligung vor
+  der ersten KI-Funktion und den Widerruf im Profil; `docs/recht/README.md` Entscheidung 3 abgehakt. Der Hinweis steht
+  bei der Registrierung und im Dialog vor der ersten KI-Funktion (9.1).
 - [x] 4. „Löschen geht in der Web-Version nicht“: nicht dringend, nicht vorziehen – bleibt unter „Ideen und
   Erkenntnisse“.
 - [x] 5. `start-test.cmd` holt den neuesten Stand selbst (Commits ac6a7b2 und 870bdc5 von Claude aus dem Chat) – erledigt
@@ -630,18 +643,28 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   der App (vor dem Einreichen in den App-Review-Richtlinien nachlesen). (24.11.2026) Erledigt 26.11.2026: im Server seit
   25.11., in der App unter 👤 Profil → „Konto verwalten“ → „Konto löschen“ (Konten mit Passwort bestätigen es mit dem
   Passwort).
-- **Einwilligung vor KI-Funktionen:** Mit Server gehen Fotos, Rezepttexte und Wünsche an Anthropic; Wünsche und Fotos
+- ✅ **Einwilligung vor KI-Funktionen:** Mit Server gehen Fotos, Rezepttexte und Wünsche an Anthropic; Wünsche und Fotos
   können Gesundheitsangaben enthalten (Art. 9 DSGVO: ausdrückliche Einwilligung). Vor der ersten Nutzung einmal fragen,
   im Profil widerrufbar machen (in Österreich willigen Kinder ab 14 selbst ein, bei Gesundheitsdaten laut herrschender
-  Meinung auch dann nur mit den Eltern). Gehört zu Teil B der
-  Datenschutzerklärung. Mindestalter: **keins** (Benjamins Entscheidung vom 24.11.2026, 23:30 Uhr) – keine Altersgrenze
-  und keine Altersprüfung, aber vor der ersten Nutzung der Hinweis, dass Kinder unter 14 und bei Gesundheitsdaten
-  Minderjährige unter 18 nur mit Zustimmung eines Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8 und 9 DSGVO; Vorrang 2,
-  Antwort 3). (24.11.2026)
+  Meinung auch dann nur mit den Eltern). Mindestalter: **keins** (Benjamins Entscheidung vom 24.11.2026, 23:30 Uhr).
+  (24.11.2026) Erledigt 26.11.2026: Dialog vor der ersten KI-Funktion mit Eltern-Hinweis, Widerruf im Profil, ohne
+  Einwilligung keine KI-Anfrage (App und Server, Header `X-AI-Consent`), Datenschutz B3 und „Mindestalter“ ergänzt
+  (Vorrang 1, 9.1).
 - **Claude-API für andere und Minderjährige:** Laufen die KI-Funktionen später mit der Claude-API für andere, gelten
   Anthropics Vorgaben für Produkte, die Minderjährige nutzen können
   (https://support.claude.com/en/articles/9307344) – die App hat kein Mindestalter (Vorrang 2, Antwort 3). Vor dem Start
   des Servers für andere prüfen. (25.11.2026)
+- **Einwilligung nachweisen:** Art. 7 Abs. 1 DSGVO verlangt, dass der Verantwortliche eine Einwilligung nachweisen kann.
+  Heute liegt sie nur auf dem Gerät (Fassung und Zeitpunkt); der Server sieht sie bei jeder KI-Anfrage im Header
+  `X-AI-Consent`, speichert sie aber nicht. Mit der Speicherschicht aus 9.2 je Konto bzw. Geräte-ID Fassung, Zeitpunkt
+  und Widerruf speichern (ohne Inhalte der Anfragen). (26.11.2026)
+- **Einwilligung gilt pro Gerät:** Wer sich auf einem fremden Gerät anmeldet, auf dem schon jemand den KI-Funktionen
+  zugestimmt hat, wird nicht noch einmal gefragt (wie bei „Geteilte Geräte“). Mit 9.2 könnte die Einwilligung zum Konto
+  wandern: beim Anmelden die des Kontos übernehmen bzw. fragen. (26.11.2026)
+- **Fassung der Einwilligung erhöhen:** Ändert sich, was an wen geht (z. B. ein neuer KI-Anbieter, der Reel-Import aus
+  9.4 mit Ton und Standbildern), `AI_CONSENT_VERSION` in `app/src/lib/aiConsent.ts` und `server/src/ai/consent.ts`
+  gemeinsam erhöhen und die Texte im Dialog (`aiConsent.*`, fünf Sprachen) und in B3 anpassen – dann fragt die App neu.
+  Eine ältere App bekommt vom Server dann 403 mit „Bitte FoodTracker neu laden bzw. aktualisieren“. (26.11.2026)
 - **„Passwort vergessen?“ braucht einen Mail-Dienst:** Ohne `SMTP_HOST` und `SMTP_FROM` in `server/.env` gibt es keinen
   Code per E-Mail, die App blendet den Knopf dann aus (seit dem App-Teil von 9.1). Wer dann sein Passwort vergisst,
   kommt nicht mehr ins Konto – ein Admin kann kein Passwort setzen. Kostenlos geht es z. B. mit Gmail und einem
