@@ -6,7 +6,7 @@ import { createApp } from "./app.js";
 import { mailerFromEnv } from "./mail/mailer.js";
 import { lanAddresses, startupMessage } from "./startInfo.js";
 import { openDatabase, type Db } from "./storage/db.js";
-import { importLegacyUsers } from "./storage/legacy.js";
+import { importLegacyDiary, importLegacyUsers } from "./storage/legacy.js";
 import { migrate } from "./storage/migrations.js";
 
 /** Kommagetrennte Liste aus einer Umgebungsvariable. */
@@ -29,12 +29,12 @@ try {
   process.exit(1);
 }
 
-// Einmaliger Umzug der Konten aus der JSON-Datei älterer Fassungen (storage/legacy.ts).
+// Einmaliger Umzug aus den JSON-Dateien älterer Fassungen (storage/legacy.ts): Konten, Sicherung der Ernährungshistorie.
+const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 const usersFile = process.env.USERS_FILE?.trim() || "data/users.json";
 try {
   const moved = await importLegacyUsers(db, usersFile);
   if (moved) {
-    const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
     console.log(
       `Konten aus ${usersFile} in die Datenbank übernommen: ${n(moved.users, "Konto", "Konten")}, ` +
         `${n(moved.sessions, "Anmeldung bleibt", "Anmeldungen bleiben")} gültig` +
@@ -44,6 +44,19 @@ try {
 } catch (e) {
   console.error(`Konten aus ${usersFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
 }
+const diaryDir = process.env.DIARY_DIR?.trim() || "data/diary";
+try {
+  const moved = await importLegacyDiary(db, diaryDir);
+  if (moved?.owners) {
+    console.log(
+      `Sicherung der Ernährungshistorie aus ${diaryDir} in die Datenbank übernommen: ${n(moved.owners, "Konto bzw. Gerät", "Konten bzw. Geräte")} ` +
+        `mit ${n(moved.records, "Eintrag", "Einträgen")} (samt Löschmarken). Die alten Dateien sind gelöscht.`,
+    );
+  }
+  if (moved?.unreadable) console.error(`${n(moved.unreadable, "Datei", "Dateien")} in ${diaryDir} unlesbar – bleiben liegen und werden nicht übernommen.`);
+} catch (e) {
+  console.error(`Sicherung der Ernährungshistorie aus ${diaryDir} konnte nicht übernommen werden (${(e as Error).message}). Die Dateien bleiben liegen.`);
+}
 
 const ai = new Ai(aiSettingsFromEnv());
 const mailer = mailerFromEnv();
@@ -52,7 +65,6 @@ const app = createApp({
   feedbackFile: process.env.FEEDBACK_FILE ?? "data/feedback.json",
   db,
   overridesFile: process.env.OVERRIDES_FILE ?? "data/recipe-overrides.json",
-  diaryDir: process.env.DIARY_DIR ?? "data/diary",
   auth: {
     appleAudiences: list(process.env.APPLE_BUNDLE_IDS ?? "host.exp.Exponent"),
     googleAudiences: list(process.env.GOOGLE_CLIENT_IDS),

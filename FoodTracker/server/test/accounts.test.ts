@@ -368,14 +368,19 @@ describe("Konto löschen und Daten exportieren", () => {
     expect((await call("GET", "/api/auth/me", undefined, { token })).status).toBe(401);
   });
 
-  it("löscht das Konto samt Sitzungen auch aus der Datenbank", async () => {
+  it("löscht das Konto samt Sitzungen und Tagebuch-Sicherung auch aus der Datenbank", async () => {
     const db = openSqlite(join(tmp, "konten-loeschen.db"));
     const { call, register, tokenOf } = setup({ db });
     const token = await tokenOf(await register("raus@example.com", "Palatschinken!"));
-    expect(await new UserStore(db).list()).toHaveLength(1);
+    await call("POST", "/api/diary/sync", { since: 0, changes: [{ id: "e1", updatedAt: "2026-11-24T03:30:00.000Z", entry }, { id: "e2", updatedAt: "2026-11-24T04:30:00.000Z", entry: null }] }, { token });
+    const [user] = await new UserStore(db).list();
+    expect(await db.all("SELECT id FROM sync_records WHERE owner = ? ORDER BY id", [`user:${user!.id}`])).toEqual([{ id: "e1" }, { id: "e2" }]);
     await call("DELETE", "/api/auth/me", { password: "Palatschinken!" }, { token });
     expect(await new UserStore(db).list()).toHaveLength(0);
     expect(await db.all("SELECT * FROM sessions")).toEqual([]);
     expect(await db.all("SELECT * FROM users WHERE email = ?", ["raus@example.com"])).toEqual([]);
+    // Auch Löschmarken und der Zähler der Revisionen sind weg.
+    expect(await db.all("SELECT * FROM sync_records")).toEqual([]);
+    expect(await db.all("SELECT * FROM sync_revisions")).toEqual([]);
   });
 });

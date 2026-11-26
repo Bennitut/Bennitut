@@ -21,6 +21,7 @@ import { resetMail, type Mailer } from "./mail/mailer.js";
 import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetchPost.js";
 import { openSqlite, type Db } from "./storage/db.js";
 import { migrate } from "./storage/migrations.js";
+import { SyncStore } from "./storage/sync.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
 const MediaType = z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -159,7 +160,8 @@ const DiaryEntryBody = z.object({
   source: z.enum(["foto", "plan", "manuell"]),
 });
 const DiarySyncBody = z.object({
-  since: z.number().int().min(0).default(0),
+  // Höchstens die größte Revision, die Postgres speichern kann (INTEGER, storage/sync.ts).
+  since: z.number().int().min(0).max(2_147_483_647).default(0),
   changes: z
     .array(z.object({ id: z.string().min(1).max(100), updatedAt: IsoTime, entry: DiaryEntryBody.nullable() }))
     .max(5000)
@@ -211,7 +213,6 @@ export function createApp({
   feedbackFile = null,
   db = openSqlite(":memory:"),
   overridesFile = null,
-  diaryDir = null,
   auth = NO_AUTH,
   ai = new Ai(aiSettingsFromEnv()),
   corsOrigins = [],
@@ -223,13 +224,11 @@ export function createApp({
   communityFile: string | null;
   feedbackFile?: string | null;
   /**
-   * Datenbank für Konten und Sitzungen (storage/db.ts: SQLite-Datei oder Postgres); fehlende Migrationen führt der
-   * Server vor der ersten Anfrage aus. Ohne Angabe nur im Speicher (Tests).
+   * Datenbank für Konten, Sitzungen und die Sicherung der Ernährungshistorie (storage/db.ts: SQLite-Datei oder
+   * Postgres); fehlende Migrationen führt der Server vor der ersten Anfrage aus. Ohne Angabe nur im Speicher (Tests).
    */
   db?: Db;
   overridesFile?: string | null;
-  /** Ordner für die Sicherung der Ernährungshistorie (eine Datei pro Konto bzw. Gerät); null = nur im Speicher. */
-  diaryDir?: string | null;
   auth?: AuthConfig;
   /** Claude oder Ollama (siehe ai/provider.ts); ohne Angabe aus der Umgebung bzw. server/.env. */
   ai?: Ai;
@@ -247,7 +246,9 @@ export function createApp({
   const feedback = new FeedbackStore(feedbackFile);
   const users = new UserStore(db, auth.adminEmails.map((e) => e.toLowerCase()), passwordCost);
   const overrides = new OverrideStore(overridesFile);
-  const diary = new DiaryStore(diaryDir);
+  const diary = new DiaryStore(db);
+  /** Alles, was App und Server abgleichen (bisher das Tagebuch), in der Tabelle sync_records. */
+  const synced = new SyncStore(db);
   /** Katalog inklusive Änderungen der Admins. */
   const catalogRecipes = () => overrides.apply(RECIPES);
 
@@ -456,7 +457,7 @@ export function createApp({
     const body = DiarySyncBody.parse(await c.req.json());
     const changes = body.changes.map((r) => ({ id: r.id, updatedAt: r.updatedAt, entry: r.entry ? { ...r.entry, id: r.id, updatedAt: r.updatedAt } : null }));
     try {
-      return c.json({ owner, ...diary.sync(owner, body.since, changes) });
+      return c.json({ owner, ...(await diary.sync(owner, body.since, changes)) });
     } catch (e) {
       if (e instanceof DiaryFullError) return c.json({ error: "diary_full" }, 413);
       throw e;
@@ -584,7 +585,7 @@ export function createApp({
     // Zuerst das Tagebuch: Nur dort kann es scheitern (Konto voll), dann bleibt alles beim Gerät.
     let diaryEntries: number;
     try {
-      diaryEntries = diary.transfer(`device:${device}`, actor);
+      diaryEntries = await diary.transfer(`device:${device}`, actor);
     } catch (e) {
       if (e instanceof DiaryFullError) return c.json({ error: "diary_full" }, 413);
       throw e;
@@ -608,7 +609,7 @@ export function createApp({
     const actor = `user:${user.id}`;
     community.removeActor(actor);
     feedback.removeActor(actor);
-    diary.remove(actor);
+    await synced.remove(actor);
     if (user.role === "admin") overrides.anonymize(user.name);
     await users.delete(user.id);
     return c.body(null, 204);
@@ -626,7 +627,7 @@ export function createApp({
       version: 1,
       exportedAt,
       account: { ...me(user), lastLoginAt: user.lastLoginAt, ...(user.provider === "password" ? { emailVerified: user.emailVerified === true } : {}) },
-      diary: diary.entries(actor),
+      diary: await diary.entries(actor),
       community: community.exportFor(actor),
       ...feedback.exportFor(actor),
     });

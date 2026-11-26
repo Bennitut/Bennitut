@@ -1,7 +1,10 @@
+import { newDb } from "pg-mem";
 import { describe, expect, it } from "vitest";
 import { Ai } from "../src/ai/provider.js";
 import { createApp } from "../src/app.js";
 import { DiaryFullError, DiaryStore } from "../src/diary/store.js";
+import { openSqlite, postgresFromPool, type Db, type PgPoolLike } from "../src/storage/db.js";
+import { migrate } from "../src/storage/migrations.js";
 
 // Vorrang 1, 9.1: Beim Anmelden übernimmt das Konto, was das Gerät ohne Konto auf dem Server hat – ohne Doppeltes.
 // Dazu die Lücke, durch die sich ein Gerät mit „user:<Konto-ID>“ als fremdes Konto ausgeben konnte.
@@ -197,31 +200,59 @@ describe("Gerätedaten beim Anmelden ins Konto übernehmen (/api/auth/claim-devi
   });
 });
 
-describe("DiaryStore.transfer", () => {
+function pgMem(): Db {
+  const { Pool } = newDb().adapters.createPg();
+  return postgresFromPool(new Pool() as unknown as PgPoolLike, "Postgres (pg-mem)");
+}
+
+describe.each([
+  ["SQLite", () => openSqlite(":memory:")],
+  ["Postgres", pgMem],
+] as [string, () => Db][])("DiaryStore.transfer mit %s", (_name, open) => {
   const record = (id: string, updatedAt = "2026-11-24T08:00:00.000Z") => ({
     id,
     updatedAt,
     entry: { id, date: "2026-11-24", time: "08:00", title: id, nutrients: { kcal: 100, protein: 1, carbs: 1, fat: 1 }, source: "manuell" as const, updatedAt },
   });
+  const store = async (pageSize?: number, maxRecords?: number) => {
+    const db = open();
+    await migrate(db);
+    return new DiaryStore(db, pageSize, maxRecords);
+  };
 
-  it("ändert nichts, wenn das Konto dafür zu voll ist", () => {
-    const store = new DiaryStore(null, 100, 3);
-    store.sync("user:voll", 0, [record("a"), record("b")]);
-    store.sync("device:geraet01", 0, [record("c"), record("d")]);
-    expect(() => store.transfer("device:geraet01", "user:voll")).toThrow(DiaryFullError);
-    expect(store.count("user:voll")).toBe(2);
-    expect(store.count("device:geraet01")).toBe(2);
+  it("ändert nichts, wenn das Konto dafür zu voll ist", async () => {
+    const diary = await store(100, 3);
+    await diary.sync("user:voll", 0, [record("a"), record("b")]);
+    await diary.sync("device:geraet01", 0, [record("c"), record("d")]);
+    await expect(diary.transfer("device:geraet01", "user:voll")).rejects.toBeInstanceOf(DiaryFullError);
+    expect(await diary.count("user:voll")).toBe(2);
+    expect(await diary.count("device:geraet01")).toBe(2);
     // Was das Konto schon hat, zählt nicht gegen die Grenze.
-    store.sync("device:geraet02", 0, [record("a", "2026-11-25T08:00:00.000Z"), record("e")]);
-    expect(store.transfer("device:geraet02", "user:voll")).toBe(2);
-    expect(store.count("user:voll")).toBe(3);
+    await diary.sync("device:geraet02", 0, [record("a", "2026-11-25T08:00:00.000Z"), record("e")]);
+    expect(await diary.transfer("device:geraet02", "user:voll")).toBe(2);
+    expect(await diary.count("user:voll")).toBe(3);
+    expect(await diary.count("device:geraet02")).toBe(0);
   });
 
-  it("macht nichts mit sich selbst und nichts ohne Sicherung des Geräts", () => {
-    const store = new DiaryStore(null);
-    store.sync("user:x", 0, [record("a")]);
-    expect(store.transfer("user:x", "user:x")).toBe(0);
-    expect(store.transfer("device:leer0000", "user:x")).toBe(0);
-    expect(store.count("user:x")).toBe(1);
+  it("macht nichts mit sich selbst und nichts ohne Sicherung des Geräts", async () => {
+    const diary = await store();
+    await diary.sync("user:x", 0, [record("a")]);
+    expect(await diary.transfer("user:x", "user:x")).toBe(0);
+    expect(await diary.transfer("device:leer0000", "user:x")).toBe(0);
+    expect(await diary.count("user:x")).toBe(1);
+  });
+
+  it("gibt Übernommenem neue Revisionen und lässt die des Geräts nie rückwärts zählen", async () => {
+    const diary = await store();
+    await diary.sync("user:k", 0, [record("k1"), record("k2")]);
+    await diary.sync("device:geraet03", 0, [record("g1"), record("g2"), record("g3")]);
+    expect(await diary.transfer("device:geraet03", "user:k")).toBe(3);
+    // Ein anderes Gerät des Kontos, das bis Revision 2 kannte, bekommt genau das Übernommene.
+    const other = await diary.sync("user:k", 2, []);
+    expect(other.changes.map((r) => r.id)).toEqual(["g1", "g2", "g3"]);
+    expect(other.rev).toBe(5);
+    // Schreibt das Gerät danach wieder ohne Konto, geht seine Revision weiter statt von vorn.
+    expect((await diary.sync("device:geraet03", 3, [record("g4")])).rev).toBe(4);
+    expect((await diary.sync("device:geraet03", 0, [])).changes.map((r) => r.id)).toEqual(["g4"]);
   });
 });

@@ -41,10 +41,11 @@ describe.each(BACKENDS)("Speicherschicht mit %s", (_name, open) => {
     const db = open();
     expect(await migrate(db)).toEqual(MIGRATIONS.map((m) => m.version));
     expect(await migrate(db)).toEqual([]);
-    const rows = await db.all<{ version: number; name: string }>("SELECT version, name FROM schema_migrations");
-    expect(rows.map((r) => Number(r.version))).toEqual([1]);
+    const rows = await db.all<{ version: number; name: string }>("SELECT version, name FROM schema_migrations ORDER BY version");
+    expect(rows.map((r) => Number(r.version))).toEqual([1, 2]);
     expect(rows[0]!.name).toContain("Konten");
-    for (const table of ["users", "sessions", "password_resets", "storage_meta"]) {
+    expect(rows[1]!.name).toContain("Abgleich");
+    for (const table of ["users", "sessions", "password_resets", "storage_meta", "sync_records", "sync_revisions"]) {
       expect(Number((await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`))!.n)).toBe(0);
     }
   });

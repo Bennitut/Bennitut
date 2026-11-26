@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import type { Db } from "../storage/db.js";
+import { SyncStore, type SyncKind, type SyncRecord } from "../storage/sync.js";
+
+export { SyncFullError as DiaryFullError } from "../storage/sync.js";
 
 /** Tagebucheintrag, wie ihn die App schickt (app/src/lib/types.ts, DiaryEntry). */
 export interface DiaryEntryData {
@@ -20,156 +21,80 @@ export interface DiaryRecord {
   entry: DiaryEntryData | null;
 }
 
-interface StoredRecord extends DiaryRecord {
-  /** Revision, mit der der Datensatz zuletzt geändert wurde (pro Besitzer fortlaufend). */
-  rev: number;
-}
-
-interface OwnerData {
-  owner: string;
-  rev: number;
-  records: Record<string, StoredRecord>;
-}
-
 export interface DiarySyncResult {
   rev: number;
   changes: DiaryRecord[];
   more: boolean;
 }
 
+/** Art in der Tabelle für den Abgleich (storage/sync.ts). */
+export const DIARY_KIND = "diary";
 /** Höchstens so viele Datensätze pro Antwort; den Rest holt die App mit `since` = `rev` (more = true). */
 export const DIARY_PAGE_SIZE = 5000;
 /** Höchstens so viele Einträge und Löschmarken pro Konto bzw. Gerät (Schutz vor Missbrauch; reicht für Jahrzehnte). */
 export const DIARY_MAX_RECORDS = 200_000;
 
-export class DiaryFullError extends Error {}
-
-/** Neuere Fassung gewinnt, bei Gleichstand das Löschen – genau wie in der App (app/src/lib/diary.ts). */
-function wins(incoming: DiaryRecord, current: DiaryRecord): boolean {
-  if (incoming.updatedAt !== current.updatedAt) return incoming.updatedAt > current.updatedAt;
-  return incoming.entry === null && current.entry !== null;
+/** Gespeichert wird der Eintrag ohne ID und Zeitpunkt – die stehen in eigenen Spalten. */
+export type DiaryData = Omit<DiaryEntryData, "id" | "updatedAt">;
+export function diaryData(entry: object): DiaryData {
+  const { id: _id, updatedAt: _updatedAt, ...data } = entry as DiaryEntryData;
+  return data;
 }
 
-const strip = ({ rev: _rev, ...record }: StoredRecord): DiaryRecord => record;
+const toSync = (r: DiaryRecord): SyncRecord<DiaryData> => ({ id: r.id, updatedAt: r.updatedAt, data: r.entry ? diaryData(r.entry) : null });
+const fromSync = (r: SyncRecord<DiaryData>): DiaryRecord => ({
+  id: r.id,
+  updatedAt: r.updatedAt,
+  entry: r.data ? { ...r.data, id: r.id, updatedAt: r.updatedAt } : null,
+});
 
 /**
- * Sicherung der Ernährungshistorie: pro Konto („user:<id>“), sonst pro Geräte-ID („device:<id>“) eine JSON-Datei
- * unter `dir` (Name = Prüfsumme des Besitzers, damit keine fremden Zeichen im Dateinamen landen). Gelöschtes bleibt
- * als Löschmarke ohne Inhalt, damit es von anderen Geräten nicht zurückkommt. `dir` = null: nur im Speicher (Tests).
+ * Sicherung der Ernährungshistorie in der Datenbank (Tabelle sync_records, Art „diary“): pro Konto („user:<id>“),
+ * sonst pro Geräte-ID („device:<id>“). Gelöschtes bleibt als Löschmarke ohne Inhalt, damit es von anderen Geräten nicht
+ * zurückkommt. Bis 27.11.2026 lag sie als eine Datei pro Besitzer unter `data/diary/` (Umzug in storage/legacy.ts).
  */
 export class DiaryStore {
-  private readonly owners = new Map<string, OwnerData>();
+  private readonly store: SyncStore;
+  private readonly kind: SyncKind;
 
-  constructor(
-    private readonly dir: string | null,
-    private readonly pageSize = DIARY_PAGE_SIZE,
-    private readonly maxRecords = DIARY_MAX_RECORDS,
-  ) {}
+  constructor(db: Db, pageSize = DIARY_PAGE_SIZE, maxRecords = DIARY_MAX_RECORDS) {
+    this.store = new SyncStore(db);
+    this.kind = { name: DIARY_KIND, pageSize, maxRecords };
+  }
 
   /**
    * Übernimmt `changes` (was neuer ist) und liefert, was seit `since` dazugekommen ist – ohne das gerade
-   * Übernommene, dafür mit der Fassung des Servers, wo die geschickte älter war.
+   * Übernommene, dafür mit der Fassung des Servers, wo die geschickte älter war. Wirft DiaryFullError, ohne etwas zu
+   * ändern, wenn der Besitzer zu viele Einträge hätte.
    */
-  sync(owner: string, since: number, changes: DiaryRecord[]): DiarySyncResult {
-    const data = this.load(owner);
-    let count = Object.keys(data.records).length;
-    const applied = new Set<string>();
-    const conflicts = new Map<string, StoredRecord>();
-    for (const change of changes) {
-      const current = data.records[change.id];
-      if (current && !wins(change, current)) {
-        const same = current.updatedAt === change.updatedAt && (current.entry === null) === (change.entry === null);
-        if (!same) conflicts.set(change.id, current);
-        continue;
-      }
-      if (!current && count >= this.maxRecords) throw new DiaryFullError();
-      if (!current) count++;
-      data.rev++;
-      data.records[change.id] = { ...change, rev: data.rev };
-      applied.add(change.id);
-      conflicts.delete(change.id);
-    }
-    if (applied.size > 0) this.save(data);
-    const newer = Object.values(data.records)
-      .filter((r) => r.rev > since && !applied.has(r.id))
-      .sort((a, b) => a.rev - b.rev);
-    const page = newer.slice(0, this.pageSize);
-    const more = newer.length > page.length;
-    const rev = more ? page[page.length - 1]!.rev : data.rev;
-    const inPage = new Set(page.map((r) => r.id));
-    const extra = [...conflicts.values()].filter((r) => !inPage.has(r.id));
-    return { rev, changes: [...page, ...extra].map(strip), more };
+  async sync(owner: string, since: number, changes: readonly DiaryRecord[]): Promise<DiarySyncResult> {
+    const result = await this.store.sync(this.kind, owner, since, changes.map(toSync));
+    return { ...result, changes: result.changes.map(fromSync) };
   }
 
   /**
-   * Übernimmt die Sicherung von `from` (z. B. „device:<id>“) in `to` („user:<id>“), danach gibt es die von `from` nicht
-   * mehr. Wie beim Abgleich gewinnt die neuere Fassung, bei Gleichstand das Löschen; Übernommenes bekommt eine neue
-   * Revision, damit es auch die anderen Geräte des Kontos erreicht. Liefert die Zahl übernommener Einträge (ohne
-   * Löschmarken). Wirft DiaryFullError, ohne etwas zu ändern, wenn `to` dafür zu voll ist.
+   * Übernimmt die Sicherung von `from` (z. B. „device:<id>“) in `to` („user:<id>“), danach hat `from` keine mehr. Neuere
+   * Fassung gewinnt, bei Gleichstand das Löschen. Liefert die Zahl übernommener Einträge (ohne Löschmarken); wirft
+   * DiaryFullError, ohne etwas zu ändern, wenn `to` dafür zu voll ist.
    */
-  transfer(from: string, to: string): number {
-    if (from === to) return 0;
-    const source = Object.values(this.load(from).records).sort((a, b) => a.rev - b.rev);
-    const target = this.load(to);
-    const incoming = source.filter((r) => !target.records[r.id] || wins(r, target.records[r.id]!));
-    const added = incoming.filter((r) => !target.records[r.id]).length;
-    if (added > 0 && Object.keys(target.records).length + added > this.maxRecords) throw new DiaryFullError();
-    for (const record of incoming) {
-      target.rev++;
-      target.records[record.id] = { ...strip(record), rev: target.rev };
-    }
-    if (incoming.length > 0) this.save(target);
-    if (source.length > 0) this.remove(from);
-    return incoming.filter((r) => r.entry !== null).length;
+  transfer(from: string, to: string): Promise<number> {
+    return this.store.transfer(this.kind, from, to);
   }
 
   /** Anzahl gespeicherter Einträge (ohne Löschmarken), z. B. für Tests. */
-  count(owner: string): number {
-    return Object.values(this.load(owner).records).filter((r) => r.entry !== null).length;
+  count(owner: string): Promise<number> {
+    return this.store.count(this.kind, owner);
   }
 
   /** Alle Einträge ohne Löschmarken, nach Tag und Uhrzeit sortiert – für „Meine Daten exportieren“. */
-  entries(owner: string): DiaryEntryData[] {
-    return Object.values(this.load(owner).records)
-      .flatMap((r) => (r.entry ? [r.entry] : []))
-      .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  async entries(owner: string): Promise<DiaryEntryData[]> {
+    return (await this.store.records<DiaryData>(this.kind, owner))
+      .flatMap((r) => (r.data ? [fromSync(r).entry!] : []))
+      .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`) || a.id.localeCompare(b.id));
   }
 
-  /** Beim Löschen eines Kontos: die ganze Sicherung entfernen, auch die Datei. */
-  remove(owner: string) {
-    this.owners.delete(owner);
-    const file = this.file(owner);
-    if (file) rmSync(file, { force: true });
-  }
-
-  private file(owner: string): string | null {
-    return this.dir ? join(this.dir, `${createHash("sha256").update(owner).digest("hex").slice(0, 40)}.json`) : null;
-  }
-
-  private load(owner: string): OwnerData {
-    const cached = this.owners.get(owner);
-    if (cached) return cached;
-    let data: OwnerData = { owner, rev: 0, records: {} };
-    const file = this.file(owner);
-    if (file) {
-      try {
-        const saved = JSON.parse(readFileSync(file, "utf8")) as OwnerData;
-        if (saved && typeof saved.rev === "number" && saved.records && typeof saved.records === "object") data = { ...saved, owner };
-      } catch (e) {
-        // Keine Datei = noch nichts gesichert. Eine unlesbare Datei nicht überschreiben.
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      }
-    }
-    this.owners.set(owner, data);
-    return data;
-  }
-
-  private save(data: OwnerData) {
-    const file = this.file(data.owner);
-    if (!file || !this.dir) return;
-    mkdirSync(this.dir, { recursive: true });
-    const tmp = `${file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(data));
-    renameSync(tmp, file);
+  /** Die ganze Sicherung eines Besitzers entfernen. */
+  remove(owner: string): Promise<void> {
+    return this.store.remove(owner, this.kind);
   }
 }

@@ -50,6 +50,31 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    version: 2,
+    name: "Abgleich mit der App (zuerst die Sicherung der Ernährungshistorie)",
+    up: [
+      // Ein Datensatz pro Besitzer („user:<Konto-ID>“ bzw. „device:<Geräte-ID>“), Art (z. B. „diary“) und Eintrags-ID:
+      // Revision der letzten Änderung, deren Zeitpunkt (ISO-Text) und Inhalt als JSON – NULL ist eine Löschmarke.
+      `CREATE TABLE sync_records (
+        owner TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        id TEXT NOT NULL,
+        rev INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        data TEXT,
+        PRIMARY KEY (owner, kind, id)
+      )`,
+      "CREATE INDEX sync_records_by_rev ON sync_records (owner, kind, rev)",
+      // Zähler pro Besitzer und Art: die zuletzt vergebene Revision (storage/sync.ts).
+      `CREATE TABLE sync_revisions (
+        owner TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        rev INTEGER NOT NULL,
+        PRIMARY KEY (owner, kind)
+      )`,
+    ],
+  },
 ];
 
 /** Die Datenbank wurde schon von einer neueren Server-Fassung umgebaut – lieber nicht starten als Daten verderben. */

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DiaryStore } from "../../server/src/diary/store";
+import { openSqlite } from "../../server/src/storage/db";
+import { migrate } from "../../server/src/storage/migrations";
 import {
   DIARY_KEY,
   addEntry,
@@ -153,15 +155,22 @@ describe("Tagebuch: nichts löscht Einträge automatisch", () => {
   });
 });
 
+/** Derselbe Speicher wie im Server (Datenbank SQLite im Speicher), ohne HTTP. */
+async function serverStore(pageSize?: number) {
+  const db = openSqlite(":memory:");
+  await migrate(db);
+  return new DiaryStore(db, pageSize);
+}
+
 describe("Tagebuch: Sicherung auf dem Server", () => {
-  /** Derselbe Speicher wie im Server, ohne HTTP (Seiten zu 3 Datensätzen, damit das Blättern mitgeprüft wird). */
-  const server = new DiaryStore(null, 3);
+  // Seiten zu 3 Datensätzen, damit das Blättern mitgeprüft wird.
+  const server = serverStore(3);
   const calls: DiarySyncRequest[] = [];
   const call =
     (owner: string) =>
     async (request: DiarySyncRequest): Promise<DiarySyncResponse> => {
       calls.push(request);
-      return { owner, ...server.sync(owner, request.since, request.changes) };
+      return { owner, ...(await (await server).sync(owner, request.since, request.changes)) };
     };
   const run = async (state: DiaryState, owner: string) => (await syncDiary(state, owner, call(owner)))(state);
 
@@ -184,9 +193,9 @@ describe("Tagebuch: Sicherung auf dem Server", () => {
 
   it("lädt beim Anmelden die Einträge vom Gerät ins Konto", async () => {
     let state = await run(addEntry(emptyDiary(), meal("anon", "2026-11-24")), "device:abc12345");
-    assert.equal(server.count("user:2"), 0);
+    assert.equal(await (await server).count("user:2"), 0);
     state = await run(state, "user:2");
-    assert.equal(server.count("user:2"), 1);
+    assert.equal(await (await server).count("user:2"), 1);
     assert.equal(state.sync?.owner, "user:2");
   });
 
@@ -198,7 +207,7 @@ describe("Tagebuch: Sicherung auf dem Server", () => {
     assert.deepEqual(state.pending, ["b"]);
     state = await run(state, "user:3");
     assert.deepEqual(state.pending, []);
-    assert.equal(server.count("user:3"), 2);
+    assert.equal(await (await server).count("user:3"), 2);
   });
 
   it("holt große Historien seitenweise und lädt in Paketen hoch", async () => {
@@ -207,12 +216,12 @@ describe("Tagebuch: Sicherung auf dem Server", () => {
     calls.length = 0;
     big = await run(big, "user:4");
     assert.deepEqual(calls.map((c) => c.changes.length), [2000, 2000, 100]);
-    assert.equal(server.count("user:4"), 4100);
+    assert.equal(await (await server).count("user:4"), 4100);
     assert.deepEqual(big.pending, []);
     // Ein neues Gerät bekommt alles, auch wenn der Server nur 3 Datensätze pro Antwort schickt.
-    const small = new DiaryStore(null, 3);
-    small.sync("user:5", 0, Array.from({ length: 8 }, (_, i) => ({ id: `s${i}`, updatedAt: "2026-02-01T00:00:00.000Z", entry: meal(`s${i}`, "2026-02-01") })));
-    const fresh = (await syncDiary(emptyDiary(), "user:5", async (r) => ({ owner: "user:5", ...small.sync("user:5", r.since, r.changes) })))(emptyDiary());
+    const small = await serverStore(3);
+    await small.sync("user:5", 0, Array.from({ length: 8 }, (_, i) => ({ id: `s${i}`, updatedAt: "2026-02-01T00:00:00.000Z", entry: meal(`s${i}`, "2026-02-01") })));
+    const fresh = (await syncDiary(emptyDiary(), "user:5", async (r) => ({ owner: "user:5", ...(await small.sync("user:5", r.since, r.changes)) })))(emptyDiary());
     assert.equal(fresh.entries.length, 8);
   });
 

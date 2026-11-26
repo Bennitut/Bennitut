@@ -1,6 +1,9 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { INSERT_USER, ROLES, userValues, type AuthProvider, type User } from "../auth/users.js";
+import { DIARY_KIND, diaryData } from "../diary/store.js";
 import type { Db } from "./db.js";
+import { SyncStore, type StoredSyncRecord } from "./sync.js";
 
 // Einmaliger Umzug aus den JSON-Dateien älterer Fassungen in die Datenbank (Vorrang 1, 9.2).
 
@@ -90,4 +93,71 @@ export async function importLegacyUsers(db: Db, file: string): Promise<LegacyImp
   rmSync(file, { force: true });
   rmSync(`${file}.tmp`, { force: true });
   return result;
+}
+
+export interface LegacyDiaryImport {
+  /** Übernommene Sicherungen (eine Datei pro Konto bzw. Gerät). */
+  owners: number;
+  /** Übernommene Einträge und Löschmarken. */
+  records: number;
+  /** Unlesbare Dateien – sie bleiben liegen. */
+  unreadable: number;
+}
+
+/** Höchste Revision, die Postgres in einer INTEGER-Spalte speichern kann. */
+const MAX_REV = 2_147_483_647;
+const revision = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAX_REV;
+
+/** Eine Datei aus `data/diary/` lesen; null, wenn sie unlesbar ist oder nicht wie eine Sicherung aussieht. */
+function legacyDiaryFile(file: string): { owner: string; rev: number; records: StoredSyncRecord[] } | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+  const saved = raw as { owner?: unknown; rev?: unknown; records?: unknown } | null;
+  if (!saved || typeof saved.owner !== "string" || !/^(user|device):./.test(saved.owner) || !revision(saved.rev)) return null;
+  if (!saved.records || typeof saved.records !== "object") return null;
+  const records = Object.values(saved.records).flatMap((value): StoredSyncRecord[] => {
+    const r = value as { id?: unknown; updatedAt?: unknown; rev?: unknown; entry?: unknown } | null;
+    if (!r || typeof r.id !== "string" || r.id.length === 0 || r.id.length > 100 || !revision(r.rev)) return [];
+    if (typeof r.updatedAt !== "string" || Number.isNaN(Date.parse(r.updatedAt))) return [];
+    if (r.entry !== null && (typeof r.entry !== "object" || Array.isArray(r.entry))) return [];
+    return [{ id: r.id, rev: r.rev, updatedAt: new Date(r.updatedAt).toISOString(), data: r.entry === null ? null : diaryData(r.entry as object) }];
+  });
+  return { owner: saved.owner, rev: saved.rev, records };
+}
+
+/**
+ * Bis 27.11.2026 lag die Sicherung der Ernährungshistorie in `data/diary/`: eine JSON-Datei pro Konto bzw. Gerät
+ * (Name = Prüfsumme des Besitzers). Jede lesbare Datei kommt einmal in die Datenbank (Tabelle sync_records, Art
+ * „diary“) – mit denselben Revisionen, damit Geräte, die schon abgeglichen haben, beim nächsten Mal nichts verpassen –
+ * und wird danach gelöscht (sonst kämen gelöschte Konten beim nächsten Start zurück). Unlesbare Dateien bleiben liegen,
+ * ein leerer Ordner verschwindet. Ohne Ordner bzw. ohne Dateien: null.
+ */
+export async function importLegacyDiary(db: Db, dir: string): Promise<LegacyDiaryImport | null> {
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir).filter((name) => name.endsWith(".json"));
+  const counts: LegacyDiaryImport = { owners: 0, records: 0, unreadable: 0 };
+  const store = new SyncStore(db);
+  for (const name of files.sort()) {
+    const file = join(dir, name);
+    const saved = legacyDiaryFile(file);
+    if (!saved) {
+      counts.unreadable++;
+      continue;
+    }
+    counts.records += await store.importOwner(DIARY_KIND, saved.owner, saved.records, saved.rev);
+    counts.owners++;
+    rmSync(file, { force: true });
+    rmSync(`${file}.tmp`, { force: true });
+  }
+  if (readdirSync(dir).length === 0) rmSync(dir, { recursive: true, force: true });
+  if (files.length === 0) return null;
+  await db.run("INSERT INTO storage_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", [
+    "imported:diary",
+    JSON.stringify({ at: new Date().toISOString(), ...counts }),
+  ]);
+  return counts;
 }
