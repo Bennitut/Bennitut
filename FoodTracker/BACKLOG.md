@@ -14,10 +14,11 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 26.11.2026 (abends):** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit Konten,
-dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
+**Stand 26.11.2026 (spätabends):** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. Konten mit E-Mail und Passwort gibt es seit 25.11. im Server und seit 26.11.
-in der App; als Nächstes kommen die lokalen Daten beim ersten Anmelden ins Konto. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+in der App, seit 26.11. abends kommt beim Anmelden mit ins Konto, was das Gerät ohne Konto auf dem Server hatte. Als
+Nächstes der Hinweis vor der ersten Nutzung der KI-Funktionen (letzter Punkt von 9.1), dann 9.2. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -63,7 +64,17 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
   Zustand, der kein Token mehr enthält). Karte „Konto verwalten“ im Profil: Passwort ändern, „Meine Daten exportieren“,
   Konto löschen mit Rückfrage direkt in der Karte (kein `Alert`, das im Browser nichts zeigt). 15 App-Tests (174);
   `npm run web:account` spielt alles im Browser mit echtem Server durch.
-- [ ] Beim ersten Anmelden die lokalen Daten des Geräts ins Konto übernehmen, ohne Duplikate.
+- [x] Beim ersten Anmelden die lokalen Daten des Geräts ins Konto übernehmen, ohne Duplikate. – erledigt 26.11.2026:
+  Nach jeder Anmeldung ruft die App einmal `POST /api/auth/claim-device` auf: Fotos, Sterne, geteilte Rezepte, Favoriten,
+  Meldungen und die Tagebuch-Sicherung der Geräte-ID gehören danach dem Konto, die Sicherung unter der Geräte-ID ist weg.
+  Nichts doppelt: Hat das Konto dasselbe Rezept bzw. Foto schon bewertet, favorisiert oder gemeldet, gilt seine Fassung
+  (Sterne haben keinen Zeitpunkt), eigene Fotos bleiben ohne eigene Sterne, im Tagebuch gewinnt die neuere Fassung.
+  Gespeichert wird, für welches Konto es geklappt hat (`claimedFor`, jede An- und Abmeldung setzt es zurück); im Profil
+  einmal ein Hinweis, Anmeldebildschirm und „Nicht angemeldet“ sagen es vorher (fünf Sprachen). Das Tagebuch auf dem
+  Gerät ging schon vorher beim ersten Abgleich ganz ins Konto. Plan, Vorrat, eigene Rezepte und Einstellungen liegen
+  bisher nur auf dem Gerät – sie kommen mit 9.2 (Abgleich aller Daten) nach demselben Muster ins Konto. Dabei eine
+  Sicherheitslücke geschlossen (Geräte-ID „user:<Konto-ID>“, unter „Ideen und Erkenntnisse“). 9 Server-Tests (124),
+  2 App-Tests (176), `npm run web:account` prüft die Übernahme im Browser.
 - [ ] Kein Mindestalter (Vorrang 2, Antwort 3): keine Altersabfrage, aber bei der Registrierung und vor der ersten
   Nutzung der KI-Funktionen der Hinweis, dass Kinder unter 14 und – für Gesundheitsdaten wie Allergien oder das
   Ernährungstagebuch – Minderjährige unter 18 nur mit Zustimmung eines Elternteils einwilligen (§ 4 Abs. 4 DSG, Art. 8
@@ -79,7 +90,9 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
   Datei-Variante). Konten und Sitzungen gehören auch dorthin (auf kostenlosen Cloud-Diensten gehen Dateien beim Neustart
   verloren).
 - [ ] Abgleich App ↔ Server wie in 8.2 (Eintrags-ID, Löschmarken, Zeitstempel), jetzt für alle genannten Daten; offline
-  weiter nutzbar, Abgleich sobald verbunden.
+  weiter nutzbar, Abgleich sobald verbunden. Wie beim Tagebuch geht beim ersten Abgleich mit einem Konto alles vom Gerät
+  hoch (Rest von 9.1 „lokale Daten ins Konto“, ohne Duplikate); bei Einzelstücken wie Plan und Einstellungen gewinnt
+  die neuere Fassung.
 - [ ] Server-Adresse: `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie bisher der
   Laptop im WLAN.
 
@@ -95,9 +108,9 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
   die Tunnel-Adresse, mit geheimem Schlüssel) – als Option vorsehen. Klar abgrenzen, was Benjamin selbst tun muss.
 - [ ] Sicherheit: nur über HTTPS, Rate-Limits, Größenbegrenzung für Uploads, keine Geheimnisse im Repo, Logs ohne
   Passwörter, Tokens oder E-Mail-Adressen; Datenschutz-Entwurf um Konten, Speicherung, Hosting-Anbieter und Reel-Import
-  ergänzen. Dabei B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` nachziehen: Dort stehen bisher
-  nur Apple und Google, und „Konto löschen“ fehle – jetzt E-Mail und Passwort (nur scrypt-Prüfwert, Code zum
-  Zurücksetzen per Mail-Dienst), Export und Löschen im Profil, die Sitzung im Schlüsselbund bzw. in localStorage.
+  ergänzen. B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand
+  (E-Mail und Passwort mit scrypt-Prüfwert, Code per Mail-Dienst, Sitzung im Schlüsselbund bzw. in localStorage,
+  Übernahme der Gerätedaten beim Anmelden, Export und Löschen im Profil).
 
 **9.4 Import von Instagram-Reels, TikTok und YouTube Shorts**
 
@@ -550,6 +563,20 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   automatisch unter der Geräte-ID (so gewünscht, 8.2). Wer sein Konto löscht, damit seine Daten vom Server verschwinden,
   hat die Historie danach also wieder dort, nur unter der Geräte-ID. Zusammen mit „Sicherung der Historie startet ohne
   Nachfrage“ lösen: Sicherung abschaltbar machen und beim Löschen mit ausschalten. (26.11.2026)
+- ✅ **Geräte-ID ließ sich als fremdes Konto ausgeben:** Der Server nahm als `X-Device-Id` jede Zeichenkette mit 8 bis
+  100 Zeichen. Ohne Anmeldung handelt er unter der Geräte-ID, mit Anmeldung unter „user:<Konto-ID>“ – und die Konto-IDs
+  stehen im Nutzerverzeichnis. Mit `X-Device-Id: user:<ID>` konnte man so ohne Passwort die Fotos und geteilten Rezepte
+  eines fremden Kontos löschen und in seinem Namen bewerten (mit der neuen Übernahme hätte man sie sogar ins eigene Konto
+  holen können). Beim Bau der Übernahme aufgefallen. (26.11.2026) Erledigt 26.11.2026: Geräte-IDs nur noch aus
+  Buchstaben, Ziffern, „-“ und „_“ (wie die App sie erzeugt), ein Server-Test prüft die Lücke.
+- **Geteilte Geräte:** Wer sich auf einem Gerät anmeldet, bekommt, was das Gerät ohne Konto auf dem Server hatte – auch
+  wenn das jemand anderes war (Familien-Tablet). Das Tagebuch auf dem Gerät ging schon bisher beim ersten Abgleich ins
+  angemeldete Konto. Bei einer Ernährungs-App auf dem eigenen Handy selten; falls nötig, vor der Übernahme fragen („Was
+  dieses Gerät ohne Konto gespeichert hat, in dein Konto übernehmen?“). (26.11.2026)
+- **Geräte-ID nicht kryptografisch zufällig:** `newId()` (Zeitstempel plus sechs Zeichen aus `Math.random`, zweimal) ist
+  schwer zu erraten, aber nicht kryptografisch zufällig. Wer eine fremde Geräte-ID kennt, kann deren Daten verwalten und
+  seit der Übernahme auch ins eigene Konto holen; der Server schickt Geräte-IDs nie an andere. Für neue Installationen
+  `randomUUID()` aus `expo-crypto` nehmen (schon eine Abhängigkeit; vorher die Doku für SDK 58 lesen). (26.11.2026)
 - **Anmeldung in Expo Go auf dem Gerät ungeprüft:** `expo-secure-store` ist in Expo Go enthalten, die Bundles für iOS
   und Android bauen, und im Browser ist alles getestet – auf iPhone und Android aber nicht. Benjamin im PR gebeten:
   anmelden, Expo Go ganz schließen, wieder öffnen → noch angemeldet. (26.11.2026)
