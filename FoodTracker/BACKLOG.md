@@ -14,14 +14,15 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 2 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 3 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
 Seit 27.11. gibt es die Speicherschicht (SQLite-Datei oder Postgres mit `DATABASE_URL`, versionierte Migrationen); dort
-liegen Konten, Sitzungen und die Tagebuch-Sicherung, Letztere in einer allgemeinen Tabelle für den Abgleich. Als Nächstes
-9.2, Teil 3 (Community-Rezepte, Favoriten, Bewertungen, Meldungen und Admin-Änderungen in die Datenbank, Fotos als
-Dateien). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+liegt alles, was der Server speichert – Konten, Sitzungen, Tagebuch-Sicherung (in einer allgemeinen Tabelle für den
+Abgleich), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und Admin-Änderungen –, die Fotos selbst als Dateien
+im Bildspeicher (`data/photos/`). Als Nächstes 9.2 „Abgleich App ↔ Server“ für Plan, Vorrat, eigene Rezepte und
+Einstellungen. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -121,8 +122,19 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   Dateien, unlesbare bleiben liegen; „Konto löschen“ entfernt auch Löschmarken und Zähler des Kontos. 17 Server-Tests
   (172, SQLite und pg-mem), der App-Test gegen den echten Server-Speicher läuft jetzt mit Datenbank, `npm run
   web:account` prüft Umzug, Übernahme ins Konto, Export und Löschen im Browser.
-- [ ] Community-Rezepte, Favoriten, Bewertungen, Meldungen und Admin-Änderungen in die Datenbank (Teil 3), mit Umzug aus
-  den JSON-Dateien; Fotos als Dateien (`data/photos/`) bzw. in einem Objektspeicher statt als data-URI.
+- [x] Community-Rezepte, Favoriten, Bewertungen, Meldungen und Admin-Änderungen in die Datenbank (Teil 3), mit Umzug aus
+  den JSON-Dateien; Fotos als Dateien (`data/photos/`) bzw. in einem Objektspeicher statt als data-URI. – erledigt
+  27.11.2026: Migration 3 mit sieben Tabellen (geteilte Rezepte, Favoriten, Fotos, Sterne für Fotos und Rezepte,
+  Meldungen, Admin-Änderungen); `CommunityStore`, `FeedbackStore` und `OverrideStore` liegen in der Datenbank, die
+  Schnittstelle der App bleibt gleich. Bildspeicher `storage/images.ts` (Ordner `data/photos/`, `PHOTOS_DIR`; Schlüssel
+  nur aus UUID und Endung, atomar geschrieben): Fotos der Galerie und eigene Fotos geteilter Rezepte als Dateien statt
+  als data-URI (vorher bis zu 700 KB pro Community-Rezept in jeder Liste), `GET /api/images/<Schlüssel>` mit langem
+  Zwischenspeicher und `nosniff`; nur JPEG, PNG und WebP, erkannt an den ersten Bytes (sonst `400 invalid_image`).
+  Die App setzt erst beim Anzeigen die Server-Adresse vor den Pfad (`lib/serverImages.ts`), damit gespeicherte Pfade
+  einen Umzug des Servers überstehen. Löschen (Foto, Rezept, Konto) löscht die Dateien mit, der Export enthält die
+  eigenen Fotos als data-URI. `community.json`, `feedback.json` und `recipe-overrides.json` übernimmt der Server beim
+  Start einmal (gleiche IDs, Fotos als Dateien) und löscht sie. 40 Server-Tests (212, SQLite und pg-mem), 5 App-Tests
+  (187); `npm run web:account` prüft den Umzug und die Fotos vom Server im Browser.
 - [ ] Abgleich App ↔ Server wie in 8.2 (Eintrags-ID, Löschmarken, Zeitstempel), jetzt für alle genannten Daten; offline
   weiter nutzbar, Abgleich sobald verbunden. Tabelle `sync_records` und `SyncStore` stehen seit Teil 2 (je Art ein eigener
   Name, eigene Grenzen). Wie beim Tagebuch geht beim ersten Abgleich mit einem Konto alles vom Gerät
@@ -136,6 +148,10 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
 
 - [ ] Dockerfile und Health-Check für den Server; `CORS_ORIGINS` für die Web-Version (`https://bennitut.github.io`)
   und eigene Domains.
+- [ ] Fotos auf Cloud-Diensten ohne dauerhafte Dateien (z. B. Render gratis): eine zweite Fassung von `ImageStore`
+  (`storage/images.ts`) für einen Objektspeicher mit S3-Schnittstelle – aktuelle Gratis-Angebote per Websuche prüfen
+  (wo eine Kreditkarte verlangt wird, ehrlich sagen); ohne neue native Pakete, Tests ohne echten Dienst. In
+  `SERVER-HOSTING.md`: beim Umzug des Servers den Ordner `data/photos/` mitnehmen bzw. in den Objektspeicher kopieren.
 - [ ] `docs/SERVER-HOSTING.md` auf Deutsch, Schritt für Schritt, zwei kostenlose Wege mit ehrlichen Grenzen:
   (a) Laptop plus Cloudflare Tunnel (KI kostenlos über Ollama auf der GPU, aber nur erreichbar, solange der Laptop
   läuft); (b) kostenloser Cloud-Dienst mit kostenloser Postgres-Datenbank (aktuelle Gratis-Angebote per Websuche prüfen,
@@ -605,7 +621,20 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   schon vorhandene Tabellen nicht (umgangen). Vor dem Start mit Neon einmal gegen ein echtes Postgres prüfen (9.3 bzw.
   9.5): Tabellen anlegen, registrieren, anmelden, Server neu starten, noch angemeldet. Seit 9.2 Teil 2 dazu das
   Tagebuch: zwei Geräte gleichzeitig abgleichen lassen – gleichzeitige Abgleiche desselben Kontos sollen nacheinander
-  laufen (Zeilensperre in `sync_revisions`; pg-mem kennt keine Sperren). (27.11.2026)
+  laufen (Zeilensperre in `sync_revisions`; pg-mem kennt keine Sperren). Seit 9.2 Teil 3 dazu: ein Rezept teilen,
+  favorisieren, ein Foto hochladen und bewerten, Konto löschen (Fremdschlüssel von Favoriten und Sternen; `COUNT` und
+  `SUM` kommen bei Postgres als Text und werden mit `Number()` gelesen). (27.11.2026)
+- **Fotogrenze bei Postgres nicht ganz streng:** Höchstens 40 Fotos pro Rezept und 5 pro Gerät bzw. Konto und Rezept –
+  bei SQLite genau, bei Postgres können zwei gleichzeitige Uploads die Grenze um eins überschreiten (Zählen und Eintragen
+  in einer Transaktion, aber ohne Sperre). Harmlos; bei Bedarf mit einer Sperre je Rezept lösen. (27.11.2026)
+- **Admin-Änderungen merken sich nur den Namen:** „Zuletzt geändert von“ an Katalogrezepten ist der Anzeigename des
+  Admins. Löscht ein Admin sein Konto, wird jeder Eintrag mit diesem Namen zu „Gelöschtes Konto“ – auch der eines
+  anderen Admins mit gleichem Namen. Besser zusätzlich die Konto-ID speichern (neue Migration). (27.11.2026)
+- **Kopie eines geteilten Rezepts behält den Pfad zum Foto:** Wer ein Community-Rezept als eigene Kopie speichert,
+  bekommt das Foto als Pfad im Bildspeicher des Servers (nicht als Datei auf dem Gerät). Ohne Server zeigt die Kopie
+  den Platzhalter; nach einem Umzug ohne den Ordner `data/photos/` oder wenn die Autorin das Rezept zurückzieht, bleibt
+  das Bild leer (teilt man die Kopie selbst, bekommt sie eine eigene Bilddatei). Mit dem Abgleich eigener Rezepte (9.2)
+  lösen: Fotos eigener Rezepte ebenfalls in den Bildspeicher, dem Konto zugeordnet. (27.11.2026)
 - **Neuer Server, alte Abgleich-Marken:** Die App merkt sich beim Tagebuch nur Besitzer und Revision, nicht, welcher
   Server bzw. welche Datenbank. Zieht der Server auf eine neue, leere Datenbank um (z. B. vom Laptop zu Render mit Neon)
   oder bekommt die App eine andere Server-Adresse, schicken Geräte, die schon abgeglichen hatten, nur noch ihre neuen
