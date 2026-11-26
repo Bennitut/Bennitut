@@ -10,8 +10,10 @@
 //                                     # Abmelden, Anmelden mit altem und neuem Passwort, „Passwort vergessen?“ bis zum
 //                                     # falschen Code; Fragebogen, Monatsplan und zwei gebuchte Zeilen kommen in einem
 //                                     # frischen Browser (Hinweis „Anmelden“ im Plan) mit dem Konto zurück, eine dort
-//                                     # abgehakte Zeile kommt im ersten an; „Meine Daten exportieren“ (mit Plan und
-//                                     # Vorrat), Konto löschen (falsch/richtig);
+//                                     # abgehakte Zeile kommt im ersten an; ein Favorit und eine Kopie mit eigenem
+//                                     # Foto kommen ebenso mit (das Foto im zweiten vom Server, im ersten bleibt es
+//                                     # auf dem Gerät); „Meine Daten exportieren“ (mit Plan, Vorrat, Rezept samt
+//                                     # Foto und Favorit), Konto löschen (falsch/richtig, Foto danach weg);
 //                                     # dabei die Sicherung des Tagebuchs in der Datenbank (Umzug einer Datei aus
 //                                     # data/diary/ beim Start, Eintrag vom Gerät landet im Konto, im Export und ist
 //                                     # nach dem Löschen weg); vorher der Umzug von Community-Rezepten, Fotos mit
@@ -421,7 +423,7 @@ async function main() {
       const res = await fetch(`${API}/api/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${bearerToken}` },
-        body: JSON.stringify({ kinds: { settings: { since: 0 }, plan: { since: 0 }, pantry: { since: 0 } } }),
+        body: JSON.stringify({ kinds: { settings: { since: 0 }, plan: { since: 0 }, pantry: { since: 0 }, recipes: { since: 0 }, favorites: { since: 0 }, texts: { since: 0 } } }),
       });
       return res.ok ? (await res.json()).kinds : {};
     };
@@ -489,6 +491,66 @@ async function main() {
     }
     if (!(await page.getByRole("checkbox").nth(2).isChecked())) failures.push("Dritte Zeile im ersten Browser nicht als angehakt markiert");
     step("Frischer Browser: Hinweis „Anmelden“ im Plan, danach Plan, Häkchen und Vorrat da; Häkchen von dort kommt im ersten an");
+
+    // Eigene Rezepte mit Foto und Favoriten mit dem Konto (9.2 Teil 5): hier ein Katalogrezept favorisieren und als
+    // eigenes Rezept mit eigenem Foto speichern, dann in einem frischen Browser anmelden – beides ist da, das Foto kommt
+    // dort vom Server; hier bleibt es auf dem Gerät (offline sichtbar), daneben der Pfad im Bildspeicher.
+    const photoFile = path.join(dataDir, "eigenes-foto.jpg");
+    fs.writeFileSync(photoFile, Buffer.from(jpeg.split(",")[1], "base64"));
+    await page.goto(`${site}/recipe/kaiserschmarrn`, { waitUntil: "networkidle" });
+    await button("♡ Favorit").click();
+    await button("♥ Favorit").waitFor({ timeout: 5_000 });
+    await button("Als eigenes Rezept speichern").click();
+    await page.waitForURL(/\/recipe\/edit/);
+    await field("Name").fill("Nachtschicht-Schmarrn");
+    const [chooser] = await Promise.all([page.waitForEvent("filechooser"), button("🖼️ Aus Galerie").click()]);
+    await chooser.setFiles(photoFile);
+    await page.waitForTimeout(1500);
+    await button("Speichern").click();
+    await page.waitForURL(/\/recipe\/eigen_/);
+    const ownId = decodeURIComponent(new URL(page.url()).pathname.split("/").pop());
+    const ownOnServer = (k) => (k.recipes?.changes ?? []).find((r) => r.id === ownId && r.data);
+    const withRecipe = await waitForServer((k) => ownOnServer(k)?.data.recipe.media?.image?.uri?.startsWith("/api/images/") && (k.favorites?.changes ?? []).some((r) => r.id === "kaiserschmarrn" && r.data));
+    const ownPath = ownOnServer(withRecipe)?.data.recipe.media?.image?.uri;
+    if (ownOnServer(withRecipe)?.data.recipe.name !== "Nachtschicht-Schmarrn") failures.push(`Eigenes Rezept nicht im Konto: ${JSON.stringify(ownOnServer(withRecipe))}`);
+    if (!ownPath?.startsWith("/api/images/")) failures.push(`Foto des eigenen Rezepts nicht im Bildspeicher: ${ownPath}`);
+    if (JSON.stringify(withRecipe.recipes ?? {}).includes("base64")) failures.push("Foto als data-URI in der Datenbank");
+    if (!(withRecipe.favorites?.changes ?? []).some((r) => r.id === "kaiserschmarrn" && r.data)) failures.push("Favorit nicht im Konto");
+    const ownImageHere = async () =>
+      page.evaluate((id) => (JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}").myRecipes ?? []).find((r) => r.id === id)?.media?.image ?? null, ownId);
+    let here = await ownImageHere();
+    for (let i = 0; i < 40 && here?.server !== ownPath; i++) {
+      await page.waitForTimeout(250);
+      here = await ownImageHere();
+    }
+    if (!here?.uri?.startsWith("data:image/") || here.server !== ownPath) failures.push(`Im ersten Browser nicht Foto plus Pfad: ${JSON.stringify(here && { uri: here.uri.slice(0, 30), server: here.server })}`);
+
+    const recipeContext = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT" });
+    const third = await recipeContext.newPage();
+    third.on("pageerror", (e) => failures.push(`JavaScript-Fehler (dritter Browser): ${e.message}`));
+    const thirdImages = new Set();
+    third.on("response", (r) => r.url().startsWith(`${API}/api/images/`) && r.status() === 200 && thirdImages.add(r.url().slice(API.length)));
+    await third.goto(`${site}/login`, { waitUntil: "networkidle" });
+    await third.getByLabel("E-Mail", { exact: true }).fill(email);
+    await third.getByLabel("Passwort", { exact: true }).fill(second);
+    await third.getByRole("button", { name: "Anmelden", exact: true }).last().click();
+    await third.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 15_000 });
+    let thirdState = {};
+    for (let i = 0; i < 60 && !(thirdState.myRecipes ?? []).some((r) => r.id === ownId); i++) {
+      await third.waitForTimeout(250);
+      thirdState = await third.evaluate(() => JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}"));
+    }
+    if (!(thirdState.favoriteIds ?? []).includes("kaiserschmarrn")) failures.push(`Favorit fehlt im dritten Browser: ${JSON.stringify(thirdState.favoriteIds)}`);
+    await third.goto(`${site}/recipe/${encodeURIComponent(ownId)}`, { waitUntil: "networkidle" });
+    await third.getByText("Nachtschicht-Schmarrn", { exact: true }).first().waitFor({ timeout: 10_000 }).catch(() => failures.push("Eigenes Rezept fehlt im dritten Browser"));
+    for (let i = 0; i < 50 && !thirdImages.has(ownPath); i++) await third.waitForTimeout(200);
+    const shownThere = await third.evaluate((src) => [...document.querySelectorAll("img")].some((img) => img.src === src && img.complete && img.naturalWidth > 0), `${API}${ownPath}`);
+    if (!thirdImages.has(ownPath) || !shownThere) failures.push(`Foto des eigenen Rezepts im dritten Browser nicht vom Server angezeigt (geladen: ${JSON.stringify([...thirdImages])})`);
+    await third.getByRole("button", { name: "♥ Favorit", exact: true }).waitFor({ timeout: 5_000 }).catch(() => undefined);
+    await third.goto(`${site}/recipe/kaiserschmarrn`, { waitUntil: "networkidle" });
+    await third.getByRole("button", { name: "♥ Favorit", exact: true }).waitFor({ timeout: 10_000 }).catch(() => failures.push("Favorit im dritten Browser nicht markiert"));
+    await recipeContext.close();
+    step("Favorit und Kopie mit eigenem Foto: im frischen Browser da, Foto dort vom Server, im ersten auf dem Gerät mit Pfad");
     await page.goto(`${site}/profile`, { waitUntil: "networkidle" });
     await see("Angemeldet als Nachtschicht", "zurück im Profil");
 
@@ -501,8 +563,11 @@ async function main() {
     if (exported.settings?.onboarded !== true || exported.plan?.checked?.length !== 3 || exported.plan?.booked?.length !== 2 || exported.pantry?.length !== 2) {
       failures.push(`Export ohne Essgewohnheiten, Plan oder Vorrat: ${JSON.stringify({ settings: !!exported.settings, checked: exported.plan?.checked, pantry: exported.pantry })}`);
     }
+    const exportedOwn = (exported.recipes ?? []).find((r) => r.id === ownId);
+    if (exportedOwn?.name !== "Nachtschicht-Schmarrn" || !exportedOwn.media?.image?.uri?.startsWith("data:image/")) failures.push(`Export ohne eigenes Rezept samt Foto: ${JSON.stringify(exportedOwn && { name: exportedOwn.name, image: exportedOwn.media?.image?.uri?.slice(0, 30) })}`);
+    if (!(exported.favorites ?? []).some((f) => f.recipeId === "kaiserschmarrn")) failures.push(`Export ohne Favorit: ${JSON.stringify(exported.favorites)}`);
     await see("gespeichert (Downloads)", "Export");
-    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash, mit Tagebuch, Essgewohnheiten, Plan und Vorrat");
+    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash, mit Tagebuch, Essgewohnheiten, Plan, Vorrat, eigenem Rezept samt Foto und Favorit");
 
     await button("🗑️ Konto löschen").click();
     await see("Das lässt sich nicht rückgängig machen.", "Rückfrage");
@@ -513,13 +578,14 @@ async function main() {
     await button("Konto endgültig löschen").click();
     await see("Dein Konto ist gelöscht.", "Konto löschen");
     if (accountsWith(path.join(dataDir, "foodtracker.db"), email) !== 0) failures.push("Konto steht nach dem Löschen noch auf dem Server");
-    if (syncRecordsOf(path.join(dataDir, "foodtracker.db"), `user:${account.id}`) !== 0) failures.push("Tagebuch, Plan oder Vorrat des Kontos stehen nach dem Löschen noch auf dem Server");
+    if (syncRecordsOf(path.join(dataDir, "foodtracker.db"), `user:${account.id}`) !== 0) failures.push("Tagebuch, Plan, Vorrat oder Rezepte des Kontos stehen nach dem Löschen noch auf dem Server");
+    if (ownPath && fs.existsSync(path.join(dataDir, "photos", ownPath.slice("/api/images/".length)))) failures.push("Foto des eigenen Rezepts liegt nach dem Löschen noch im Bildspeicher");
     await button("Anmelden oder registrieren").click();
     await field("E-Mail").fill(email);
     await field("Passwort").fill(second);
     await button("Anmelden").last().click();
     await see("E-Mail-Adresse oder Passwort stimmt nicht.", "Anmelden nach dem Löschen");
-    step("Konto löschen (falsch, dann richtig), danach keine Anmeldung und weder Tagebuch noch Plan oder Vorrat des Kontos mehr");
+    step("Konto löschen (falsch, dann richtig), danach keine Anmeldung und weder Tagebuch noch Plan, Vorrat, Rezepte oder Fotos des Kontos mehr");
 
     // Einwilligung vor den KI-Funktionen: Ohne „Einverstanden“ geht keine KI-Anfrage an den Server.
     const improveRequests = [];
