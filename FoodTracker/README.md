@@ -16,7 +16,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Historie sichern** | Das Tagebuch wird nie automatisch gelöscht und liegt in einem eigenen Speicher (auch wenn Fotos den übrigen Speicher füllen; scheitert das Speichern, erscheint ein Hinweis). Mit Server wird es automatisch gesichert – mit Konto kommt es auf einem neuen Gerät oder nach dem Löschen der Browserdaten zurück. Ohne Server und Konto: Export als Tabelle (CSV) oder Sicherung (JSON) und Import ohne Duplikate. |
 | **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos – je Sprache eines; die App zeigt nur Videos in der gewählten Sprache und sucht sonst auf YouTube in dieser Sprache. Dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
 | **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
-| **Konten & Rollen** | Konto mit E-Mail und Passwort oder Anmeldung mit Apple bzw. Google (optional – die App funktioniert auch anonym); Passwort ändern, Konto mit allen Daten löschen, Daten exportieren (im Profil unter „Konto verwalten“). Was das Gerät vorher ohne Konto auf dem Server hatte (Fotos, Sterne, geteilte Rezepte, Favoriten, Meldungen, Sicherung des Tagebuchs), gehört nach dem Anmelden dem Konto – ohne Doppeltes. Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
+| **Konten & Rollen** | Konto mit E-Mail und Passwort oder Anmeldung mit Apple bzw. Google (optional – die App funktioniert auch anonym); Passwort ändern, Konto mit allen Daten löschen, Daten exportieren (im Profil unter „Konto verwalten“). Was das Gerät vorher ohne Konto auf dem Server hatte (Fotos, Sterne, geteilte Rezepte, Favoriten, Meldungen, Sicherung des Tagebuchs), gehört nach dem Anmelden dem Konto – ohne Doppeltes. Mit Konto sind **Plan, Einkaufsliste (mit Häkchen), Vorrat und Essgewohnheiten auf allen Geräten gleich** – auch nach dem Löschen der Browserdaten; ohne Konto bleiben sie auf dem Gerät. Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
 | **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
 | **Rezepte** | Eigene Rezepte anlegen und bearbeiten, Katalog- und Community-Rezepte als eigene Kopie anpassen, Favoriten markieren. |
@@ -49,7 +49,7 @@ FoodTracker/
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
 │   ├── src/legal/        Impressum und Datenschutzerklärung: angaben.ts (eigene Angaben, nur hier eintragen), texte.ts
-│   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten, Tagebuch und Historie, Einwilligung vor der KI)
+│   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten, Tagebuch und Historie, Abgleich mit dem Konto, Einwilligung vor der KI)
 ├── docs/recht/   Entwürfe für Impressum und Datenschutzerklärung (Österreich) mit Platzhaltern für die eigenen Angaben
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 ├── reports/      Tagesberichte der Nachtschicht als PDF (make-report.cjs, Test: node --test reports/make-report.test.cjs)
@@ -61,6 +61,7 @@ FoodTracker/
     ├── src/community/    Geteilte Rezepte und Favoriten, Fotos, Sterne und „Problem melden“ (in der Datenbank)
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
     ├── src/diary/        Sicherung der Ernährungshistorie (in der Datenbank, pro Konto bzw. Gerät)
+    ├── src/sync/         Abgleich von Einstellungen, Plan mit Häkchen und Vorrat eines Kontos (userData.ts)
     ├── src/storage/      Speicherschicht: SQLite-Datei (data/foodtracker.db) oder Postgres (DATABASE_URL),
     │                     versionierte Migrationen, Tabelle für den Abgleich mit der App (sync.ts), Bildspeicher für
     │                     Fotos (images.ts, data/photos/), einmaliger Umzug aus den JSON-Dateien älterer Fassungen
@@ -205,7 +206,11 @@ vom alten Speicherort, gesperrter Schlüsselbund; Passwortlänge genau wie im Se
 vielen Versuchen) sowie die Einwilligung vor der KI (gilt nur für die aktuelle Fassung, Unlesbares heißt „nicht erlaubt“,
 gleicher Header und gleiche Fassung wie im Server, Texte für jede KI-Funktion in allen Sprachen, Abschnitt
 „Mindestalter“ ohne Platzhalter) und die Fotos aus dem Bildspeicher des Servers (Adresse des Servers erst beim
-Anzeigen, ohne Server ein Platzhalter, derselbe Pfad wie im Server).
+Anzeigen, ohne Server ein Platzhalter, derselbe Pfad wie im Server) sowie der Abgleich von Plan, Einkaufsliste, Vorrat
+und Essgewohnheiten mit dem Konto (Einträge aus dem Zustand, Änderungen mit Zeitpunkt, ein neues Gerät bekommt alles,
+Häkchen und Vorrat in beide Richtungen, beim ersten Abgleich der Stand des ersten Geräts, ein neuer Plan von einem
+anderen Gerät setzt die alten Häkchen zurück, ohne die neuen zu löschen, nichts, was der Server ablehnen würde – gegen
+den echten Abgleich des Servers mit derselben Prüfung der Anfrage).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem die Speicherschicht mit SQLite und mit Postgres (pg-mem,
 eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig: Migrationen, Konten und Sitzungen,
 gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und
@@ -214,7 +219,9 @@ dem Rezept bzw. dem Konto, Übernahme ins Konto ohne Doppeltes, Umzug aus `commu
 `recipe-overrides.json`), die Auslieferung der Bilder, Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
 die Sicherung des Tagebuchs (ebenfalls auf beiden Datenbanken: Seiten, neuere Fassung gewinnt, Grenze ohne halbe
 Änderungen, viele Einträge in Paketen, gleichzeitige Abgleiche, Übernahme ins Konto, Umzug aus `data/diary/` mit
-denselben Revisionen) und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
+denselben Revisionen), der Abgleich von Einstellungen, Plan und Vorrat (`POST /api/sync`: nur mit Konto, zwei Geräte,
+Häkchen eines abgelösten Plans verschwinden, bei gleichem Zeitpunkt gilt der Server, Prüfung von IDs und Größe, Export
+und Löschen, Grenze pro Konto) und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
 Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash,
 Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt) und dass ohne
 Einwilligung keine Anfrage an die KI geht (`403 ai_consent_required` für jede KI-Funktion, Eingaben werden vorher
@@ -229,7 +236,9 @@ Browser durch: Umzug einer Tagebuch-Sicherung aus `data/diary/` beim Start, Umzu
 Sternen und Admin-Änderungen aus den JSON-Dateien (die App zeigt die Fotos danach vom Server: Galerie, Foto eines
 geteilten Rezepts, geändertes Katalogrezept), Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren (Sterne, die das
 Gerät vorher ohne Konto vergeben hat, und sein Tagebuch gehören danach dem Konto), Anmeldung nach dem Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
-Daten exportieren“ (mit Tagebuch) und Konto löschen (danach ist auch das Tagebuch des Kontos weg); danach die Einwilligung vor der KI („Nicht jetzt“ schickt nichts, „Einverstanden“
+Daten exportieren“ (mit Tagebuch) und Konto löschen (danach ist auch das Tagebuch des Kontos weg); dazwischen Fragebogen, Monatsplan und zwei
+gebuchte Zeilen, die in einem frischen Browser (Hinweis „Anmelden“ im Plan) mit dem Konto zurückkommen, und eine dort
+abgehakte Zeile, die im ersten Browser ankommt; danach die Einwilligung vor der KI („Nicht jetzt“ schickt nichts, „Einverstanden“
 schickt mit Einwilligung, danach keine Frage mehr, der Server lehnt Anfragen ohne ab, Widerruf im Profil, Abschnitt
 „Mindestalter“ in der Datenschutzerklärung).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
@@ -278,8 +287,8 @@ Grenzen pro IP-Adresse greifen.
 auf. Fotos, Sterne, geteilte Rezepte, Favoriten und Meldungen der Geräte-ID gehören danach dem Konto, die Sicherung des
 Tagebuchs unter der Geräte-ID wandert ins Konto und ist dort danach weg. Nichts doppelt: Hat das Konto dasselbe Rezept
 oder Foto schon bewertet, favorisiert oder gemeldet, gilt seine Fassung; im Tagebuch gewinnt wie beim Abgleich die
-neuere Fassung. Plan, Vorrat und eigene Rezepte liegen bisher nur auf dem Gerät; sie kommen mit dem Abgleich aller
-Daten ins Konto (Vorrang 1, 9.2 in `BACKLOG.md`). Die Geräte-ID besteht nur aus Buchstaben, Ziffern, „-“ und „_“ –
+neuere Fassung. Plan, Einkaufsliste, Vorrat und Essgewohnheiten gehen beim ersten Abgleich mit dem Konto ganz hoch
+(nächster Abschnitt, „Abgleich mit der App“); eigene Rezepte folgen (Vorrang 1, 9.2 in `BACKLOG.md`). Die Geräte-ID besteht nur aus Buchstaben, Ziffern, „-“ und „_“ –
 der Server lehnt andere ab, damit sich kein Gerät als Konto (`user:<id>`) ausgeben kann.
 
 Der Server liest außerdem diese Umgebungsvariablen:
@@ -308,8 +317,9 @@ Katalogrezepten liegen in der Datenbank (nächster Abschnitt).
 
 Alles, was der Server speichert, liegt in einer Datenbank (`src/storage/`): Konten und Sitzungen, die Sicherung der
 Ernährungshistorie, geteilte Rezepte mit Favoriten, Fotos mit Sternen, Sterne für Rezepte, „Problem melden“ und die
-Admin-Änderungen an Katalogrezepten – nur die Fotos selbst nicht (siehe „Fotos“). Plan, Vorrat und eigene Rezepte
-liegen bisher nur auf dem Gerät; der Abgleich dafür kommt als Nächstes (Vorrang 1, 9.2 in `BACKLOG.md`).
+Admin-Änderungen an Katalogrezepten, mit Konto auch Einstellungen, Plan mit Häkchen und Vorrat – nur die Fotos selbst
+nicht (siehe „Fotos“). Eigene Rezepte liegen bisher nur auf dem Gerät; der Abgleich dafür kommt als Nächstes (Vorrang 1,
+9.2 in `BACKLOG.md`).
 
 - **Ohne Einstellung** eine Datei auf dem eigenen Rechner: `server/data/foodtracker.db` (SQLite, in Node.js ab 22.13
   eingebaut – nichts zu installieren, keine nativen Pakete; anderer Ort mit `DATABASE_FILE`). Übersteht auch ein hart
@@ -322,10 +332,22 @@ liegen bisher nur auf dem Gerät; der Abgleich dafür kommt als Nächstes (Vorra
   `schema_migrations`). Hat eine neuere Fassung die Datenbank schon umgebaut, startet eine ältere nicht, statt Daten zu
   verderben. Dasselbe SQL läuft auf SQLite und Postgres.
 - **Abgleich mit der App:** Was App und Server abgleichen, steht in einer gemeinsamen Tabelle `sync_records` – pro Besitzer
-  (`user:<Konto-ID>` bzw. `device:<Geräte-ID>`), Art (bisher `diary`; Plan, Vorrat und eigene Rezepte sollen folgen) und
-  Eintrags-ID mit Revision, Zeitpunkt der letzten Änderung und Inhalt als JSON oder einer Löschmarke. Die Revision zählt
-  pro Besitzer und Art hoch (`sync_revisions`); die App fragt nur nach dem, was nach ihrer letzten Revision kam.
-  Gleichzeitige Abgleiche desselben Besitzers laufen nacheinander (bei Postgres sperrt die Zeile in `sync_revisions`).
+  (`user:<Konto-ID>` bzw. `device:<Geräte-ID>`), Art und Eintrags-ID mit Revision, Zeitpunkt der letzten Änderung und
+  Inhalt als JSON oder einer Löschmarke. Die Revision zählt pro Besitzer und Art hoch (`sync_revisions`); die App fragt
+  nur nach dem, was nach ihrer letzten Revision kam. Gleichzeitige Abgleiche desselben Besitzers laufen nacheinander
+  (bei Postgres sperrt die Zeile in `sync_revisions`). Arten:
+  - `diary` – das Tagebuch (`POST /api/diary/sync`, pro Konto, ohne Konto pro Gerät).
+  - `settings`, `plan` und `pantry` – nur mit Konto (`POST /api/sync`, `src/sync/userData.ts`, in der App
+    `lib/dataSync.ts`): ein Eintrag `settings` mit Profil und Fragebogen (erst nach dem Fragebogen, damit die
+    Voreinstellungen eines neuen Geräts nie die des Kontos ersetzen); `plan` mit dem Monatsplan und seinen
+    KI-Rezepten (ohne Fotos vom Gerät), dazu je Häkchen ein kleiner Eintrag mit dem Startdatum des Plans in der ID
+    (`e:<Start>:<Tag>:<Mahlzeit>` gegessen, `c:…:<Woche>:<Zutat>` abgehakt, `b:…` in den Vorrat gebucht) – so geht kein
+    Häkchen verloren, wenn zwei Geräte abhaken; Häkchen eines abgelösten Plans löscht der Server; `pantry` je
+    Vorratsposten (`<Zutat>@<Einkaufstag>`) mit der Menge. Je Eintrag gewinnt die neuere Fassung, bei gleichem Zeitpunkt
+    die des Servers; was ein Gerät schon vor dem Abgleich hatte, trägt den Zeitpunkt 0 – beim ersten Abgleich gelten
+    Plan und Einstellungen des ersten Geräts, Vorratsposten von beiden kommen zusammen. Die App gleicht beim Start, nach
+    der Anmeldung, kurz nach jeder Änderung, beim Öffnen des Profils und beim Zurückkehren in die App ab. Der Server
+    prüft IDs, Größe (Plan bis 1 MB) und Pflichtfelder, nicht den ganzen Inhalt; höchstens 5000 Einträge pro Art.
 - **Fotos** (Galerie der Rezepte, Foto eines geteilten Rezepts) speichert der Server als Bilddateien in
   `server/data/photos/` (anderer Ort mit `PHOTOS_DIR`), in der Datenbank steht nur ihr Schlüssel. Die App bekommt
   einen Pfad (`/api/images/<Schlüssel>`) statt der früheren data-URI und setzt erst beim Anzeigen die Adresse des
@@ -371,9 +393,11 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 ## Grenzen dieser Version
 
 - Alles, was der Server speichert, liegt in der Datenbank (SQLite oder Postgres), Fotos als Dateien in
-  `data/photos/` – auf Cloud-Diensten ohne dauerhafte Dateien braucht es dafür noch einen Objektspeicher (9.3). Plan,
-  Vorrat und eigene Rezepte liegen nur auf dem Gerät, bis der Abgleich dafür kommt. Ohne Anmeldung zählt weiter eine
-  anonyme Geräte-ID.
+  `data/photos/` – auf Cloud-Diensten ohne dauerhafte Dateien braucht es dafür noch einen Objektspeicher (9.3). Eigene
+  Rezepte, Favoriten und eigene Fotos liegen nur auf dem Gerät, bis der Abgleich dafür kommt; Plan, Einkaufsliste, Vorrat
+  und Essgewohnheiten gleicht die App mit Konto ab. Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
+- Abgleich: Kocht man auf zwei Geräten ohne Verbindung aus demselben Vorratsposten, gilt danach die zuletzt geänderte
+  Menge (der andere Abzug fehlt); plant man auf zwei Geräten gleichzeitig neu, gilt der neuere Plan.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
 - Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
   Fotos stammen aus freien Lizenzen (CC0, Public Domain, CC BY, CC BY-SA, über Openverse von Wikimedia Commons
@@ -388,7 +412,8 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 ## Nächste Schritte
 
 - Echten Lieferdienst-Partner anbinden
-- Plan, Vorrat und eigene Rezepte zwischen Geräten abgleichen (das Tagebuch wird schon gesichert)
+- Eigene Rezepte, Favoriten und eigene Fotos zwischen Geräten abgleichen (Tagebuch, Plan, Vorrat und Essgewohnheiten
+  schon)
 - Zutatenkatalog an eine Produktdatenbank (z. B. Open Food Facts) anbinden, Barcode-Scan
 - „Teilen“-Menü von Instagram/TikTok direkt in die App (Share Extension)
 - Mehrere Lieferungen pro Plan für sehr verderbliche Zutaten (Fisch, Fleisch)

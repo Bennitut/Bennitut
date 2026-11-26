@@ -257,8 +257,8 @@ function partB(): LegalSection[] {
           "zusätzlich E-Mail-Adresse und letzte Anmeldung.",
         "Im Profil unter „Konto verwalten“ kannst du dein Passwort ändern, alles, was der Server zu deinem Konto " +
           "speichert, als Datei herunterladen („Meine Daten exportieren“) und dein Konto löschen – mit allem, was der " +
-          "Server dazu speichert (Sicherung des Tagebuchs, geteilte Rezepte, Favoriten, Fotos, Sterne und Meldungen). Auf " +
-          "deinem Gerät bleibt dabei alles erhalten.",
+          "Server dazu speichert (Sicherung des Tagebuchs, Plan, Einkaufsliste, Vorrat und Essgewohnheiten, geteilte " +
+          "Rezepte, Favoriten, Fotos, Sterne und Meldungen). Auf deinem Gerät bleibt dabei alles erhalten.",
         "Rechtsgrundlage: Bereitstellung des gewünschten Kontos (Art. 6 Abs. 1 lit. b DSGVO). Speicherdauer: bis du dein " +
           "Konto löschst.",
       ],
@@ -334,6 +334,25 @@ function partB(): LegalSection[] {
           "Art. 9 Abs. 2 lit. a DSGVO).]] Speicherdauer: [[ANGABE: z. B. bis du dein Konto löschst]]",
         "Unabhängig vom Server kannst du deine Historie im Profil jederzeit als Datei speichern und wieder importieren " +
           "(Abschnitt 2).",
+      ],
+    },
+    {
+      title: "B7. Plan, Einkaufsliste, Vorrat und Essgewohnheiten (mit Konto)",
+      level: 3,
+      blocks: [
+        "Bist du angemeldet, gleicht FoodTracker diese Daten zwischen deinen Geräten ab, damit du überall denselben Stand " +
+          "hast: deine Antworten aus dem Fragebogen (Abschnitt 2, auch Unverträglichkeiten und Körperdaten), Sprache, " +
+          "Region und Anzeigename, den Monatsplan mit den Rezepten, die nur darin vorkommen, was du darin als gegessen, " +
+          "eingekauft und in den Vorrat gebucht abgehakt hast, und deinen Vorrat (Zutat, Einkaufstag, Menge). Der Server " +
+          "speichert sie zu deinem Konto, je Eintrag mit dem Zeitpunkt der letzten Änderung; Gelöschtes bleibt als " +
+          "Löschmarke ohne Inhalt, damit es von anderen Geräten nicht zurückkommt. Häkchen eines abgelösten Plans löscht " +
+          "er. Fotos vom Gerät gehen dabei nicht mit. Ohne Konto bleiben diese Daten auf deinem Gerät.",
+        "[[PRÜFEN: Unverträglichkeiten und Körperdaten sind Gesundheitsdaten (Art. 9 DSGVO). Sicherer Weg wie bei B6: den " +
+          "Abgleich erst nach einer ausdrücklichen Einwilligung starten und im Profil abschaltbar machen. Heute beginnt " +
+          "er mit der Anmeldung – vor einem Server für andere klären.]]",
+        "Rechtsgrundlage: [[ENTSCHEIDUNG: Bereitstellung des gewünschten Abgleichs (Art. 6 Abs. 1 lit. b DSGVO), für die " +
+          "Gesundheitsdaten deine ausdrückliche Einwilligung (Art. 9 Abs. 2 lit. a DSGVO), siehe oben.]] Speicherdauer: " +
+          "bis du dein Konto löschst; „Meine Daten exportieren“ enthält diese Daten (B2).",
       ],
     },
   ];
