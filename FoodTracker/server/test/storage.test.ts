@@ -6,6 +6,7 @@ import { newDb } from "pg-mem";
 import { afterAll, describe, expect, it } from "vitest";
 import { hashPassword } from "../src/auth/password.js";
 import { AuthError, UserStore } from "../src/auth/users.js";
+import { nowIso } from "../src/storage/clock.js";
 import { openPostgres, openSqlite, postgresFromPool, toPostgresPlaceholders, type Db, type PgPoolLike } from "../src/storage/db.js";
 import { importLegacyUsers } from "../src/storage/legacy.js";
 import { DatabaseTooNewError, MIGRATIONS, migrate } from "../src/storage/migrations.js";
@@ -267,5 +268,14 @@ describe("SQLite", () => {
 describe("Postgres-Adresse", () => {
   it("meldet eine ungültige DATABASE_URL verständlich, ohne sie auszugeben", async () => {
     await expect(openPostgres("kein-link")).rejects.toThrow("DATABASE_URL ist keine gültige Adresse");
+  });
+});
+
+describe("Zeitpunkte für neue Zeilen", () => {
+  it("steigen streng, auch in derselben Millisekunde und wenn die Uhr zurückspringt", () => {
+    // Zeitpunkte in der Vergangenheit, damit die Uhr dieses Servers nicht in die Zukunft springt.
+    const [a, b, c] = [nowIso(Date.parse("2020-01-01T05:00:00.000Z")), nowIso(Date.parse("2020-01-01T05:00:00.000Z")), nowIso(Date.parse("2020-01-01T04:59:59.000Z"))];
+    expect(a < b && b < c).toBe(true);
+    expect(c).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
 });

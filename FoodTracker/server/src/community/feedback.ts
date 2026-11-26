@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { nowIso } from "../storage/clock.js";
 import { batches, placeholders, type Db, type Queryable } from "../storage/db.js";
 import { decodeDataUri, imageUri, newImageKey, toDataUri, type ImageStore } from "../storage/images.js";
 
@@ -133,7 +134,7 @@ export class FeedbackStore {
   async addPhoto(actor: string, recipeId: string, authorName: string, uri: string): Promise<PhotoView | "limit" | "invalid"> {
     const image = decodeDataUri(uri);
     if (!image) return "invalid";
-    const row: PhotoRow = { id: randomUUID(), recipe_id: recipeId, author: actor, author_name: authorName, image_key: newImageKey(image.type), created_at: new Date().toISOString() };
+    const row: PhotoRow = { id: randomUUID(), recipe_id: recipeId, author: actor, author_name: authorName, image_key: newImageKey(image.type), created_at: nowIso() };
     // Erst das Bild, dann der Eintrag (in der Transaktion nichts Langsames); klappt der Eintrag nicht, kommt das Bild weg.
     await this.images.put(row.image_key, image);
     let added: boolean;
@@ -308,7 +309,7 @@ export class FeedbackStore {
       actor,
       reason,
       note,
-      new Date().toISOString(),
+      nowIso(),
     ]);
   }
 

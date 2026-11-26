@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { nowIso } from "../storage/clock.js";
 import { batches, placeholders, type Db, type Queryable } from "../storage/db.js";
 import { decodeDataUri, imageKeyOf, imageUri, newImageKey, toDataUri, type ImageStore } from "../storage/images.js";
 import type { Recipe } from "../types.js";
@@ -94,7 +95,7 @@ export class CommunityStore {
     const id = randomUUID();
     const stored = await storeRecipeImage(this.images, recipe);
     const shared: Recipe = { ...stored.recipe, id: `community_${id}`, source: { kind: "community", communityId: id, author: authorName } };
-    const row: Row = { id, author: actor, author_name: authorName, name: shared.name, created_at: new Date().toISOString(), image_key: stored.imageKey };
+    const row: Row = { id, author: actor, author_name: authorName, name: shared.name, created_at: nowIso(), image_key: stored.imageKey };
     try {
       await this.db.run(INSERT_COMMUNITY_RECIPE, [row.id, row.author, row.author_name, row.name, row.created_at, JSON.stringify(shared), row.image_key]);
     } catch (e) {
@@ -109,7 +110,7 @@ export class CommunityStore {
       const row = await tx.get<Row & { recipe: string }>(`SELECT ${COLUMNS}, recipe FROM community_recipes WHERE id = ?`, [id]);
       if (!row) return undefined;
       const removed = await tx.run("DELETE FROM community_likes WHERE recipe_id = ? AND actor = ?", [id, actor]);
-      if (removed === 0) await tx.run("INSERT INTO community_likes (recipe_id, actor, created_at) VALUES (?, ?, ?)", [id, actor, new Date().toISOString()]);
+      if (removed === 0) await tx.run("INSERT INTO community_likes (recipe_id, actor, created_at) VALUES (?, ?, ?)", [id, actor, nowIso()]);
       const likes = Number((await tx.get<{ n: number | string }>("SELECT COUNT(*) AS n FROM community_likes WHERE recipe_id = ?", [id]))?.n ?? 0);
       return this.view(row, JSON.parse(row.recipe) as Recipe, likes, removed === 0, actor);
     });
