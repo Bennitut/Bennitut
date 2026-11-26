@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import * as VideoThumbnails from "expo-video-thumbnails";
 import { useState } from "react";
 import { Platform, Text, TextInput, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
 import { Button, Card, ErrorText, Field, Muted, Screen, styles } from "../../components/ui";
 import { ComingSoon } from "../../components/ComingSoon";
 import { api, HAS_SERVER, type ImagePayload } from "../../lib/api";
@@ -41,6 +42,7 @@ export default function ImportRecipeScreen() {
   const [loading, setLoading] = useState<"frames" | "import" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const consent = useAiConsent();
 
   const pickVideo = async () => {
     setError(null);
@@ -57,8 +59,9 @@ export default function ImportRecipeScreen() {
   };
 
   const start = async () => {
-    setLoading("import");
     setError(null);
+    if (!(await consent.ask("import"))) return;
+    setLoading("import");
     try {
       const result = await api.importRecipe({
         url: url.trim() || undefined,
@@ -82,6 +85,7 @@ export default function ImportRecipeScreen() {
 
   return (
     <Screen>
+      {consent.dialog}
       {/* Den Import macht Claude auf dem Server; ohne Server gleich erklären statt nach dem Ausfüllen zu scheitern. */}
       {HAS_SERVER ? null : <ComingSoon />}
       <Card>

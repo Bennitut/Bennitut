@@ -8,6 +8,7 @@ import { StorageWarning } from "../components/StorageWarning";
 import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, ShowMore, colors, styles } from "../components/ui";
 import type { TKey } from "../i18n";
 import { providerName } from "../lib/account";
+import { hasAiConsent } from "../lib/aiConsent";
 import { api, HAS_SERVER } from "../lib/api";
 import { formatDate, formatDay } from "../lib/dates";
 import { HISTORY_RANGES, backupFileName, diaryCsv, diaryJson, historySummary, type HistoryRange } from "../lib/history";
@@ -23,7 +24,8 @@ const BAR_LEGEND: Record<"day" | "week" | "month", TKey> = { day: "history.barsD
 const DAYS_PAGE = 30;
 
 export default function ProfileScreen() {
-  const { settings, updateSettings, diary, diaryState, importDiary, diarySync, refreshDiary, auth, setAuth, isAdmin, deviceClaim } = useStore();
+  const { settings, updateSettings, diary, diaryState, importDiary, diarySync, refreshDiary, auth, setAuth, isAdmin, deviceClaim, aiConsent, setAiConsent } =
+    useStore();
   const i18n = useI18n();
   const { t } = i18n;
   const [range, setRange] = useState<HistoryRange>(7);
@@ -31,6 +33,8 @@ export default function ProfileScreen() {
   const [backupMessage, setBackupMessage] = useState<{ text: string; error: boolean } | null>(null);
   /** Bestätigung nach „Konto löschen“ (dann ist man abgemeldet). */
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
+  /** Bestätigung nach „Erlaubnis widerrufen“ (KI-Funktionen). */
+  const [aiRevoked, setAiRevoked] = useState(false);
   // Beim Öffnen auch Einträge anderer Geräte holen (mit Konto).
   useFocusEffect(
     useCallback(() => {
@@ -297,6 +301,28 @@ export default function ProfileScreen() {
         <Muted>{t("history.exportHint")}</Muted>
         {backupMessage ? <Text style={backupMessage.error ? styles.error : styles.text}>{backupMessage.text}</Text> : null}
       </Card>
+
+      {/* Einwilligung in die KI-Funktionen (lib/aiConsent.ts): ansehen und widerrufen. Ohne Server gibt es keine KI. */}
+      {HAS_SERVER ? (
+        <Card title={t("aiConsent.profileTitle")} icon="🤖">
+          {hasAiConsent(aiConsent) ? (
+            <>
+              <Text style={styles.text}>{t("aiConsent.profileGranted", { date: formatDate(today(new Date(aiConsent.at)), i18n.language) })}</Text>
+              <Muted>{t("aiConsent.profileGrantedHint")}</Muted>
+              <Button
+                label={t("aiConsent.revoke")}
+                variant="secondary"
+                onPress={() => {
+                  setAiConsent(null);
+                  setAiRevoked(true);
+                }}
+              />
+            </>
+          ) : (
+            <Muted>{t(aiRevoked ? "aiConsent.revoked" : "aiConsent.profileNotYet")}</Muted>
+          )}
+        </Card>
+      ) : null}
 
       <Button label={`🌐 ${t("profile.settings")} ›`} variant="secondary" onPress={() => router.push("/settings")} />
       <Button

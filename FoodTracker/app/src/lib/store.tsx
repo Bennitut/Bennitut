@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isUILanguage, regionFromCode } from "../i18n";
-import { ApiError, HAS_SERVER, api, setAuthToken, setDeviceId } from "./api";
+import { readAiConsent, type AiConsent } from "./aiConsent";
+import { ApiError, HAS_SERVER, api, setAiConsent as setApiAiConsent, setAuthToken, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
 import { claimedAnything, needsDeviceClaim, type DeviceClaim } from "./deviceClaim";
 import { addEntry, emptyDiary, loadDiary, removeEntry, saveDiary, syncDiary, type DiaryState } from "./diary";
@@ -75,6 +76,8 @@ interface PersistedState {
    * abgemeldet bzw. noch nicht übernommen.
    */
   claimedFor: string | null;
+  /** Einwilligung in die KI-Funktionen (lib/aiConsent.ts); null = noch nicht gefragt bzw. widerrufen. */
+  aiConsent: AiConsent | null;
   settings: Settings;
 }
 
@@ -130,6 +133,7 @@ function initialState(): PersistedState {
     ratings: {},
     catalogOverrides: {},
     claimedFor: null,
+    aiConsent: null,
     settings: defaultSettings(),
   };
 }
@@ -167,6 +171,7 @@ async function loadState(): Promise<{ state: PersistedState; legacyDiary: unknow
         shoppingChecked: plan ? (saved.shoppingChecked ?? []).filter((e): e is string => typeof e === "string") : [],
         shoppingBooked: plan ? (saved.shoppingBooked ?? []).filter((e): e is string => typeof e === "string") : [],
         pantry: migrateStock(saved.pantry ?? []),
+        aiConsent: readAiConsent(saved.aiConsent),
         settings: { ...base.settings, ...saved.settings },
       },
       legacyDiary,
@@ -274,6 +279,8 @@ interface Store extends PersistedState {
   /** Durchschnittliche Sterne je Rezept mit mindestens einer Bewertung (für den Planer). */
   ratingAverages: () => Record<string, number>;
   setShared: (recipeId: string, communityId: string | null) => void;
+  /** Einwilligung in die KI-Funktionen erteilen bzw. mit null widerrufen; gilt sofort für die nächste Anfrage. */
+  setAiConsent: (consent: AiConsent | null) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -335,6 +342,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       writeSession.current = sessionWriter(sessionStore, loadedSession);
       setDeviceId(loaded.state.deviceId);
       setAuthToken(loadedSession?.token ?? null);
+      setApiAiConsent(loaded.state.aiConsent);
       setSession(loadedSession);
       setState(loaded.state);
       setReady(true);
@@ -688,6 +696,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       ratingAverages: () =>
         Object.fromEntries(Object.entries(state.ratings).filter(([, r]) => r.count > 0).map(([id, r]) => [id, r.avg])),
+      setAiConsent: (aiConsent) => {
+        // Sofort, nicht erst nach dem nächsten Rendern: Gleich nach „Einverstanden“ geht die Anfrage los.
+        setApiAiConsent(aiConsent);
+        setState((s) => ({ ...s, aiConsent }));
+      },
     };
   }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, owner, refreshDiary, deviceClaim]);
 

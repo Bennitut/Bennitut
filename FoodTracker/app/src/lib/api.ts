@@ -25,6 +25,7 @@ import type {
   Role,
   ShoppingItem,
 } from "./types";
+import { aiConsentHeaders, type AiConsent } from "./aiConsent";
 import type { DeviceClaim } from "./deviceClaim";
 import type { DiarySyncRequest, DiarySyncResponse } from "./diary";
 import type { ServerHealth } from "./serverStatus";
@@ -83,6 +84,14 @@ export function setAuthToken(token: string | null) {
 export function setDeviceId(id: string) {
   deviceId = id;
 }
+let aiConsent: AiConsent | null = null;
+/**
+ * Einwilligung in die KI-Funktionen (lib/aiConsent.ts). Ohne verschickt die App keine KI-Anfrage (Fehler
+ * „ai_consent_required“) – auch dann nicht, wenn ein Bildschirm vergisst, vorher zu fragen.
+ */
+export function setAiConsent(consent: AiConsent | null) {
+  aiConsent = consent;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Ohne Server wie ohne Verbindung: Katalog, Planer, Vorrat und Tagebuch laufen in der App weiter.
@@ -120,6 +129,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
+/** KI-Anfrage: nur mit Einwilligung, die der Server im Header sieht (sonst antwortet er mit 403). */
+const postAi = <T>(path: string, body: unknown): Promise<T> => {
+  const headers = aiConsentHeaders(aiConsent);
+  if (Object.keys(headers).length === 0) return Promise.reject(new ApiError("ai_consent_required"));
+  return request<T>(path, { method: "POST", body: JSON.stringify(body), headers });
+};
 const send = <T>(method: "PATCH" | "PUT" | "DELETE", path: string, body?: unknown) =>
   request<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
@@ -146,11 +161,12 @@ export interface PlanPreferences {
 export const api = {
   /** Lebenszeichen des Servers und welche KI er gerade nutzen kann (Profilzeile). */
   health: () => request<ServerHealth>("/api/health"),
+  // KI-Funktionen (postAi): nur mit Einwilligung, siehe components/AiConsent.tsx.
   analyzeMeal: (image: ImagePayload, language: string) =>
-    post<MealAnalysis>("/api/analyze/meal", { imageBase64: image.data, mediaType: image.mediaType, language }),
+    postAi<MealAnalysis>("/api/analyze/meal", { imageBase64: image.data, mediaType: image.mediaType, language }),
 
   analyzeReceipt: (image: ImagePayload, language: string) =>
-    post<{ receipt: ReceiptAnalysis; pantry: PantryItem[] }>("/api/analyze/receipt", {
+    postAi<{ receipt: ReceiptAnalysis; pantry: PantryItem[] }>("/api/analyze/receipt", {
       imageBase64: image.data,
       mediaType: image.mediaType,
       language,
@@ -158,7 +174,7 @@ export const api = {
 
   /** Monatsplan mit KI-Rezeptvorschlägen (ohne Wünsche plant die App selbst). */
   plan: (body: Record<string, unknown> & { startDate: string; recipes: Recipe[]; preferences: string; language: string }) =>
-    post<{ plan: MonthPlan; extraRecipes: Recipe[] }>("/api/plan", {
+    postAi<{ plan: MonthPlan; extraRecipes: Recipe[] }>("/api/plan", {
       ...body,
       // Fotos eigener Rezepte braucht der Server nicht.
       recipes: body.recipes.map(({ media: _media, ...r }) => r),
@@ -168,10 +184,10 @@ export const api = {
   diarySync: (body: DiarySyncRequest) => post<DiarySyncResponse>("/api/diary/sync", body),
 
   importRecipe: (body: { url?: string; caption?: string; frames: ImagePayload[]; language: string }) =>
-    post<{ recipe: Recipe; author: string | null }>("/api/recipes/import", body),
+    postAi<{ recipe: Recipe; author: string | null }>("/api/recipes/import", body),
 
   translateRecipe: (text: RecipeText, targetLanguage: string) =>
-    post<RecipeText>("/api/recipes/translate", { text, targetLanguage }),
+    postAi<RecipeText>("/api/recipes/translate", { text, targetLanguage }),
 
   communityRecipes: (sort: "popular" | "new", query: string) =>
     request<CommunityRecipe[]>(`/api/community/recipes?sort=${sort}&q=${encodeURIComponent(query)}`),
@@ -202,7 +218,7 @@ export const api = {
 
   /** Lässt Claude Name, Schritte und Sonstiges an Zutaten und Mengen anpassen. */
   improveRecipe: (body: { text: RecipeText; ingredients: { name: string; amount: string }[]; cookMinutes: number; problem: string; language: string }) =>
-    post<ImprovedRecipe>("/api/recipes/improve", body),
+    postAi<ImprovedRecipe>("/api/recipes/improve", body),
 
   // Konten
   authConfig: () => request<AuthConfig>("/api/auth/config"),

@@ -6,6 +6,7 @@ import { newId } from "../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../lib/photos";
 import { useStore } from "../lib/store";
 import { FLAG_REASONS, type FlagReason, type ImprovedRecipe, type Recipe, type RecipePhoto } from "../lib/types";
+import { useAiConsent } from "./AiConsent";
 import { ComingSoonNote } from "./ComingSoon";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, Muted, colors, styles } from "./ui";
 
@@ -264,6 +265,7 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
   const [busy, setBusy] = useState<"report" | "improve" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const consent = useAiConsent();
   const flagged = flaggedIds.includes(recipe.id);
   const hasOverride = Boolean(textOverrides[recipe.id]?.[i18n.language]);
 
@@ -283,8 +285,9 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
   };
 
   const improve = async () => {
-    setBusy("improve");
     setError(null);
+    if (!(await consent.ask("improve"))) return;
+    setBusy("improve");
     try {
       const text = i18n.recipe(recipe);
       setProposal(
@@ -329,6 +332,7 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
 
   return (
     <Card>
+      {consent.dialog}
       <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
         {hasOverride ? <Badge label={t("feedback.improved")} /> : null}
         {flagged ? <Badge label={t("feedback.flagged")} color={colors.warning} tint={colors.accentTint} /> : null}

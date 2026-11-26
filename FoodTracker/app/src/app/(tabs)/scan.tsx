@@ -1,6 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Image, Text, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, NutrientRow, Screen, styles } from "../../components/ui";
 import { ComingSoon } from "../../components/ComingSoon";
 import { api, HAS_SERVER, toMediaType } from "../../lib/api";
@@ -24,6 +25,7 @@ export default function ScanScreen() {
   const [portion, setPortion] = useState(1);
   const [receipt, setReceipt] = useState<{ receipt: ReceiptAnalysis; pantry: PantryItem[] } | null>(null);
   const [saved, setSaved] = useState(false);
+  const consent = useAiConsent();
 
   const reset = (nextMode: Mode) => {
     setMode(nextMode);
@@ -36,6 +38,8 @@ export default function ScanScreen() {
 
   const pick = async (source: "camera" | "library") => {
     setError(null);
+    // Erst fragen, dann fotografieren – ohne Erlaubnis geht kein Foto an die KI.
+    if (!(await consent.ask(mode))) return;
     if (source === "camera") {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -90,6 +94,7 @@ export default function ScanScreen() {
 
   return (
     <Screen>
+      {consent.dialog}
       <ChipRow>
         {(["meal", "receipt"] as const).map((m) => (
           <Chip key={m} label={t(m === "meal" ? "scan.meal" : "scan.receipt")} selected={mode === m} onPress={() => reset(m)} />

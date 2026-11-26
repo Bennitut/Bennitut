@@ -1,6 +1,7 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Image, Linking, Text, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
 import { ComingSoonNote } from "../../components/ComingSoon";
 import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } from "../../components/ui";
 import { api, HAS_SERVER } from "../../lib/api";
@@ -38,6 +39,7 @@ export default function RecipeDetailScreen() {
   const { t } = i18n;
   const [busy, setBusy] = useState<"translate" | "share" | "favorite" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const consent = useAiConsent();
 
   const cached = communityCache.get(id);
   const recipe = recipes.get(id) ?? cached?.recipe;
@@ -83,14 +85,16 @@ export default function RecipeDetailScreen() {
       store.setFavorite(recipe, !isFavorite);
     });
 
-  const translateNow = () =>
-    run("translate", async () => {
+  const translateNow = async () => {
+    if (!(await consent.ask("translate"))) return;
+    await run("translate", async () => {
       const translated = await api.translateRecipe(
         { name: recipe.name, steps: recipe.steps, otherIngredients: recipe.otherIngredients },
         i18n.language,
       );
       store.cacheTranslation(recipe.id, i18n.language, translated);
     });
+  };
 
   const toggleShare = () =>
     run("share", async () => {
@@ -132,6 +136,7 @@ export default function RecipeDetailScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: text.name }} />
+      {consent.dialog}
       {image ? (
         <View style={{ gap: 4 }}>
           <Image source={{ uri: image.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 14 }} resizeMode="cover" accessibilityIgnoresInvertColors />

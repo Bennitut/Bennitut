@@ -1,6 +1,7 @@
 import { Link, router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
 import { RecipeThumb } from "../../components/RecipeThumb";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, ShowMore, colors, styles } from "../../components/ui";
 import { ApiError, HAS_SERVER, api } from "../../lib/api";
@@ -30,6 +31,7 @@ export default function PlanScreen() {
   const [swap, setSwap] = useState<PlannedMeal | null>(null);
   const [alternatives, setAlternatives] = useState<string[]>([]);
   const [alternativesLimit, setAlternativesLimit] = useState(PAGE_SIZE);
+  const consent = useAiConsent();
   const todayIndex = plan ? daysBetween(plan.startDate, today()) : 0;
   const [selectedWeek, setSelectedWeek] = useState(() => weekOfDay(Math.max(0, todayIndex)));
   const loading = progress !== null;
@@ -45,8 +47,13 @@ export default function PlanScreen() {
       router.push("/onboarding");
       return;
     }
+    // Ohne Server (Web-Version) gibt es kein Wunschfeld; früher eingetragene Wünsche bleiben gespeichert,
+    // lösen aber keine Anfrage und keinen Hinweis „braucht eine Verbindung“ aus. Wünsche zählen nur für den ganzen Monat.
+    const wishes = HAS_SERVER && fromWeek === 0 ? settings.preferences.trim() : "";
+    // Wünsche gehen an die KI: vorher fragen. Ohne Erlaubnis plant das Handy wie ohne Wünsche.
+    const useWishes = wishes !== "" && (await consent.ask("wishes"));
     setError(null);
-    setNotice(null);
+    setNotice(wishes && !useWishes ? t("plan.aiDeclined") : null);
     setProgress(fromWeek + 1);
     const { startDate, keepWeeks, locked } = prepareReplan({ plan, fromWeek, swapped: extraLock, mealTypes: settings.mealTypes, today: today() });
     const request = {
@@ -61,10 +68,7 @@ export default function PlanScreen() {
       effort: DEVICE_EFFORT,
     };
 
-    // Ohne Server (Web-Version) gibt es kein Wunschfeld; früher eingetragene Wünsche bleiben gespeichert,
-    // lösen aber keine Anfrage und keinen Hinweis „braucht eine Verbindung“ aus.
-    const wishes = HAS_SERVER ? settings.preferences.trim() : "";
-    if (wishes && fromWeek === 0) {
+    if (useWishes) {
       try {
         const result = await api.plan({ ...request, startDate, recipes: userRecipes, preferences: wishes, language: i18n.language });
         setPlan(result.plan, result.extraRecipes);
@@ -187,6 +191,7 @@ export default function PlanScreen() {
 
   return (
     <Screen>
+      {consent.dialog}
       {!settings.onboarded ? (
         <Card title={t("plan.onboardingTitle")} icon="👋">
           <Muted>{t("plan.onboardingText")}</Muted>

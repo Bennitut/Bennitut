@@ -9,12 +9,15 @@ import { Button, Chip, ChipRow, ErrorText, Field, Muted, colors, styles } from "
 
 type Mode = "signIn" | "register" | "forgot" | "reset";
 
-/** Hinweis bei der Registrierung: kein Mindestalter, aber die Zustimmung eines Elternteils (Benjamins Entscheidung). */
-export function ParentalNotice() {
+/**
+ * Hinweis bei der Registrierung und vor der ersten Nutzung der KI-Funktionen (`text`): kein Mindestalter, aber die
+ * Zustimmung eines Elternteils (Benjamins Entscheidung vom 24.11.2026).
+ */
+export function ParentalNotice({ text }: { text?: string }) {
   const { t } = useI18n();
   return (
     <View style={{ backgroundColor: colors.selected, borderRadius: 12, padding: 12 }}>
-      <Text style={{ fontSize: 13, color: colors.text }}>👪 {t("account.parentalNotice")}</Text>
+      <Text style={{ fontSize: 13, color: colors.text }}>👪 {text ?? t("account.parentalNotice")}</Text>
     </View>
   );
 }
