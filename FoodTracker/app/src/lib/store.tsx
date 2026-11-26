@@ -83,8 +83,9 @@ interface PersistedState {
   aiConsent: AiConsent | null;
   settings: Settings;
   /**
-   * Abgleich von Einstellungen, Plan mit Einkaufsliste und Vorrat mit dem Konto (lib/dataSync.ts): Zeitpunkt jeder
-   * Änderung, was noch hoch muss, letzter Abgleich. Steht hier, damit er immer zusammen mit diesen Daten gespeichert wird.
+   * Abgleich von Einstellungen, Plan mit Einkaufsliste, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten mit dem
+   * Konto (lib/dataSync.ts): Zeitpunkt jeder Änderung, was noch hoch muss, letzter Abgleich. Steht hier, damit er immer
+   * zusammen mit diesen Daten gespeichert wird.
    */
   dataSync: DataSync;
 }
@@ -222,13 +223,13 @@ export interface DiarySyncStatus {
 }
 
 /**
- * Abgleich von Einstellungen, Plan und Vorrat mit dem Konto: aus (kein Server), nur auf dem Gerät (ohne Konto), gleich,
- * läuft, erledigt oder Server nicht erreichbar.
+ * Abgleich von Einstellungen, Plan, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten mit dem Konto: aus (kein
+ * Server), nur auf dem Gerät (ohne Konto), gleich, läuft, erledigt oder Server nicht erreichbar.
  */
 export interface DataSyncStatus {
   state: "off" | "local" | "waiting" | "syncing" | "synced" | "offline";
   pending: number;
-  /** Letzter erfolgreicher Abgleich aller drei Arten (ISO). */
+  /** Letzter erfolgreicher Abgleich aller Arten (ISO). */
   at: string | null;
 }
 
@@ -243,9 +244,9 @@ interface Store extends PersistedState {
   /** Übernimmt eine Sicherung (JSON) ins Tagebuch, ohne Doppeltes. */
   importDiary: (text: string) => Omit<Extract<ImportResult, { ok: true }>, "state"> | Extract<ImportResult, { ok: false }>;
   diarySync: DiarySyncStatus;
-  /** Abgleich von Einstellungen, Plan und Vorrat mit dem Konto. */
+  /** Abgleich von Einstellungen, Plan, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten mit dem Konto. */
   dataSyncStatus: DataSyncStatus;
-  /** Jetzt mit dem Server abgleichen – Tagebuch, Einstellungen, Plan und Vorrat (z. B. beim Öffnen des Profils). */
+  /** Jetzt mit dem Server abgleichen – Tagebuch und alle Daten des Kontos (z. B. beim Öffnen des Profils). */
   refreshSync: () => void;
   storageIssues: StorageIssues;
   catalog: typeof baseCatalog;
@@ -479,9 +480,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [ready, owner, pendingCount, syncedOwner, syncRequest]);
 
-  // Abgleich von Einstellungen, Plan mit Einkaufsliste und Vorrat – nur mit Konto (lib/dataSync.ts): beim Start bzw.
-  // nach der Anmeldung einmal, danach kurz nach jeder Änderung; ohne Verbindung in einer Minute noch einmal. Ein anderes
-  // Konto als beim letzten Mal bekommt alles vom Gerät und schickt alles zurück.
+  // Abgleich von Einstellungen, Plan mit Einkaufsliste, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten – nur mit
+  // Konto (lib/dataSync.ts): beim Start bzw. nach der Anmeldung einmal, danach kurz nach jeder Änderung; ohne Verbindung
+  // in einer Minute noch einmal. Ein anderes Konto als beim letzten Mal bekommt alles vom Gerät und schickt alles zurück.
   const signedIn = session !== null;
   const dataPending = pendingChanges(state.dataSync);
   const dataSyncedFor = syncedWith(state.dataSync, owner);

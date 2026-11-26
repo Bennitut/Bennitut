@@ -1,5 +1,7 @@
-// Abgleich von Profil und Fragebogen, Plan mit Einkaufsliste und Vorrat zwischen den Geräten eines Kontos (Vorrang 1,
-// 9.2 Teil 4; Gegenstück im Server: server/src/sync/userData.ts). Ohne native Module, damit alles in test/ läuft.
+// Abgleich der Daten eines Kontos zwischen seinen Geräten (Vorrang 1, 9.2 Teil 4 und 5; Gegenstück im Server:
+// server/src/sync/userData.ts): Profil und Fragebogen, Plan mit Einkaufsliste, Vorrat, eigene und importierte Rezepte
+// (mit Fotos), Favoriten (samt gespeicherten Community-Rezepten) und von der KI übersetzte bzw. verbesserte Texte. Ohne
+// native Module, damit alles in test/ läuft.
 //
 // Grundsätze:
 // - Nur mit Konto. Ohne Konto bleiben diese Daten auf dem Gerät (das Tagebuch sichert lib/diary.ts weiter pro Gerät).
@@ -11,11 +13,16 @@
 //   weiteren Geräte bekommen sie; Vorratsposten und Häkchen, die nur ein Gerät kennt, kommen dazu.
 // - Häkchen (gegessen, abgehakt, in den Vorrat gebucht) gehören zu einem Plan – sein Startdatum steht in der ID. Kommt
 //   ein Plan mit anderem Startdatum, gelten die Häkchen des alten nicht mehr, wie beim Neuplanen auf dem Gerät selbst.
+// - Fotos eigener Rezepte gehören nicht in die Datenbank: Die App schickt ein eigenes Foto einmal als data-URI, der
+//   Server legt es in den Bildspeicher des Kontos und schickt den Pfad zurück. Auf dem Gerät bleibt die data-URI (offline
+//   sichtbar), daneben der Pfad (`server`) – den schickt die App künftig statt des Fotos. Andere Geräte zeigen das Foto
+//   über den Pfad vom Server.
 import { REGIONS, isUILanguage } from "../i18n";
 import type { StockItem } from "./pantry";
-import type { MonthPlan, Recipe, Settings } from "./types";
+import { SERVER_IMAGE_PATH } from "./serverImages";
+import type { MonthPlan, Recipe, RecipeText, Settings } from "./types";
 
-export const DATA_KINDS = ["settings", "plan", "pantry"] as const;
+export const DATA_KINDS = ["settings", "plan", "pantry", "recipes", "favorites", "texts"] as const;
 export type DataKind = (typeof DATA_KINDS)[number];
 
 /** Was abgeglichen wird – ein Ausschnitt des Zustands der App (store.tsx). */
@@ -28,6 +35,17 @@ export interface SyncedData {
   shoppingChecked: string[];
   shoppingBooked: string[];
   pantry: StockItem[];
+  /** Eigene und importierte Rezepte. */
+  myRecipes: Recipe[];
+  /** Eigene Rezepte, die in der Community geteilt sind: Rezept-ID → Community-ID. */
+  shared: Record<string, string>;
+  favoriteIds: string[];
+  /** Kopien favorisierter Community-Rezepte. */
+  savedRecipes: Recipe[];
+  /** Von der KI übersetzte Rezepttexte: Rezept-ID → Sprache → Text. */
+  translations: Record<string, Record<string, RecipeText>>;
+  /** Mit der KI verbesserte Rezepttexte: Rezept-ID → Sprache → Text. */
+  textOverrides: Record<string, Record<string, RecipeText>>;
 }
 
 /** Letzter erfolgreicher Abgleich einer Art: für welches Konto, bis zu welcher Revision des Servers und wann. */
@@ -71,14 +89,25 @@ export interface DataSyncResponse {
 // --------------------------------------------------------------------------------------------------------------
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** IDs von Rezepten: Katalog („linsen_dal“), eigene („eigen_…“), importierte („import_…“), Community („community_<UUID>“). */
+const RECIPE_ID = "[A-Za-z0-9_-]{1,100}";
+const TEXT_ID = new RegExp(`^([to]):([a-z]{2,3}(?:-[A-Z]{2})?):(${RECIPE_ID})$`);
 /** Eintrags-IDs, die der Server annimmt – genau wie in server/src/sync/userData.ts (ein Test vergleicht beide). */
 export const SYNC_IDS: Record<DataKind, RegExp> = {
   settings: /^settings$/,
   plan: /^(?:plan|e:\d{4}-\d{2}-\d{2}:\d{1,2}:(?:breakfast|lunch|dinner)|[cb]:\d{4}-\d{2}-\d{2}:\d:[a-z0-9_]{1,60})$/,
   pantry: /^[a-z0-9_]{1,60}@\d{4}-\d{2}-\d{2}$/,
+  recipes: new RegExp(`^${RECIPE_ID}$`),
+  favorites: new RegExp(`^${RECIPE_ID}$`),
+  texts: TEXT_ID,
 };
-/** Höchstens so viele Zeichen JSON pro Eintrag (wie im Server); Größeres bleibt auf dem Gerät. */
-export const MAX_JSON: Record<DataKind, number> = { settings: 20_000, plan: 1_000_000, pantry: 500 };
+/**
+ * Höchstens so viele Zeichen JSON pro Eintrag (wie im Server; bei eigenen Rezepten ohne das Foto); Größeres bleibt auf
+ * dem Gerät.
+ */
+export const MAX_JSON: Record<DataKind, number> = { settings: 20_000, plan: 1_000_000, pantry: 500, recipes: 100_000, favorites: 100_000, texts: 100_000 };
+/** Foto eines eigenen Rezepts als data-URI höchstens so lang (wie im Server, rund 1,5 MB); größere bleiben auf dem Gerät. */
+export const MAX_IMAGE_URI = 2_000_000;
 const MAX_AMOUNT = 1_000_000;
 
 /** Häkchen im Zustand (Felder) und ihr Kürzel in der ID: gegessen, abgehakt, in den Vorrat gebucht. */
@@ -103,10 +132,18 @@ const markId = (prefix: string, start: string, key: string) => `${prefix}:${star
 export const postId = (item: Pick<StockItem, "ingredientId" | "addedAt">) => `${item.ingredientId}@${item.addedAt}`;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
+
 /** Fotos, die nur auf diesem Gerät liegen (andere Geräte könnten sie nicht öffnen; Fotos gehören nicht in die Datenbank). */
 const LOCAL_IMAGE = /^(?:data|file|blob|content|ph|assets-library):/i;
+/** Ein Foto als data-URI – das einzige vom Gerät, das der Server in den Bildspeicher legen kann. */
+const DATA_IMAGE = /^data:image\//i;
 
-/** KI-Rezepte des Plans ohne Fotos vom Gerät. */
+type RecipeImage = NonNullable<NonNullable<Recipe["media"]>["image"]>;
+
+/** Rezepte des Plans und gespeicherte Community-Rezepte ohne Fotos vom Gerät. */
 function shareableRecipe(recipe: Recipe): Recipe {
   const uri = recipe.media?.image?.uri;
   if (!uri || !LOCAL_IMAGE.test(uri)) return recipe;
@@ -114,11 +151,58 @@ function shareableRecipe(recipe: Recipe): Recipe {
   return { ...recipe, media };
 }
 
+/** Rezept mit anderem bzw. ohne Foto (ohne Foto fällt `media.image` weg, ein leeres `media` ganz). */
+function withImage(recipe: Recipe, image: RecipeImage | undefined): Recipe {
+  const { image: _old, ...media } = recipe.media ?? {};
+  const next = image ? { ...media, image } : media;
+  const { media: _media, ...rest } = recipe;
+  return Object.keys(next).length > 0 ? { ...rest, media: next } : rest;
+}
+
+/**
+ * Foto eines eigenen Rezepts, wie es zum Server geht: Kennt die App den Pfad im Bildspeicher des Kontos schon
+ * (`server`), geht der Pfad – sonst die data-URI (der Server legt sie in den Bildspeicher). Fotos im Netz und im
+ * Bildspeicher gehen, wie sie sind; andere Dateien auf dem Gerät (file:, blob: …) und zu große Fotos bleiben hier.
+ * `fresh` (erster Abgleich mit diesem Konto): immer das Foto selbst – der Server kennt den Pfad vielleicht nicht.
+ * Unverändert dasselbe Objekt.
+ */
+function uploadImage(image: RecipeImage, fresh: boolean): RecipeImage | undefined {
+  const { server, ...plain } = image;
+  if (server !== undefined && !fresh && LOCAL_IMAGE.test(image.uri)) return { ...plain, uri: server };
+  const ok = DATA_IMAGE.test(image.uri) ? image.uri.length <= MAX_IMAGE_URI : !LOCAL_IMAGE.test(image.uri);
+  if (!ok) return undefined;
+  return server === undefined ? image : plain;
+}
+
+/** Der Eintrag eines eigenen Rezepts: das Rezept (Foto wie in uploadImage) und, falls geteilt, die Community-ID. */
+function ownRecipeRecord(recipe: Recipe, sharedAs: string | undefined, fresh: boolean) {
+  const image = recipe.media?.image;
+  const sent = image ? uploadImage(image, fresh) : undefined;
+  const r = sent === image ? recipe : withImage(recipe, sent);
+  return sharedAs ? { recipe: r, sharedAs } : { recipe: r };
+}
+
+/** Texte im Zustand und ihr Kürzel in der ID: übersetzt („t:en:linsen_dal“) und verbessert („o:de:eigen_…“). */
+const TEXTS = [
+  ["t", "translations"],
+  ["o", "textOverrides"],
+] as const;
+
+/** „t:en:linsen_dal“ → Feld, Sprache und Rezept. */
+export function parseTextId(id: string): { field: (typeof TEXTS)[number][1]; language: string; recipeId: string } | null {
+  const match = TEXT_ID.exec(id);
+  if (!match) return null;
+  return { field: match[1] === "t" ? "translations" : "textOverrides", language: match[2]!, recipeId: match[3]! };
+}
+
 /** Der Eintrag „plan“: Monatsplan und KI-Rezepte. */
 const planRecord = (data: SyncedData) => ({ plan: data.plan, recipes: data.planRecipes.map(shareableRecipe) });
 
-/** Alle Einträge einer Art, wie sie sich aus dem Zustand ergeben (ID → Inhalt). */
-export function recordsOf(kind: DataKind, data: SyncedData): Map<string, unknown> {
+/**
+ * Alle Einträge einer Art, wie sie sich aus dem Zustand ergeben (ID → Inhalt). `fresh`: für den ersten Abgleich mit
+ * einem Konto (eigene Fotos als data-URI statt als Pfad, siehe uploadImage).
+ */
+export function recordsOf(kind: DataKind, data: SyncedData, fresh = false): Map<string, unknown> {
   const records = new Map<string, unknown>();
   if (kind === "settings") {
     // Unveränderte Voreinstellungen eines neuen Geräts sollen nie die eines Kontos ersetzen: erst nach dem Fragebogen.
@@ -127,10 +211,24 @@ export function recordsOf(kind: DataKind, data: SyncedData): Map<string, unknown
     if (!data.plan) return records;
     records.set("plan", planRecord(data));
     for (const id of markIds(data)) records.set(id, {});
-  } else {
+  } else if (kind === "pantry") {
     const totals = new Map<string, number>();
     for (const item of data.pantry) totals.set(postId(item), (totals.get(postId(item)) ?? 0) + item.amount);
     for (const [id, amount] of totals) if (round1(amount) > 0) records.set(id, { amount: round1(amount) });
+  } else if (kind === "recipes") {
+    for (const recipe of data.myRecipes) records.set(recipe.id, ownRecipeRecord(recipe, data.shared[recipe.id], fresh));
+  } else if (kind === "favorites") {
+    const saved = new Map(data.savedRecipes.map((r) => [r.id, r]));
+    for (const id of data.favoriteIds) {
+      const copy = saved.get(id);
+      records.set(id, copy ? { recipe: shareableRecipe(copy) } : {});
+    }
+  } else {
+    for (const [prefix, field] of TEXTS) {
+      for (const [recipeId, byLanguage] of Object.entries(data[field])) {
+        for (const [language, text] of Object.entries(byLanguage ?? {})) records.set(`${prefix}:${language}:${recipeId}`, text);
+      }
+    }
   }
   return records;
 }
@@ -145,10 +243,24 @@ function markIds(data: SyncedData): string[] {
 function touches(kind: DataKind, a: SyncedData, b: SyncedData): boolean {
   if (kind === "settings") return a.settings !== b.settings;
   if (kind === "pantry") return a.pantry !== b.pantry;
+  if (kind === "recipes") return a.myRecipes !== b.myRecipes || a.shared !== b.shared;
+  if (kind === "favorites") return a.favoriteIds !== b.favoriteIds || a.savedRecipes !== b.savedRecipes;
+  if (kind === "texts") return a.translations !== b.translations || a.textOverrides !== b.textOverrides;
   return a.plan !== b.plan || a.planRecipes !== b.planRecipes || a.eatenMeals !== b.eatenMeals || a.shoppingChecked !== b.shoppingChecked || a.shoppingBooked !== b.shoppingBooked;
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/**
+ * Gleicher Inhalt – zuerst ohne JSON (eigene Rezepte mit Foto als data-URI sind groß): dieselben Objekte bzw. ein
+ * Eintrag aus denselben Teilen (unverändertes Rezept, gleiche Community-ID).
+ */
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (isObject(a) && isObject(b)) {
+    const keys = Object.keys(a);
+    if (keys.length === Object.keys(b).length && keys.every((key) => key in b && a[key] === b[key])) return true;
+  }
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 /**
  * Nach einer Änderung auf diesem Gerät: Was sich zwischen `before` und `after` geändert hat, bekommt den Zeitpunkt `now`
@@ -180,11 +292,7 @@ export function trackChanges(sync: DataSync, before: SyncedData, after: SyncedDa
 }
 
 /** Abgleich-Stand ohne Einträge (neues Gerät). */
-export const emptyDataSync = (): DataSync => ({
-  settings: { at: {}, pending: [], mark: null },
-  plan: { at: {}, pending: [], mark: null },
-  pantry: { at: {}, pending: [], mark: null },
-});
+export const emptyDataSync = (): DataSync => Object.fromEntries(DATA_KINDS.map((kind) => [kind, { at: {}, pending: [], mark: null }])) as unknown as DataSync;
 
 /**
  * Abgleich-Stand aus dem Speicher; fehlt er (Daten aus der Zeit vor dem Abgleich) oder ist er unlesbar, tragen alle
@@ -211,10 +319,6 @@ export function readDataSync(raw: unknown, data: SyncedData): DataSync {
 // --------------------------------------------------------------------------------------------------------------
 // Einträge vom Server übernehmen
 // --------------------------------------------------------------------------------------------------------------
-
-const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
 
 /**
  * Einstellungen von einem anderen Gerät, Feld für Feld geprüft: Unbrauchbares behält den Wert dieses Geräts, unbekannte
@@ -302,7 +406,8 @@ export function applyRemote<S extends SyncedState>(state: S, kind: DataKind, rec
     if (typeof record.id !== "string" || !Number.isFinite(time) || record.data === undefined) continue;
     const local = k.at[record.id];
     if (local !== undefined && time < local) continue;
-    const next = applyRecord(kind, data, record, k);
+    // Gleicher Zeitpunkt: dieselbe Fassung wie auf dem Gerät, z. B. die vom Server beim Speichern angepasste.
+    const next = applyRecord(kind, data, record, k, local === time);
     if (!next) continue;
     data = next;
     k.at[record.id] = time;
@@ -310,7 +415,7 @@ export function applyRemote<S extends SyncedState>(state: S, kind: DataKind, rec
     changed = true;
   }
   if (!changed) return state;
-  const { settings, plan, planRecipes, eatenMeals, shoppingChecked, shoppingBooked, pantry } = data;
+  const { settings, plan, planRecipes, eatenMeals, shoppingChecked, shoppingBooked, pantry, myRecipes, shared, favoriteIds, savedRecipes, translations, textOverrides } = data;
   return {
     ...state,
     settings,
@@ -320,12 +425,129 @@ export function applyRemote<S extends SyncedState>(state: S, kind: DataKind, rec
     shoppingChecked,
     shoppingBooked,
     pantry,
+    myRecipes,
+    shared,
+    favoriteIds,
+    savedRecipes,
+    translations,
+    textOverrides,
     dataSync: { ...state.dataSync, [kind]: { ...state.dataSync[kind], at: k.at, pending: [...k.pending] } },
   };
 }
 
-/** Ein Eintrag vom Server im Zustand; null, wenn er nicht passt (dann bleibt alles, wie es ist). */
-function applyRecord(kind: DataKind, data: SyncedData, record: RemoteRecord, k: { at: Record<string, number>; pending: Set<string> }): SyncedData | null {
+/**
+ * Rezept von einem anderen Gerät: nur mit allem, was die Ansichten brauchen (sonst null – dann bleibt das eigene).
+ * Fehlende Listen gelten als leer; der Pfad `server` eines fremden Geräts gilt hier nicht.
+ */
+export function readRecipe(raw: unknown): Recipe | null {
+  if (!isObject(raw)) return null;
+  const { id, language, name, mealTypes, ingredients, source, media } = raw;
+  if (typeof id !== "string" || typeof name !== "string" || typeof language !== "string" || !strings(mealTypes)) return null;
+  if (!Array.isArray(ingredients) || !ingredients.every((i) => isObject(i) && typeof i.ingredientId === "string" && isNumber(i.amount))) return null;
+  if (!isObject(source) || typeof source.kind !== "string") return null;
+  const list = (v: unknown) => (v === undefined ? [] : strings(v) ? v : null);
+  const steps = list(raw.steps);
+  const otherIngredients = list(raw.otherIngredients);
+  const tags = list(raw.tags);
+  if (!steps || !otherIngredients || !tags) return null;
+  if (media !== undefined && !isObject(media)) return null;
+  const image = isObject(media) ? media.image : undefined;
+  if (image !== undefined && !(isObject(image) && typeof image.uri === "string")) return null;
+  const recipe = { ...raw, steps, otherIngredients, tags, cookMinutes: isNumber(raw.cookMinutes) ? raw.cookMinutes : 0 } as unknown as Recipe;
+  if (!isObject(image) || !("server" in image)) return recipe;
+  const { server: _foreign, ...plain } = image as RecipeImage;
+  return withImage(recipe, plain);
+}
+
+/**
+ * Foto vom Gerät behalten, wenn es dasselbe ist wie auf dem Server: dieselbe Fassung (der Server hat das Foto in den
+ * Bildspeicher gelegt und schickt den Pfad zurück) oder derselbe Pfad, den das Gerät schon kennt (ein anderes Gerät hat
+ * nur etwas anderes am Rezept geändert). So bleibt ein eigenes Foto offline sichtbar; die App merkt sich den Pfad
+ * (`server`) und schickt künftig diesen. Hat ein anderes Gerät das Foto ersetzt oder entfernt, gilt dessen Fassung.
+ */
+function mergeImage(received: Recipe, local: Recipe | undefined, sameVersion: boolean): Recipe {
+  const mine = local?.media?.image;
+  if (!mine || !LOCAL_IMAGE.test(mine.uri)) return received;
+  const theirs = received.media?.image?.uri;
+  const path = theirs?.startsWith(SERVER_IMAGE_PATH) ? theirs : undefined;
+  if (!sameVersion && (path === undefined || path !== mine.server)) return received;
+  const { server: _old, ...plain } = mine;
+  return withImage(received, path ? { ...plain, server: path } : plain);
+}
+
+/** Eigenes Rezept vom Server: neu, geändert (Foto wie in mergeImage) oder gelöscht; dazu, ob es geteilt ist. */
+function applyOwnRecipe(data: SyncedData, record: RemoteRecord, sameVersion: boolean): SyncedData | null {
+  const local = data.myRecipes.find((r) => r.id === record.id);
+  const { [record.id]: wasShared, ...unshared } = data.shared;
+  if (record.data === null) {
+    return local || wasShared !== undefined ? { ...data, myRecipes: data.myRecipes.filter((r) => r.id !== record.id), shared: unshared } : data;
+  }
+  if (!isObject(record.data)) return null;
+  const received = readRecipe(record.data.recipe);
+  if (!received || received.id !== record.id) return null;
+  const recipe = mergeImage(received, local, sameVersion);
+  const sharedAs = record.data.sharedAs;
+  const shared = typeof sharedAs === "string" && sharedAs ? { ...unshared, [record.id]: sharedAs } : unshared;
+  const myRecipes = local ? data.myRecipes.map((r) => (r.id === record.id ? recipe : r)) : [recipe, ...data.myRecipes];
+  return { ...data, myRecipes, shared };
+}
+
+/** Favorit vom Server, bei Community-Rezepten mit der gespeicherten Kopie; Löschmarke: kein Favorit mehr. */
+function applyFavorite(data: SyncedData, record: RemoteRecord, sameVersion: boolean): SyncedData | null {
+  const id = record.id;
+  if (record.data === null) {
+    if (!data.favoriteIds.includes(id) && !data.savedRecipes.some((r) => r.id === id)) return data;
+    return { ...data, favoriteIds: data.favoriteIds.filter((f) => f !== id), savedRecipes: data.savedRecipes.filter((r) => r.id !== id) };
+  }
+  if (!isObject(record.data)) return null;
+  let savedRecipes = data.savedRecipes;
+  if (record.data.recipe !== undefined) {
+    const received = readRecipe(record.data.recipe);
+    if (!received || received.id !== id) return null;
+    const local = data.savedRecipes.find((r) => r.id === id);
+    const recipe = mergeImage(received, local, sameVersion);
+    savedRecipes = local ? data.savedRecipes.map((r) => (r.id === id ? recipe : r)) : [recipe, ...data.savedRecipes];
+  }
+  const favoriteIds = data.favoriteIds.includes(id) ? data.favoriteIds : [...data.favoriteIds, id];
+  return { ...data, favoriteIds, savedRecipes };
+}
+
+/** Text vom Server (übersetzt oder verbessert), Feld für Feld geprüft; null, wenn er nicht passt. */
+function readText(raw: unknown): RecipeText | null {
+  if (!isObject(raw) || typeof raw.name !== "string") return null;
+  const { steps, otherIngredients } = raw;
+  if ((steps !== undefined && !strings(steps)) || (otherIngredients !== undefined && !strings(otherIngredients))) return null;
+  return { name: raw.name, ...(steps ? { steps } : {}), ...(otherIngredients ? { otherIngredients } : {}) };
+}
+
+function applyText(data: SyncedData, record: RemoteRecord): SyncedData | null {
+  const target = parseTextId(record.id);
+  if (!target) return null;
+  const { field, language, recipeId } = target;
+  const texts = data[field];
+  const { [language]: old, ...others } = texts[recipeId] ?? {};
+  let forRecipe: Record<string, RecipeText>;
+  if (record.data === null) {
+    if (old === undefined) return data;
+    forRecipe = others;
+  } else {
+    const text = readText(record.data);
+    if (!text) return null;
+    forRecipe = { ...others, [language]: text };
+  }
+  const next = { ...texts, [recipeId]: forRecipe };
+  return field === "translations" ? { ...data, translations: next } : { ...data, textOverrides: next };
+}
+
+/**
+ * Ein Eintrag vom Server im Zustand; null, wenn er nicht passt (dann bleibt alles, wie es ist). `sameVersion`: Das
+ * Gerät kennt diese Fassung schon (gleicher Zeitpunkt), z. B. weil der Server beim Speichern ein Foto in den
+ * Bildspeicher gelegt hat.
+ */
+function applyRecord(kind: DataKind, data: SyncedData, record: RemoteRecord, k: { at: Record<string, number>; pending: Set<string> }, sameVersion: boolean): SyncedData | null {
+  if (kind === "recipes") return applyOwnRecipe(data, record, sameVersion);
+  if (kind === "favorites") return applyFavorite(data, record, sameVersion);
+  if (kind === "texts") return applyText(data, record);
   if (kind === "settings") {
     // Einstellungen werden nie gelöscht – eine Löschmarke ändert nichts.
     return record.id === "settings" && isObject(record.data) ? { ...data, settings: readSettings(record.data, data.settings) } : null;
@@ -364,11 +586,31 @@ function applyRecord(kind: DataKind, data: SyncedData, record: RemoteRecord, k: 
 // Abgleich mit dem Server
 // --------------------------------------------------------------------------------------------------------------
 
-/** Ob der Server einen Eintrag annimmt (ID, Größe, Menge). */
+/** Ob der Server ein Rezept annimmt: dieselben Pflichtfelder und Grenzen wie in server/src/sync/userData.ts. */
+function recipeAcceptable(raw: unknown, id: string): boolean {
+  if (!isObject(raw) || raw.id !== id || typeof raw.name !== "string" || raw.name.length > 500) return false;
+  if (!Array.isArray(raw.ingredients) || raw.ingredients.length > 300 || !Array.isArray(raw.mealTypes) || raw.mealTypes.length > 10) return false;
+  if (raw.media !== undefined && !isObject(raw.media)) return false;
+  const image = isObject(raw.media) ? raw.media.image : undefined;
+  if (image !== undefined && !(isObject(image) && typeof image.uri === "string" && image.uri.length <= MAX_IMAGE_URI)) return false;
+  return JSON.stringify(withImage(raw as unknown as Recipe, undefined)).length <= MAX_JSON.recipes;
+}
+
+/** Ob der Server einen Text annimmt (wie in server/src/sync/userData.ts). */
+function textAcceptable(raw: unknown): boolean {
+  if (!isObject(raw) || typeof raw.name !== "string" || raw.name.length > 500) return false;
+  const list = (v: unknown, n: number, len: number) => v === undefined || (strings(v) && v.length <= n && v.every((x) => x.length <= len));
+  return list(raw.steps, 200, 5000) && list(raw.otherIngredients, 300, 500);
+}
+
+/** Ob der Server einen Eintrag annimmt (ID, Form, Größe) – sonst bleibt er auf dem Gerät, statt den Abgleich scheitern zu lassen. */
 function acceptable(kind: DataKind, id: string, data: unknown): boolean {
   if (!SYNC_IDS[kind].test(id)) return false;
   if (data === null) return true;
   if (kind === "pantry" && (!isObject(data) || !isNumber(data.amount) || data.amount > MAX_AMOUNT)) return false;
+  if (kind === "recipes") return isObject(data) && recipeAcceptable(data.recipe, id) && (data.sharedAs === undefined || (typeof data.sharedAs === "string" && data.sharedAs.length >= 1 && data.sharedAs.length <= 100));
+  if (kind === "favorites" && (!isObject(data) || (data.recipe !== undefined && !recipeAcceptable(data.recipe, id)))) return false;
+  if (kind === "texts" && !textAcceptable(data)) return false;
   return JSON.stringify(data).length <= MAX_JSON[kind];
 }
 
@@ -378,7 +620,8 @@ function acceptable(kind: DataKind, id: string, data: unknown): boolean {
  * (z. B. viel zu lange Wünsche) – bleibt auf dem Gerät.
  */
 export function uploadRecords(kind: DataKind, state: SyncedState, ids?: Iterable<string>): { records: RemoteRecord[]; skipped: string[] } {
-  const derived = recordsOf(kind, state);
+  // Ohne `ids` (neues Konto): eigene Fotos als data-URI, siehe uploadImage.
+  const derived = recordsOf(kind, state, ids === undefined);
   const at = state.dataSync[kind].at;
   const wanted = ids ? [...new Set(ids)] : [...new Set([...Object.keys(at), ...derived.keys()])];
   const records: RemoteRecord[] = [];
@@ -394,7 +637,25 @@ export function uploadRecords(kind: DataKind, state: SyncedState, ids?: Iterable
 
 /** Wie viele Einträge einer Art höchstens in einer Anfrage hochgehen (der Server nimmt bis zu 5000). */
 export const UPLOAD_CHUNK = 1000;
+/**
+ * Höchstens so viele Zeichen JSON je Art in einer Anfrage (der Server nimmt bis zu 30 MB pro Anfrage) – eigene Rezepte
+ * mit Foto haben rund 150 KB. Ein einzelner größerer Eintrag geht trotzdem, allein.
+ */
+export const UPLOAD_CHARS = 4_000_000;
 const MAX_ROUNDS = 50;
+
+/** Nimmt die nächsten Einträge aus der Warteschlange: höchstens UPLOAD_CHUNK Stück und UPLOAD_CHARS Zeichen. */
+function takeChunk(queue: RemoteRecord[]): RemoteRecord[] {
+  let chars = 0;
+  let n = 0;
+  while (n < queue.length && n < UPLOAD_CHUNK) {
+    const size = JSON.stringify(queue[n]).length;
+    if (n > 0 && chars + size > UPLOAD_CHARS) break;
+    chars += size;
+    n++;
+  }
+  return queue.splice(0, n);
+}
 
 /** Häkchen anderer Pläne, die nicht mehr warten, aus dem Abgleich-Stand entfernen (sonst wüchse er jeden Monat). */
 function compact(kind: DataKind, state: SyncedState, k: KindSync): KindSync {
@@ -412,7 +673,7 @@ function compact(kind: DataKind, state: SyncedState, k: KindSync): KindSync {
 }
 
 /**
- * Gleicht Einstellungen, Plan und Vorrat mit dem Konto auf dem Server ab: lädt Geändertes und Gelöschtes hoch und holt,
+ * Gleicht alle Arten mit dem Konto auf dem Server ab: lädt Geändertes und Gelöschtes hoch und holt,
  * was das Gerät noch nicht kennt. Ist das Konto neu für dieses Gerät (erste Anmeldung, anderes Konto), geht alles hoch
  * und alles kommt zurück. Liefert eine Funktion, die das Ergebnis in den dann aktuellen Zustand einarbeitet (in der
  * Zwischenzeit Geändertes bleibt erhalten und geht beim nächsten Mal hoch).
@@ -436,7 +697,7 @@ export async function syncData<S extends SyncedState>(
     const request: DataSyncRequest = { kinds: {} };
     const chunks = new Map<DataKind, RemoteRecord[]>();
     for (const run of active) {
-      const chunk = run.queue.splice(0, UPLOAD_CHUNK);
+      const chunk = takeChunk(run.queue);
       chunks.set(run.kind, chunk);
       request.kinds[run.kind] = { since: run.since, changes: chunk };
     }
