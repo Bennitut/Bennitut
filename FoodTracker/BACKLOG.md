@@ -14,12 +14,14 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 1 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 2 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
-Seit 27.11. gibt es die Speicherschicht (SQLite-Datei oder Postgres mit `DATABASE_URL`, versionierte Migrationen), und
-Konten und Sitzungen liegen dort. Als Nächstes 9.2, Teil 2 (Tagebuch-Sicherung in die Datenbank). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+Seit 27.11. gibt es die Speicherschicht (SQLite-Datei oder Postgres mit `DATABASE_URL`, versionierte Migrationen); dort
+liegen Konten, Sitzungen und die Tagebuch-Sicherung, Letztere in einer allgemeinen Tabelle für den Abgleich. Als Nächstes
+9.2, Teil 3 (Community-Rezepte, Favoriten, Bewertungen, Meldungen und Admin-Änderungen in die Datenbank, Fotos als
+Dateien). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -107,17 +109,28 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   einmal (gleiche Konto-IDs, gültige Anmeldungen) und löscht sie. Startmeldung „Daten: …“, sauberes Schließen beim
   Beenden. Tests auf SQLite und auf Postgres über pg-mem (nachgebaut im Speicher). 28 Server-Tests (155),
   `npm run web:account` mit eigener Datenbank grün.
-- [ ] Tagebuch-Sicherung in die Datenbank (Teil 2): Einträge und Löschmarken als Zeilen statt einer Datei pro Konto bzw.
+- [x] Tagebuch-Sicherung in die Datenbank (Teil 2): Einträge und Löschmarken als Zeilen statt einer Datei pro Konto bzw.
   Gerät, mit einmaligem Umzug aus `data/diary/`. Gleich als allgemeine Tabelle für den Abgleich (Besitzer, Art,
-  Eintrags-ID, Revision, Zeitstempel, Inhalt oder Löschmarke), damit Plan, Vorrat und Co. sie mitnutzen.
+  Eintrags-ID, Revision, Zeitstempel, Inhalt oder Löschmarke), damit Plan, Vorrat und Co. sie mitnutzen. – erledigt
+  27.11.2026: Migration 2 mit `sync_records` (Besitzer, Art, Eintrags-ID, Revision, Zeitpunkt, Inhalt als JSON, NULL
+  = Löschmarke) und `sync_revisions` (Zähler pro Besitzer und Art); `storage/sync.ts` (`SyncStore`: Abgleich, Übernahme
+  ins Konto, Löschen – für jede Art nutzbar), `DiaryStore` darauf mit der Art „diary“, die Schnittstelle der App bleibt
+  gleich. Alles oder nichts pro Anfrage (vorher blieb eine an der Grenze abgelehnte Anfrage halb im Speicher), Pakete
+  fester Größe (5000 Einträge in rund 50 ms), gleichzeitige Abgleiche nacheinander (Postgres: Zeilensperre).
+  `data/diary/` übernimmt der Server beim Start einmal mit denselben Revisionen (Geräte verpassen nichts) und löscht die
+  Dateien, unlesbare bleiben liegen; „Konto löschen“ entfernt auch Löschmarken und Zähler des Kontos. 17 Server-Tests
+  (172, SQLite und pg-mem), der App-Test gegen den echten Server-Speicher läuft jetzt mit Datenbank, `npm run
+  web:account` prüft Umzug, Übernahme ins Konto, Export und Löschen im Browser.
 - [ ] Community-Rezepte, Favoriten, Bewertungen, Meldungen und Admin-Änderungen in die Datenbank (Teil 3), mit Umzug aus
   den JSON-Dateien; Fotos als Dateien (`data/photos/`) bzw. in einem Objektspeicher statt als data-URI.
 - [ ] Abgleich App ↔ Server wie in 8.2 (Eintrags-ID, Löschmarken, Zeitstempel), jetzt für alle genannten Daten; offline
-  weiter nutzbar, Abgleich sobald verbunden. Wie beim Tagebuch geht beim ersten Abgleich mit einem Konto alles vom Gerät
+  weiter nutzbar, Abgleich sobald verbunden. Tabelle `sync_records` und `SyncStore` stehen seit Teil 2 (je Art ein eigener
+  Name, eigene Grenzen). Wie beim Tagebuch geht beim ersten Abgleich mit einem Konto alles vom Gerät
   hoch (Rest von 9.1 „lokale Daten ins Konto“, ohne Duplikate); bei Einzelstücken wie Plan und Einstellungen gewinnt
   die neuere Fassung.
 - [ ] Server-Adresse: `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie bisher der
-  Laptop im WLAN.
+  Laptop im WLAN. Dabei die Abgleich-Marken an die Datenbank binden (unter „Ideen und Erkenntnisse“: „Neuer Server,
+  alte Abgleich-Marken“).
 
 **9.3 Bereit fürs Internet (vorbereiten, nicht deployen)**
 
@@ -590,7 +603,17 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Postgres nur mit pg-mem getestet:** Die Tests laufen auf SQLite und auf pg-mem (Postgres nachgebaut im Speicher).
   pg-mem rollt Transaktionen nicht zurück (das prüfen die SQLite-Tests) und versteht `CREATE TABLE IF NOT EXISTS` für
   schon vorhandene Tabellen nicht (umgangen). Vor dem Start mit Neon einmal gegen ein echtes Postgres prüfen (9.3 bzw.
-  9.5): Tabellen anlegen, registrieren, anmelden, Server neu starten, noch angemeldet. (27.11.2026)
+  9.5): Tabellen anlegen, registrieren, anmelden, Server neu starten, noch angemeldet. Seit 9.2 Teil 2 dazu das
+  Tagebuch: zwei Geräte gleichzeitig abgleichen lassen – gleichzeitige Abgleiche desselben Kontos sollen nacheinander
+  laufen (Zeilensperre in `sync_revisions`; pg-mem kennt keine Sperren). (27.11.2026)
+- **Neuer Server, alte Abgleich-Marken:** Die App merkt sich beim Tagebuch nur Besitzer und Revision, nicht, welcher
+  Server bzw. welche Datenbank. Zieht der Server auf eine neue, leere Datenbank um (z. B. vom Laptop zu Render mit Neon)
+  oder bekommt die App eine andere Server-Adresse, schicken Geräte, die schon abgeglichen hatten, nur noch ihre neuen
+  Änderungen – die neue Datenbank hätte nur einen Teil der Historie, und ein neues Gerät bekäme nicht alles (auf den
+  Geräten selbst bleibt alles). Lösung mit 9.2 „Server-Adresse“: Der Server nennt beim Abgleich eine zufällige Kennung
+  seiner Datenbank (einmal in `storage_meta` angelegt), die App merkt sie sich mit der Marke und gleicht bei einer anderen
+  Kennung von vorn ab (alles hoch, alles zurück). Der Umzug aus `data/diary/` behält die Revisionen und ist davon nicht
+  betroffen. (27.11.2026)
 - **`node:sqlite` gilt in Node 22 als experimentell:** `npm start` blendet die Warnung „SQLite is an experimental
   feature“ aus (`--disable-warning=ExperimentalWarning`), die Tests zeigen sie. Die genutzte Schnittstelle
   (`DatabaseSync`, `prepare`, `exec`) gibt es unverändert seit Node 22.13; ändert eine künftige Node-Version etwas,
