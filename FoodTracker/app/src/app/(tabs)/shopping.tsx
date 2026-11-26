@@ -151,7 +151,9 @@ export default function ShoppingScreen() {
                     <Pressable
                       key={item.ingredientId}
                       accessibilityRole="checkbox"
-                      accessibilityState={{ checked }}
+                      // aria-* statt accessibilityState: Das versteht auch die Web-Version (react-native-web 0.21
+                      // übergeht accessibilityState), Screenreader im Browser hören dann „angehakt“.
+                      aria-checked={checked}
                       onPress={() => toggleShoppingItem(checkKey(item.ingredientId))}
                       style={[styles.row, { paddingVertical: 4, opacity: checked ? 0.5 : 1 }]}
                     >
@@ -197,7 +199,7 @@ export default function ShoppingScreen() {
         <Card>
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ expanded: leftoversOpen }}
+            aria-expanded={leftoversOpen}
             onPress={() => setLeftoversOpen((open) => !open)}
             style={styles.row}
           >
