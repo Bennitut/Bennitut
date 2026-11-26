@@ -11,7 +11,10 @@
 //                                     # falschen Code, „Meine Daten exportieren“, Konto löschen (falsch/richtig);
 //                                     # dabei die Sicherung des Tagebuchs in der Datenbank (Umzug einer Datei aus
 //                                     # data/diary/ beim Start, Eintrag vom Gerät landet im Konto, im Export und ist
-//                                     # nach dem Löschen weg);
+//                                     # nach dem Löschen weg); vorher der Umzug von Community-Rezepten, Fotos mit
+//                                     # Sternen und Admin-Änderungen aus den JSON-Dateien älterer Fassungen: Fotos
+//                                     # liegen danach als Dateien im Bildspeicher, die App zeigt sie vom Server
+//                                     # (Galerie, Rezeptbild, „Aus der Community“) und die geänderten Katalogrezepte;
 //                                     # danach die Einwilligung vor den KI-Funktionen: „Nicht jetzt“ schickt nichts,
 //                                     # „Einverstanden“ schickt mit Header (der Server ohne KI meldet das), danach
 //                                     # keine Frage mehr, ohne Header lehnt der Server ab, Widerruf im Profil, dann
@@ -21,6 +24,7 @@
 // Der Server bekommt SMTP_HOST auf einen Port, an dem niemand lauscht: So erscheint „Passwort vergessen?“, die Mail
 // selbst geht ins Leere (der Server meldet das nur im eigenen Protokoll). Playwright wie bei web-smoke.cjs.
 // Schlägt fehl (Exit-Code 1), sobald ein Schritt nicht klappt oder eine Seite einen JavaScript-Fehler wirft.
+const { Buffer } = require("node:buffer");
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -77,6 +81,37 @@ function writeLegacyDiary(dir, owner, entry) {
   fs.writeFileSync(path.join(dir, name), JSON.stringify({ owner, rev: 1, records: { [entry.id]: record } }));
 }
 
+/**
+ * Community-Rezepte, Fotos mit Sternen und Admin-Änderungen, wie sie Server bis 27.11.2026 in JSON-Dateien ablegten –
+ * die Fotos als data-URI mittendrin. `jpeg` ist ein echtes kleines JPEG (im Browser gezeichnet), damit es sich anzeigen lässt.
+ */
+function writeLegacyCommunityFiles(dir, jpeg) {
+  const recipe = {
+    id: "community_e2e-geteilt-1",
+    language: "de",
+    name: "Bärlauch-Spätzle aus der alten Datei",
+    steps: ["Spätzle kochen", "Mit Bärlauch schwenken"],
+    otherIngredients: [],
+    mealTypes: ["dinner"],
+    ingredients: [{ ingredientId: "kartoffeln", amount: 300 }],
+    cookMinutes: 25,
+    tags: [],
+    source: { kind: "community", communityId: "e2e-geteilt-1", author: "Alte Fassung" },
+    media: { image: { uri: jpeg } },
+  };
+  const at = "2026-11-20T18:00:00.000Z";
+  fs.writeFileSync(path.join(dir, "community.json"), JSON.stringify([{ id: "e2e-geteilt-1", recipe, authorId: "e2e-autorin-0001", authorName: "Alte Fassung", createdAt: at, likedBy: ["e2e-fan-00000001"] }]));
+  fs.writeFileSync(
+    path.join(dir, "feedback.json"),
+    JSON.stringify({
+      photos: [{ id: "e2e-foto-1", recipeId: "shakshuka", authorId: "e2e-autorin-0001", authorName: "Alte Fassung", uri: jpeg, createdAt: at, ratings: { "e2e-fan-00000001": 5 } }],
+      recipeRatings: { shakshuka: { "e2e-fan-00000001": 5 } },
+      flags: [{ id: "e2e-meldung-1", recipeId: "linsen_dal", authorId: "e2e-fan-00000001", reason: "text", note: "aus der alten Datei", createdAt: at }],
+    }),
+  );
+  fs.writeFileSync(path.join(dir, "overrides.json"), JSON.stringify({ kaiserschmarrn: { patch: { name: "Kaiserschmarrn vom Admin" }, updatedBy: "Chefin", updatedAt: at } }));
+}
+
 /** Wie viele Konten mit dieser Adresse in der Datenbank des Test-Servers stehen (zweite Verbindung, nur lesend). */
 function accountsWith(file, email) {
   const { DatabaseSync } = require("node:sqlite");
@@ -104,6 +139,7 @@ async function startServer(dataDir) {
       FEEDBACK_FILE: path.join(dataDir, "feedback.json"),
       OVERRIDES_FILE: path.join(dataDir, "overrides.json"),
       DIARY_DIR: path.join(dataDir, "diary"),
+      PHOTOS_DIR: path.join(dataDir, "photos"),
       SMTP_HOST: "127.0.0.1",
       SMTP_PORT: "9",
       SMTP_FROM: "foodtracker@example.org",
@@ -157,10 +193,25 @@ async function main() {
     source: "plan",
     updatedAt: "2026-11-19T17:30:00.000Z",
   });
+  // Ein echtes kleines JPEG, im Browser gezeichnet – für die Fotos in den JSON-Dateien älterer Fassungen.
+  const browser = await chromium.launch();
+  const painter = await browser.newPage();
+  const jpeg = await painter.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 160;
+    canvas.height = 90;
+    const g = canvas.getContext("2d");
+    g.fillStyle = "#E07A2F";
+    g.fillRect(0, 0, 160, 90);
+    g.fillStyle = "#2E7D32";
+    g.fillRect(40, 20, 80, 50);
+    return canvas.toDataURL("image/jpeg", 0.8);
+  });
+  await painter.close();
+  writeLegacyCommunityFiles(dataDir, jpeg);
   const api = await startServer(dataDir);
   const web = await serveDist();
   const site = `http://127.0.0.1:${web.address().port}`;
-  const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT", acceptDownloads: true });
   const page = await context.newPage();
   const failures = [];
@@ -196,6 +247,52 @@ async function main() {
     const fromFile = await diaryOf({ "X-Device-Id": oldDevice });
     if (fromFile.length !== 1 || fromFile[0].entry?.title !== "Krautfleckerl" || fromFile[0].updatedAt !== "2026-11-19T17:30:00.000Z") failures.push(`Tagebuch aus der Datei: ${JSON.stringify(fromFile)}`);
     step("Sicherung des Tagebuchs beim Start aus data/diary/ in die Datenbank übernommen");
+
+    // Umzug beim Start: Community-Rezepte, Fotos mit Sternen und Admin-Änderungen aus den JSON-Dateien, Fotos als Dateien.
+    const log = api.log();
+    if (!/Community-Rezepte aus .* übernommen: 1 Rezept mit 1 Favorit, 1 Foto jetzt als Datei/.test(log)) failures.push(`Umzug aus community.json nicht gemeldet:\n${log}`);
+    if (!/Fotos, Sterne und Meldungen aus .* übernommen: 1 Foto .*, 2 Bewertungen, 1 Meldung\./.test(log)) failures.push(`Umzug aus feedback.json nicht gemeldet:\n${log}`);
+    if (!/Admin-Änderungen an Katalogrezepten aus .* übernommen: 1 Rezept\./.test(log)) failures.push(`Umzug aus overrides.json nicht gemeldet:\n${log}`);
+    for (const name of ["community.json", "feedback.json", "overrides.json"]) if (fs.existsSync(path.join(dataDir, name))) failures.push(`${name} liegt nach dem Umzug noch da`);
+    const photoFiles = fs.existsSync(path.join(dataDir, "photos")) ? fs.readdirSync(path.join(dataDir, "photos")) : [];
+    if (photoFiles.length !== 2 || !photoFiles.every((f) => f.endsWith(".jpg"))) failures.push(`Fotos im Bildspeicher: ${JSON.stringify(photoFiles)}`);
+    const headers = { "X-Device-Id": "e2e-fan-00000001" };
+    const [gallery] = await (await fetch(`${API}/api/recipes/shakshuka/photos`, { headers })).json();
+    const [shared] = await (await fetch(`${API}/api/community/recipes`, { headers })).json();
+    const sharedImage = shared?.recipe?.media?.image?.uri ?? "";
+    if (gallery?.id !== "e2e-foto-1" || !gallery.uri?.startsWith("/api/images/") || gallery.myRating !== 5) failures.push(`Foto aus feedback.json: ${JSON.stringify(gallery)}`);
+    if (shared?.id !== "e2e-geteilt-1" || !sharedImage.startsWith("/api/images/") || shared.likes !== 1) failures.push(`Rezept aus community.json: ${JSON.stringify(shared)?.slice(0, 300)}`);
+    const served = await fetch(`${API}${gallery?.uri}`);
+    if (!served.ok || served.headers.get("content-type") !== "image/jpeg" || Buffer.from(await served.arrayBuffer()).toString("base64") !== jpeg.split(",")[1]) {
+      failures.push(`Foto vom Server: HTTP ${served.status} ${served.headers.get("content-type")}`);
+    }
+    step("Community-Rezepte, Fotos mit Sternen und Admin-Änderungen beim Start aus den JSON-Dateien übernommen, Fotos als Dateien");
+
+    // Die App zeigt die Fotos vom Server: Galerie und Rezeptbild (bestbewertetes Foto), Foto des geteilten Rezepts.
+    // Eigener Browser-Kontext, damit der Umzug der Anmeldung unten mit einem frischen Speicher beginnt.
+    const photoContext = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT" });
+    const photoPage = await photoContext.newPage();
+    photoPage.on("pageerror", (e) => failures.push(`JavaScript-Fehler (Fotos): ${e.message}`));
+    const loadedImages = new Set();
+    photoPage.on("response", (r) => r.url().startsWith(`${API}/api/images/`) && r.status() === 200 && loadedImages.add(r.url().slice(API.length)));
+    const waitForImage = async (uri, what) => {
+      for (let i = 0; i < 50 && !loadedImages.has(uri); i++) await photoPage.waitForTimeout(200);
+      if (!loadedImages.has(uri)) failures.push(`${what}: ${uri} nicht vom Server geladen (geladen: ${JSON.stringify([...loadedImages])})`);
+    };
+    const shownImage = (uri) =>
+      photoPage.evaluate((src) => [...document.querySelectorAll("img")].some((img) => img.src === src && img.complete && img.naturalWidth === 160), `${API}${uri}`);
+    await photoPage.goto(`${site}/recipe/shakshuka`, { waitUntil: "networkidle" });
+    await photoPage.getByText("von Alte Fassung", { exact: false }).first().waitFor({ timeout: 10_000 }).catch(() => failures.push("Foto in der Galerie ohne Namen"));
+    await waitForImage(gallery?.uri, "Foto in der Galerie");
+    if (!(await shownImage(gallery?.uri))) failures.push("Foto in der Galerie nicht angezeigt");
+    await photoPage.goto(`${site}/recipes`, { waitUntil: "networkidle" });
+    await photoPage.getByText("Entdecken", { exact: true }).click();
+    await photoPage.getByText("Bärlauch-Spätzle aus der alten Datei", { exact: true }).waitFor({ timeout: 10_000 }).catch(() => failures.push("Geteiltes Rezept fehlt unter „Aus der Community“"));
+    await waitForImage(sharedImage, "Foto des geteilten Rezepts");
+    await photoPage.getByPlaceholder("Rezepte suchen", { exact: true }).fill("vom Admin").catch(() => undefined);
+    await photoPage.getByText("Kaiserschmarrn vom Admin", { exact: true }).first().waitFor({ timeout: 10_000 }).catch(() => failures.push("Admin-Änderung am Katalogrezept nicht in der App"));
+    await photoContext.close();
+    step("App zeigt die Fotos vom Server (Galerie, Foto des geteilten Rezepts) und die Admin-Änderung am Katalog");
 
     // Umzug: Eine ältere Version speicherte die Anmeldung im übrigen Zustand – sie muss erhalten bleiben und in den
     // eigenen Speicher wandern, ohne dass das Token im übrigen Zustand bleibt.
