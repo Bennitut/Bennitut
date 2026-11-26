@@ -1,11 +1,13 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
+import { AccountManage } from "../components/AccountManage";
 import { ComingSoonNote } from "../components/ComingSoon";
 import { legalDraftState } from "../components/Legal";
 import { StorageWarning } from "../components/StorageWarning";
 import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, ShowMore, colors, styles } from "../components/ui";
 import type { TKey } from "../i18n";
+import { providerName } from "../lib/account";
 import { api, HAS_SERVER } from "../lib/api";
 import { formatDate, formatDay } from "../lib/dates";
 import { HISTORY_RANGES, backupFileName, diaryCsv, diaryJson, historySummary, type HistoryRange } from "../lib/history";
@@ -27,6 +29,8 @@ export default function ProfileScreen() {
   const [range, setRange] = useState<HistoryRange>(7);
   const [shownDays, setShownDays] = useState(DAYS_PAGE);
   const [backupMessage, setBackupMessage] = useState<{ text: string; error: boolean } | null>(null);
+  /** Bestätigung nach „Konto löschen“ (dann ist man abgemeldet). */
+  const [accountNotice, setAccountNotice] = useState<string | null>(null);
   // Beim Öffnen auch Einträge anderer Geräte holen (mit Konto).
   useFocusEffect(
     useCallback(() => {
@@ -139,7 +143,7 @@ export default function ProfileScreen() {
               />
             </View>
             <Muted>
-              {auth.user.email ?? ""} {t("account.via", { provider: auth.user.provider === "apple" ? "Apple" : auth.user.provider === "google" ? "Google" : "Test" })}
+              {auth.user.email ?? ""} {t("account.via", { provider: providerName(auth.user.provider, t("account.providerEmail")) })}
             </Muted>
             <Button label={t("account.directory")} variant="secondary" onPress={() => router.push("/users")} />
             {isAdmin ? <Button label={t("account.adminArea")} onPress={() => router.push("/admin")} /> : null}
@@ -154,8 +158,9 @@ export default function ProfileScreen() {
           </>
         ) : HAS_SERVER ? (
           <>
+            {accountNotice ? <Text style={styles.text}>{accountNotice}</Text> : null}
             <Muted>{t("account.notSignedIn")}</Muted>
-            <Button label={t("account.signIn")} onPress={() => router.push("/login")} />
+            <Button label={t("account.signInOrRegister")} onPress={() => router.push("/login")} />
           </>
         ) : (
           // Ohne Server keine Anmeldung: Hinweis statt eines Knopfs, der zu „Ohne Verbindung … keine Anmeldung“ führt.
@@ -163,6 +168,7 @@ export default function ProfileScreen() {
         )}
         {HAS_SERVER ? <Muted>{t(server.key, { model: server.model })}</Muted> : null}
       </Card>
+      {auth ? <AccountManage auth={auth} onDeleted={() => setAccountNotice(t("account.deleted"))} /> : null}
 
       <Card title={t("profile.you")} icon="🙋">
         <Field label={t("settings.displayName")} hint={t("settings.displayNameHint")}>

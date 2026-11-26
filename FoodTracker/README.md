@@ -179,6 +179,7 @@ cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen) + Tests
 cd app && npm run web:export && npm run web:smoke   # Web-Version bauen und im Browser durchklicken
 cd app && npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe wie auf GitHub Pages (/Bennitut/)
                                                                  # (solange Impressum-Angaben fehlen: web:pages -- --entwurf)
+cd app && npm run web:account   # Konten im Browser mit echtem Server (eigener Port 3917, leere Daten im Temp-Ordner)
 ```
 
 Einzeln: `npm run typecheck` und `npm test` (in beiden Ordnern) bzw. `npm run lint` (App).
@@ -191,8 +192,10 @@ je Sprache (Fallback auf Englisch, wann „Übersetzen“ erscheint, mit KI verb
 („Entdecken“ und Tauschen zeigen zuerst 30 Rezepte, Sortierung nach Bewertung) und „Abgehaktes in den Vorrat“ (ganze
 Packungen, nichts doppelt – auch nicht, wenn danach eine Bestellung geliefert wird) sowie Tagebuch und Historie (Umzug
 aus dem alten Speicherort, nichts wird automatisch gelöscht, Löschmarken, Abgleich mit dem echten Server-Speicher,
-Auswertung bis „Alles“, CSV und Import ohne Duplikate) und Impressum/Datenschutz (Platzhalter erkennen, vollständige
-Texte ohne Server, Teil B nur mit Server, lückenlose Nummerierung).
+Auswertung bis „Alles“, CSV und Import ohne Duplikate), Impressum/Datenschutz (Platzhalter erkennen, vollständige
+Texte ohne Server, Teil B nur mit Server, lückenlose Nummerierung) und die Anmeldung (Sitzung im eigenen Speicher, Umzug
+vom alten Speicherort, gesperrter Schlüsselbund; Passwortlänge genau wie im Server, E-Mail-Adresse, Wartezeit nach zu
+vielen Versuchen).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
 die Sicherung des Tagebuchs und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
 Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash).
@@ -201,6 +204,10 @@ abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und T
 prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen, und zuletzt die
 Ernährungshistorie (Umzug in den eigenen Speicher, „Alles“, Export, Import nach gelöschten Browserdaten, Hinweis bei
 vollem Speicher) und „Impressum & Datenschutz“ (Link oben auf jeder Seite, „Entwurf“, solange Angaben fehlen); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
+`npm run web:account` baut die Web-Version für einen Server auf Port 3917, startet ihn mit leeren Daten und spielt im
+Browser durch: Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren, Anmeldung nach dem
+Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
+Daten exportieren“ und Konto löschen.
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet
@@ -228,7 +235,11 @@ der verderblichen Einkäufe übrig, im schlechtesten Fall 4 %.
 
 ## Anmeldung und Admins einrichten
 
-**Konten mit E-Mail und Passwort** gehen ohne weitere Einrichtung. Passwörter speichert der Server nur als scrypt-Hash
+**Konten mit E-Mail und Passwort** gehen ohne weitere Einrichtung: in der App unter 👤 Profil → „Anmelden oder
+registrieren“, dort auch „Passwort vergessen?“ (nur mit Mail-Dienst, siehe unten). Angemeldet bleibt man, bis man sich
+abmeldet oder die Sitzung abläuft – auf dem Handy liegt sie verschlüsselt im Schlüsselbund bzw. Keystore
+(`expo-secure-store`), im Browser in localStorage. Unter „Konto verwalten“ im Profil: Passwort ändern, „Meine Daten
+exportieren“ und Konto löschen. Passwörter speichert der Server nur als scrypt-Hash
 (`node:crypto`, mindestens 10 Zeichen), Sitzungen gelten 30 Tage und enden beim Abmelden. Gegen das Durchprobieren
 gibt es Grenzen pro IP-Adresse und pro E-Mail-Adresse (`429 auth_rate_limited` mit `Retry-After`); unbekannte Adressen
 und falsche Passwörter ergeben dieselbe Antwort. Endpunkte: `POST /api/auth/register`, `POST /api/auth/login`,
@@ -255,8 +266,8 @@ und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
   im Apple-Developer-Konto (in `app.json` schon aktiviert).
 - **Google** braucht einen eigenen Build der App (`npx expo run:ios` bzw. EAS Build) und die Client-IDs; in Expo Go
   ist die Google-Anmeldung nicht möglich.
-- Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → Anmelden
-  die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
+- Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → „Anmelden
+  oder registrieren“ die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
 
 Konten, Sitzungen und Admin-Änderungen an Rezepten liegen in `data/users.json` und `data/recipe-overrides.json`, die
 Sicherung der Ernährungshistorie in `data/diary/` (eine Datei pro Konto bzw. Geräte-ID, `DIARY_DIR`).

@@ -5,11 +5,12 @@ import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { Platform, Text, TextInput } from "react-native";
 import { ComingSoon } from "../components/ComingSoon";
+import { PasswordSignIn } from "../components/PasswordSignIn";
 import { Button, Card, ErrorText, Field, Muted, Screen, styles } from "../components/ui";
-import { api, HAS_SERVER } from "../lib/api";
+import { api, HAS_SERVER, type AuthConfig } from "../lib/api";
 import { useI18n } from "../lib/i18n";
+import type { Session } from "../lib/session";
 import { useStore } from "../lib/store";
-import type { Account } from "../lib/types";
 
 // Schließt das Browserfenster der Google-Anmeldung, wenn die App zurückkehrt.
 WebBrowser.maybeCompleteAuthSession();
@@ -24,7 +25,7 @@ const googleConfigured = Boolean(
   Platform.select({ ios: GOOGLE_IDS.iosClientId, android: GOOGLE_IDS.androidClientId, default: GOOGLE_IDS.webClientId }),
 );
 
-type Done = (login: { token: string; user: Account }) => void;
+type Done = (login: Session) => void;
 
 function GoogleButton({ onDone, onError }: { onDone: Done; onError: (e: unknown) => void }) {
   const { t } = useI18n();
@@ -43,7 +44,7 @@ export default function LoginScreen() {
   const { setAuth } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
-  const [config, setConfig] = useState<{ apple: boolean; google: boolean; dev: boolean } | null>(null);
+  const [config, setConfig] = useState<AuthConfig | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -56,9 +57,11 @@ export default function LoginScreen() {
     if (Platform.OS === "ios") AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
   }, [t]);
 
+  // Die Anmeldung bleibt gespeichert (lib/session.ts), bis man sich abmeldet oder sie nach 30 Tagen abläuft.
   const done: Done = (login) => {
     setAuth(login);
-    router.back();
+    if (router.canGoBack()) router.back();
+    else router.replace("/profile");
   };
   const fail = (e: unknown) => {
     setBusy(false);
@@ -103,11 +106,17 @@ export default function LoginScreen() {
     );
   }
 
+  const withPassword = config?.password === true;
+  const withApple = appleAvailable && config?.apple === true;
+  const withGoogle = config?.google === true && googleConfigured;
+
   return (
     <Screen>
       <Card title={t("account.signInTitle")} icon="🔐">
         <Muted>{t("account.signInText")}</Muted>
-        {appleAvailable && config?.apple ? (
+        {config && withPassword ? <PasswordSignIn config={config} onDone={done} /> : null}
+        {withPassword && (withApple || withGoogle) ? <Muted>{t("account.orWith")}</Muted> : null}
+        {withApple ? (
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
@@ -116,9 +125,10 @@ export default function LoginScreen() {
             onPress={signInWithApple}
           />
         ) : null}
-        {config?.google && googleConfigured ? (
+        {withGoogle ? (
           <GoogleButton onDone={done} onError={fail} />
-        ) : config ? (
+        ) : config && !withPassword ? (
+          // Älterer Server ohne Konten mit Passwort: wie bisher erklären, warum hier nur Apple steht.
           <Muted>{t("account.googleMissing")}</Muted>
         ) : null}
         <ErrorText message={error} />

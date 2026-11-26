@@ -8,9 +8,10 @@ import { addEntry, emptyDiary, loadDiary, removeEntry, saveDiary, syncDiary, typ
 import { importDiaryJson, type ImportResult } from "./history";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import { withStoredTexts } from "./recipeText";
+import { loadSession, sessionWriter, type Session } from "./session";
+import { sessionStore } from "./sessionStore";
 import { checkedToBook, deliveryToBook } from "./shopping";
 import type {
-  Account,
   DiaryEntry,
   Ingredient,
   MonthPlan,
@@ -66,8 +67,6 @@ interface PersistedState {
   myPhotos: MyPhoto[];
   /** Zuletzt geladene Bewertungen aller Rezepte (für Planung und Anzeige, auch offline). */
   ratings: Record<string, RatingSummary>;
-  /** Angemeldetes Konto mit Sitzungstoken; null = anonym. */
-  auth: { token: string; user: Account } | null;
   /** Änderungen der Admins an Katalogrezepten (zuletzt geladener Stand, gilt auch offline). */
   catalogOverrides: Record<string, RecipeOverride>;
   settings: Settings;
@@ -123,7 +122,6 @@ function initialState(): PersistedState {
     flaggedIds: [],
     myPhotos: [],
     ratings: {},
-    auth: null,
     catalogOverrides: {},
     settings: defaultSettings(),
   };
@@ -135,20 +133,22 @@ const keepCorrupt = (key: string, raw: string) => AsyncStorage.setItem(`${key}/k
 /**
  * Lädt den gespeicherten Zustand; aus Version 1 wird der Vorrat übernommen. `legacyDiary`: Tagebuch vom alten
  * Speicherort (bis November 2026 lag es hier mit drin) – lib/diary.ts übernimmt es in den eigenen Speicher.
+ * `legacyAuth`: Anmeldung vom alten Speicherort – lib/session.ts übernimmt sie in den sicheren Speicher.
  */
-async function loadState(): Promise<{ state: PersistedState; legacyDiary: unknown }> {
+async function loadState(): Promise<{ state: PersistedState; legacyDiary: unknown; legacyAuth?: unknown }> {
   const base = initialState();
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   if (raw) {
-    let parsed: (Partial<PersistedState> & { catalog?: unknown; diary?: unknown }) | null = null;
+    let parsed: (Partial<PersistedState> & { catalog?: unknown; diary?: unknown; auth?: unknown }) | null = null;
     try {
       parsed = JSON.parse(raw);
     } catch {
       await keepCorrupt(STORAGE_KEY, raw);
     }
     if (!parsed) return { state: base, legacyDiary: undefined };
-    // Ältere Versionen speicherten auch den Katalog; der kommt jetzt immer aus der App.
-    const { catalog: _oldCatalog, diary: legacyDiary, ...saved } = parsed;
+    // Ältere Versionen speicherten auch den Katalog (kommt jetzt immer aus der App) und die Anmeldung (jetzt in
+    // lib/session.ts, auf dem Handy verschlüsselt).
+    const { catalog: _oldCatalog, diary: legacyDiary, auth: legacyAuth, ...saved } = parsed;
     // Pläne aus Versionen vor dem Monatsplan werden verworfen (das Tagebuch bleibt).
     const plan = saved.plan && "weeks" in saved.plan ? saved.plan : null;
     return {
@@ -163,6 +163,7 @@ async function loadState(): Promise<{ state: PersistedState; legacyDiary: unknow
         settings: { ...base.settings, ...saved.settings },
       },
       legacyDiary,
+      legacyAuth,
     };
   }
   const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
@@ -204,6 +205,8 @@ export interface DiarySyncStatus {
 
 interface Store extends PersistedState {
   ready: boolean;
+  /** Angemeldetes Konto mit Sitzungstoken; null = anonym. Gespeichert über lib/session.ts. */
+  auth: Session | null;
   /** Alle Tagebucheinträge, nach Tag und Uhrzeit sortiert. */
   diary: DiaryEntry[];
   /** Tagebuch samt Löschmarken (für den Export). */
@@ -216,7 +219,7 @@ interface Store extends PersistedState {
   storageIssues: StorageIssues;
   catalog: typeof baseCatalog;
   /** Anmelden (Konto und Token speichern) bzw. mit null abmelden. */
-  setAuth: (auth: { token: string; user: Account } | null) => void;
+  setAuth: (auth: Session | null) => void;
   isAdmin: boolean;
   /** Lädt die Änderungen der Admins an Katalogrezepten neu. */
   refreshOverrides: () => Promise<void>;
@@ -268,6 +271,8 @@ const StoreContext = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
+  const [session, setSession] = useState<Session | null>(null);
+  const writeSession = useRef<((session: Session | null) => Promise<void>) | null>(null);
   const [diary, setDiary] = useState<DiaryState>(emptyDiary);
   const [ready, setReady] = useState(false);
   const [pendingPlan, setPendingPlan] = useState(false);
@@ -316,8 +321,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist.current.legacyDiary = loaded.legacyDiary;
         setStorageIssues((i) => ({ ...i, diary: "unreadable" }));
       }
+      const loadedSession = await loadSession(sessionStore, loaded.legacyAuth);
+      writeSession.current = sessionWriter(sessionStore, loadedSession);
       setDeviceId(loaded.state.deviceId);
-      setAuthToken(loaded.state.auth?.token ?? null);
+      setAuthToken(loadedSession?.token ?? null);
+      setSession(loadedSession);
       setState(loaded.state);
       setReady(true);
     })();
@@ -331,6 +339,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       () => setStorageIssues((i) => (i.state ? i : { ...i, state: true })),
     );
   }, [state, ready]);
+
+  // Anmelden, Abmelden und neue Kontodaten (Name, Rolle) sofort merken – unabhängig vom übrigen Zustand.
+  useEffect(() => {
+    if (ready) writeSession.current?.(session);
+  }, [session, ready]);
 
   useEffect(() => {
     sync.current.latest = diary;
@@ -356,7 +369,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Sicherung auf dem Server: beim Start einmal abgleichen, danach kurz nach jeder Änderung und nach dem An- oder
   // Abmelden (dann geht alles hoch und alles kommt zurück). Ohne Verbindung in einer Minute noch einmal.
-  const owner = state.auth ? `user:${state.auth.user.id}` : `device:${state.deviceId}`;
+  const owner = session ? `user:${session.user.id}` : `device:${state.deviceId}`;
   const pendingCount = diary.pending.length;
   const syncedOwner = diary.sync?.owner;
   useEffect(() => {
@@ -379,7 +392,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (e instanceof ApiError && e.code.startsWith("auth_")) {
             // Sitzung abgelaufen: abmelden, dann geht die Historie wieder unter der Geräte-ID in die Sicherung.
             setAuthToken(null);
-            setState((st) => ({ ...st, auth: null }));
+            setSession(null);
           } else {
             retry = setTimeout(() => setSyncRequest((n) => n + 1), 60_000);
           }
@@ -404,15 +417,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .overrides()
       .then((catalogOverrides) => setState((s) => ({ ...s, catalogOverrides })))
       .catch(() => {});
-    if (state.auth) {
+    if (session) {
+      const { token } = session;
       api
         .me()
-        .then((user) => setState((s) => (s.auth ? { ...s, auth: { ...s.auth, user } } : s)))
+        // Nur für dieselbe Sitzung übernehmen – wer inzwischen ein anderes Konto angemeldet hat, behält dessen Daten.
+        .then((user) => setSession((s) => (s?.token === token ? { ...s, user } : s)))
         .catch((e) => {
           // Abgelaufene oder gesperrte Sitzung: abmelden. Netzwerkfehler ändern nichts.
           if (e instanceof ApiError && e.code.startsWith("auth_")) {
             setAuthToken(null);
-            setState((s) => ({ ...s, auth: null }));
+            setSession(null);
           }
         });
     }
@@ -598,16 +613,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addMyPhoto: (photo) => setState((s) => ({ ...s, myPhotos: [photo, ...s.myPhotos] })),
       updateMyPhoto: (id, patch) => setState((s) => ({ ...s, myPhotos: s.myPhotos.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       removeMyPhoto: (id) => setState((s) => ({ ...s, myPhotos: s.myPhotos.filter((p) => p.id !== id) })),
+      auth: session,
       setAuth: (auth) => {
         setAuthToken(auth?.token ?? null);
-        setState((s) => ({
-          ...s,
-          auth,
-          // Der Kontoname wird auch als Anzeigename für geteilte Rezepte genutzt.
-          settings: auth && !s.settings.displayName ? { ...s.settings, displayName: auth.user.name } : s.settings,
-        }));
+        setSession(auth);
+        // Der Kontoname wird auch als Anzeigename für geteilte Rezepte genutzt.
+        if (auth) setState((s) => (s.settings.displayName ? s : { ...s, settings: { ...s.settings, displayName: auth.user.name } }));
       },
-      isAdmin: state.auth?.user.role === "admin",
+      isAdmin: session?.user.role === "admin",
       refreshOverrides: async () => {
         const catalogOverrides = await api.overrides();
         setState((s) => ({ ...s, catalogOverrides }));
@@ -629,7 +642,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ratingAverages: () =>
         Object.fromEntries(Object.entries(state.ratings).filter(([, r]) => r.count > 0).map(([id, r]) => [id, r.avg])),
     };
-  }, [state, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, owner, refreshDiary]);
+  }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, owner, refreshDiary]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

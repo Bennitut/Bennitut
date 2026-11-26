@@ -158,7 +158,7 @@ export interface Account {
   name: string;
   email: string | null;
   role: Role;
-  provider: "apple" | "google" | "dev";
+  provider: "apple" | "google" | "dev" | "password";
   createdAt: string;
 }
 

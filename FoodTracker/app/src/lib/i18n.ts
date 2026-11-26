@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { contentLocale, formatNumber, formatPrice, regionalize, translate, type TKey } from "../i18n";
+import { errorParams } from "./account";
 import { ApiError } from "./api";
 import { localizeRecipe } from "./recipeText";
 import { useStore } from "./store";
@@ -40,11 +41,11 @@ export function useI18n() {
           otherIngredients: text.otherIngredients.map((s) => regionalize(s, language, region)),
         };
       },
-      /** Fehlermeldung zu einem Fehler aus der API. */
+      /** Fehlermeldung zu einem Fehler aus der API (mit Wartezeit bzw. Mindestlänge, wo der Text sie nennt). */
       error: (e: unknown) => {
         const code = e instanceof ApiError ? e.code : "internal";
         const key = `errors.${code}` as TKey;
-        const text = translate(language, key);
+        const text = translate(language, key, errorParams(e instanceof ApiError ? e.details : {}));
         return regionalize(text === key ? translate(language, "errors.internal") : text, language, region);
       },
     };

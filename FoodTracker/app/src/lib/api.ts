@@ -59,9 +59,15 @@ export function toMediaType(mimeType: string | undefined | null): ImageMediaType
   return mimeType === "image/png" || mimeType === "image/webp" || mimeType === "image/gif" ? mimeType : "image/jpeg";
 }
 
-/** Fehler mit Code aus dem Backend (z. B. "plan_no_recipe_for_meal"), wird in der App übersetzt. */
+/**
+ * Fehler mit Code aus dem Backend (z. B. "plan_no_recipe_for_meal"), wird in der App übersetzt. `details`: übrige
+ * Felder der Antwort, z. B. `retryAfter` (Sekunden) nach zu vielen Anmeldeversuchen oder `minLength` beim Passwort.
+ */
 export class ApiError extends Error {
-  constructor(readonly code: string) {
+  constructor(
+    readonly code: string,
+    readonly details: Record<string, unknown> = {},
+  ) {
     super(code);
   }
 }
@@ -106,9 +112,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     clearTimeout(timer);
     return undefined as T;
   }
-  const body = await res.json().catch(() => ({}));
+  const body = (await res.json().catch(() => ({}))) ?? {};
   clearTimeout(timer);
-  if (!res.ok) throw new ApiError(typeof body.error === "string" ? body.error : "internal");
+  if (!res.ok) throw new ApiError(typeof body.error === "string" ? body.error : "internal", typeof body === "object" ? body : {});
   return body as T;
 }
 
@@ -117,6 +123,17 @@ const send = <T>(method: "PATCH" | "PUT" | "DELETE", path: string, body?: unknow
   request<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
 type Login = { token: string; user: Account };
+
+/** Welche Anmeldearten der Server anbietet; ältere Server kennen die Felder zum Passwort noch nicht. */
+export interface AuthConfig {
+  apple: boolean;
+  google: boolean;
+  dev: boolean;
+  password?: boolean;
+  /** „Passwort vergessen?“ – nur mit Mail-Dienst auf dem Server. */
+  passwordReset?: boolean;
+  passwordMinLength?: number;
+}
 
 export interface PlanPreferences {
   diet: Diet;
@@ -187,7 +204,19 @@ export const api = {
     post<ImprovedRecipe>("/api/recipes/improve", body),
 
   // Konten
-  authConfig: () => request<{ apple: boolean; google: boolean; dev: boolean }>("/api/auth/config"),
+  authConfig: () => request<AuthConfig>("/api/auth/config"),
+  register: (email: string, password: string, name: string | undefined) =>
+    post<Login & { created: boolean }>("/api/auth/register", { email, password, ...(name ? { name } : {}) }),
+  loginPassword: (email: string, password: string) => post<Login>("/api/auth/login", { email, password }),
+  /** Neues Passwort; andere Geräte werden abgemeldet, dieses bleibt angemeldet. */
+  changePassword: (currentPassword: string, newPassword: string) => post<void>("/api/auth/password", { currentPassword, newPassword }),
+  /** Schickt einen Code per E-Mail, falls es das Konto gibt – die Antwort ist immer dieselbe. */
+  forgotPassword: (email: string, language: string) => post<void>("/api/auth/password/forgot", { email, language }),
+  resetPassword: (email: string, code: string, newPassword: string) => post<Login>("/api/auth/password/reset", { email, code, newPassword }),
+  /** Konto mit allen Daten auf dem Server löschen; Konten mit Passwort bestätigen mit dem Passwort. */
+  deleteAccount: (password: string | undefined) => send<void>("DELETE", "/api/auth/me", password === undefined ? {} : { password }),
+  /** „Meine Daten exportieren“: alles, was der Server zum Konto speichert. */
+  exportAccount: () => request<Record<string, unknown>>("/api/auth/export"),
   loginApple: (identityToken: string, fullName: string | undefined) => post<Login>("/api/auth/apple", { identityToken, fullName }),
   loginGoogle: (idToken: string) => post<Login>("/api/auth/google", { idToken }),
   loginDev: (name: string, email: string | undefined) => post<Login>("/api/auth/dev", { name, email }),
