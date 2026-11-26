@@ -1,10 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AppState } from "react-native";
 import { isUILanguage, regionFromCode } from "../i18n";
 import { readAiConsent, type AiConsent } from "./aiConsent";
 import { ApiError, BASE_URL, HAS_SERVER, api, setAiConsent as setApiAiConsent, setAuthToken, setDeviceId } from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
+import { emptyDataSync, lastSynced, pendingChanges, readDataSync, syncData, syncedWith, trackChanges, type DataSync } from "./dataSync";
 import { claimedAnything, needsDeviceClaim, type DeviceClaim } from "./deviceClaim";
 import { addEntry, emptyDiary, loadDiary, removeEntry, saveDiary, syncDiary, type DiaryState } from "./diary";
 import { importDiaryJson, type ImportResult } from "./history";
@@ -80,6 +82,11 @@ interface PersistedState {
   /** Einwilligung in die KI-Funktionen (lib/aiConsent.ts); null = noch nicht gefragt bzw. widerrufen. */
   aiConsent: AiConsent | null;
   settings: Settings;
+  /**
+   * Abgleich von Einstellungen, Plan mit Einkaufsliste und Vorrat mit dem Konto (lib/dataSync.ts): Zeitpunkt jeder
+   * Änderung, was noch hoch muss, letzter Abgleich. Steht hier, damit er immer zusammen mit diesen Daten gespeichert wird.
+   */
+  dataSync: DataSync;
 }
 
 /** Fest eingebauter Katalog – funktioniert auch ohne Verbindung zum Server. */
@@ -136,6 +143,7 @@ function initialState(): PersistedState {
     claimedFor: null,
     aiConsent: null,
     settings: defaultSettings(),
+    dataSync: emptyDataSync(),
   };
 }
 
@@ -163,21 +171,20 @@ async function loadState(): Promise<{ state: PersistedState; legacyDiary: unknow
     const { catalog: _oldCatalog, diary: legacyDiary, auth: legacyAuth, ...saved } = parsed;
     // Pläne aus Versionen vor dem Monatsplan werden verworfen (das Tagebuch bleibt).
     const plan = saved.plan && "weeks" in saved.plan ? saved.plan : null;
-    return {
-      state: {
-        ...base,
-        ...saved,
-        plan,
-        eatenMeals: plan ? (saved.eatenMeals ?? []).filter((e): e is string => typeof e === "string") : [],
-        shoppingChecked: plan ? (saved.shoppingChecked ?? []).filter((e): e is string => typeof e === "string") : [],
-        shoppingBooked: plan ? (saved.shoppingBooked ?? []).filter((e): e is string => typeof e === "string") : [],
-        pantry: migrateStock(saved.pantry ?? []),
-        aiConsent: readAiConsent(saved.aiConsent),
-        settings: { ...base.settings, ...saved.settings },
-      },
-      legacyDiary,
-      legacyAuth,
+    const state: PersistedState = {
+      ...base,
+      ...saved,
+      plan,
+      eatenMeals: plan ? (saved.eatenMeals ?? []).filter((e): e is string => typeof e === "string") : [],
+      shoppingChecked: plan ? (saved.shoppingChecked ?? []).filter((e): e is string => typeof e === "string") : [],
+      shoppingBooked: plan ? (saved.shoppingBooked ?? []).filter((e): e is string => typeof e === "string") : [],
+      pantry: migrateStock(saved.pantry ?? []),
+      aiConsent: readAiConsent(saved.aiConsent),
+      settings: { ...base.settings, ...saved.settings },
+      dataSync: base.dataSync,
     };
+    // Ohne Abgleich-Stand (Daten von vor dem Abgleich): alles mit dem Zeitpunkt 0, siehe lib/dataSync.ts.
+    return { state: { ...state, dataSync: readDataSync(saved.dataSync, state) }, legacyDiary, legacyAuth };
   }
   const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
   if (!legacy) return { state: base, legacyDiary: undefined };
@@ -187,19 +194,17 @@ async function loadState(): Promise<{ state: PersistedState; legacyDiary: unknow
   } catch {
     return { state: base, legacyDiary: undefined };
   }
-  return {
-    state: {
-      ...base,
-      pantry: migrateStock(old.pantry ?? []),
-      settings: {
-        ...base.settings,
-        kcalPerPersonPerDay: old.settings?.kcalPerPersonPerDay ?? base.settings.kcalPerPersonPerDay,
-        people: old.settings?.people ?? base.settings.people,
-        days: old.settings?.days ?? base.settings.days,
-      },
+  const state: PersistedState = {
+    ...base,
+    pantry: migrateStock(old.pantry ?? []),
+    settings: {
+      ...base.settings,
+      kcalPerPersonPerDay: old.settings?.kcalPerPersonPerDay ?? base.settings.kcalPerPersonPerDay,
+      people: old.settings?.people ?? base.settings.people,
+      days: old.settings?.days ?? base.settings.days,
     },
-    legacyDiary: old.diary,
   };
+  return { state: { ...state, dataSync: readDataSync(undefined, state) }, legacyDiary: old.diary };
 }
 
 /** Hinweis, wenn etwas nicht gespeichert werden konnte (Tagebuch: unlesbar bzw. Speichern gescheitert). */
@@ -216,6 +221,17 @@ export interface DiarySyncStatus {
   at: string | null;
 }
 
+/**
+ * Abgleich von Einstellungen, Plan und Vorrat mit dem Konto: aus (kein Server), nur auf dem Gerät (ohne Konto), gleich,
+ * läuft, erledigt oder Server nicht erreichbar.
+ */
+export interface DataSyncStatus {
+  state: "off" | "local" | "waiting" | "syncing" | "synced" | "offline";
+  pending: number;
+  /** Letzter erfolgreicher Abgleich aller drei Arten (ISO). */
+  at: string | null;
+}
+
 interface Store extends PersistedState {
   ready: boolean;
   /** Angemeldetes Konto mit Sitzungstoken; null = anonym. Gespeichert über lib/session.ts. */
@@ -227,8 +243,10 @@ interface Store extends PersistedState {
   /** Übernimmt eine Sicherung (JSON) ins Tagebuch, ohne Doppeltes. */
   importDiary: (text: string) => Omit<Extract<ImportResult, { ok: true }>, "state"> | Extract<ImportResult, { ok: false }>;
   diarySync: DiarySyncStatus;
-  /** Jetzt mit dem Server abgleichen (z. B. beim Öffnen des Profils). */
-  refreshDiary: () => void;
+  /** Abgleich von Einstellungen, Plan und Vorrat mit dem Konto. */
+  dataSyncStatus: DataSyncStatus;
+  /** Jetzt mit dem Server abgleichen – Tagebuch, Einstellungen, Plan und Vorrat (z. B. beim Öffnen des Profils). */
+  refreshSync: () => void;
   storageIssues: StorageIssues;
   catalog: typeof baseCatalog;
   /** Anmelden (Konto und Token speichern) bzw. mit null abmelden. */
@@ -297,6 +315,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [storageIssues, setStorageIssues] = useState<StorageIssues>({ diary: null, state: false });
   const [syncState, setSyncState] = useState<"idle" | "syncing" | "offline">("idle");
   const [syncRequest, setSyncRequest] = useState(0);
+  const [dataSyncState, setDataSyncState] = useState<"idle" | "syncing" | "offline">("idle");
+  const [dataSyncRequest, setDataSyncRequest] = useState(0);
   const [deviceClaim, setDeviceClaim] = useState<DeviceClaim | null>(null);
   // Speichern: was darf geschrieben werden (nach einem Lesefehler nichts, damit nichts überschrieben wird), was steht
   // schon im Speicher, und das Tagebuch vom alten Speicherort, bis es unter dem eigenen Schlüssel gespeichert ist.
@@ -308,6 +328,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     queue: Promise.resolve(),
   });
   const sync = useRef({ running: false, pulled: false, latest: emptyDiary() });
+  // Abgleich von Einstellungen, Plan und Vorrat: läuft gerade, schon einmal geholt (für dieses Konto), neuester Zustand.
+  const dataRef = useRef({ running: false, pulled: false, owner: "", latest: state });
   // Gerade abgehakte Mahlzeiten (Plan-Start und Mahlzeit), damit ein schneller Doppeltipp nicht zweimal einträgt.
   const marked = useRef(new Set<string>());
 
@@ -380,11 +402,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
   }, [diary, ready]);
 
-  /** Beim nächsten Durchlauf auch ohne eigene Änderungen beim Server nachfragen (z. B. beim Öffnen des Profils). */
-  const refreshDiary = useCallback(() => {
+  /**
+   * Zustand ändern und merken, was davon mit dem Konto abgeglichen werden muss (lib/dataSync.ts). Alle Änderungen auf
+   * diesem Gerät laufen hierüber; nur das Übernehmen vom Server nicht (das muss nicht wieder hoch).
+   */
+  const update = useCallback(
+    (change: (s: PersistedState) => PersistedState) =>
+      setState((s) => {
+        const next = change(s);
+        if (next === s) return s;
+        const dataSync = trackChanges(next.dataSync, s, next);
+        return dataSync === next.dataSync ? next : { ...next, dataSync };
+      }),
+    [],
+  );
+
+  /**
+   * Beim nächsten Durchlauf auch ohne eigene Änderungen beim Server nachfragen – Tagebuch, Einstellungen, Plan und Vorrat
+   * (z. B. beim Öffnen des Profils oder wenn die App wieder in den Vordergrund kommt).
+   */
+  const refreshSync = useCallback(() => {
     sync.current.pulled = false;
+    dataRef.current.pulled = false;
     setSyncRequest((n) => n + 1);
+    setDataSyncRequest((n) => n + 1);
   }, []);
+
+  // Zurück in der App bzw. im Browser-Tab: holen, was andere Geräte inzwischen geändert haben.
+  useEffect(() => {
+    if (!HAS_SERVER) return;
+    const subscription = AppState.addEventListener("change", (status) => {
+      if (status === "active") refreshSync();
+    });
+    return () => subscription.remove();
+  }, [refreshSync]);
 
   // Sicherung auf dem Server: beim Start einmal abgleichen, danach kurz nach jeder Änderung und nach dem An- oder
   // Abmelden (dann geht alles hoch und alles kommt zurück). Ohne Verbindung in einer Minute noch einmal.
@@ -427,6 +478,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (retry) clearTimeout(retry);
     };
   }, [ready, owner, pendingCount, syncedOwner, syncRequest]);
+
+  // Abgleich von Einstellungen, Plan mit Einkaufsliste und Vorrat – nur mit Konto (lib/dataSync.ts): beim Start bzw.
+  // nach der Anmeldung einmal, danach kurz nach jeder Änderung; ohne Verbindung in einer Minute noch einmal. Ein anderes
+  // Konto als beim letzten Mal bekommt alles vom Gerät und schickt alles zurück.
+  const signedIn = session !== null;
+  const dataPending = pendingChanges(state.dataSync);
+  const dataSyncedFor = syncedWith(state.dataSync, owner);
+  useEffect(() => {
+    dataRef.current.latest = state;
+  }, [state]);
+  useEffect(() => {
+    if (!ready || !HAS_SERVER || !signedIn) return;
+    const d = dataRef.current;
+    if (d.owner !== owner) {
+      d.owner = owner;
+      d.pulled = false;
+    }
+    if (d.running || (d.pulled && dataPending === 0 && dataSyncedFor)) return;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(
+      async () => {
+        d.running = true;
+        setDataSyncState("syncing");
+        try {
+          const apply = await syncData(d.latest, owner, api.dataSync);
+          d.pulled = true;
+          // Ohne update: Was vom Server kommt, muss nicht wieder hoch.
+          setState((current) => apply(current));
+          setDataSyncState("idle");
+          // Während des Abgleichs Geändertes gleich hinterherschicken.
+          setDataSyncRequest((n) => n + 1);
+        } catch (e) {
+          if (e instanceof ApiError && e.code.startsWith("auth_")) {
+            // Sitzung abgelaufen: abmelden; Plan, Vorrat und Einstellungen bleiben auf dem Gerät.
+            setAuthToken(null);
+            setSession(null);
+          } else {
+            retry = setTimeout(() => setDataSyncRequest((n) => n + 1), 60_000);
+          }
+          setDataSyncState("offline");
+        } finally {
+          d.running = false;
+        }
+      },
+      dataPending > 0 ? 1500 : 0,
+    );
+    return () => {
+      clearTimeout(timer);
+      if (retry) clearTimeout(retry);
+    };
+  }, [ready, owner, signedIn, dataPending, dataSyncedFor, dataSyncRequest]);
 
   // Nach jeder Anmeldung einmal: Was dieses Gerät ohne Konto auf dem Server hat (Fotos, Sterne, geteilte Rezepte,
   // Favoriten, Meldungen, Sicherung des Tagebuchs), gehört danach dem Konto (lib/deviceClaim.ts). Ohne Verbindung beim
@@ -536,15 +638,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pending: diary.pending.length,
         at: diary.sync?.at ?? null,
       },
-      refreshDiary,
+      dataSyncStatus: {
+        state: !HAS_SERVER
+          ? "off"
+          : !session
+            ? "local"
+            : dataSyncState === "syncing"
+              ? "syncing"
+              : dataSyncState === "offline"
+                ? "offline"
+                : pendingChanges(state.dataSync) > 0 || !syncedWith(state.dataSync, owner)
+                  ? "waiting"
+                  : "synced",
+        pending: pendingChanges(state.dataSync),
+        at: lastSynced(state.dataSync),
+      },
+      refreshSync,
       storageIssues,
-      addPantryItems: (items) => setState((s) => ({ ...s, pantry: addToPantry(s.pantry, items) })),
+      addPantryItems: (items) => update((s) => ({ ...s, pantry: addToPantry(s.pantry, items) })),
       setPantryAmount: (ingredientId, amount) =>
-        setState((s) => ({ ...s, pantry: setPantryAmount(s.pantry, ingredientId, Math.max(0, amount)) })),
+        update((s) => ({ ...s, pantry: setPantryAmount(s.pantry, ingredientId, Math.max(0, amount)) })),
       pendingPlan,
       setPendingPlan,
       setPlan: (plan, extraRecipes) =>
-        setState((s) => {
+        update((s) => {
           // KI-Rezepte aus dem alten Plan behalten, solange sie noch eingeplant sind.
           const used = new Set(plan.weeks.flatMap((w) => w.meals.map((m) => m.recipeId)));
           const planRecipes = [...s.planRecipes, ...extraRecipes].filter((r) => used.has(r.id));
@@ -565,19 +682,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const recipe = recipes.get(meal.recipeId);
         if (!recipe || state.eatenMeals.includes(key) || marked.current.has(once)) return;
         marked.current.add(once);
-        setState((s) =>
+        update((s) =>
           s.eatenMeals.includes(key) ? s : { ...s, eatenMeals: [...s.eatenMeals, key], pantry: consumeMeal(s.pantry, meal, recipe) },
         );
         const entry: DiaryEntry = { id: newId(), date: today(), time: nowTime(), title, nutrients: meal.nutrientsPerPortion, source: "plan" };
         setDiary((d) => addEntry(d, entry));
       },
       toggleShoppingItem: (key) =>
-        setState((s) => ({
+        update((s) => ({
           ...s,
           shoppingChecked: s.shoppingChecked.includes(key) ? s.shoppingChecked.filter((k) => k !== key) : [...s.shoppingChecked, key],
         })),
       bookCheckedShopping: (week) =>
-        setState((s) => {
+        update((s) => {
           const list = s.plan?.weeks[week]?.shoppingList;
           if (!list) return s;
           const booking = checkedToBook(list, week, s.shoppingChecked, s.shoppingBooked);
@@ -585,7 +702,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return { ...s, pantry: addToPantry(s.pantry, booking.items), shoppingBooked: [...s.shoppingBooked, ...booking.keys] };
         }),
       toggleLock: (meal) =>
-        setState((s) =>
+        update((s) =>
           s.plan
             ? {
                 ...s,
@@ -599,9 +716,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               }
             : s,
         ),
-      saveOrder: (order) => setState((s) => ({ ...s, orders: [order, ...s.orders.filter((o) => o.id !== order.id)] })),
+      saveOrder: (order) => update((s) => ({ ...s, orders: [order, ...s.orders.filter((o) => o.id !== order.id)] })),
       receiveOrder: (order, delivered) =>
-        setState((s) => {
+        update((s) => {
           const previous = s.orders.find((o) => o.id === order.id);
           // Der Server kennt die Woche nicht; sie steht nur in der gespeicherten Bestellung.
           const merged: Order = { ...order, forWeek: order.forWeek ?? previous?.forWeek };
@@ -616,17 +733,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             shoppingBooked: [...s.shoppingBooked, ...booking.keys.filter((k) => !s.shoppingBooked.includes(k))],
           };
         }),
-      updateSettings: (settings) => setState((s) => ({ ...s, settings: { ...s.settings, ...settings } })),
+      updateSettings: (settings) => update((s) => ({ ...s, settings: { ...s.settings, ...settings } })),
       saveRecipe: (recipe) =>
-        setState((s) => ({ ...s, myRecipes: [recipe, ...s.myRecipes.filter((r) => r.id !== recipe.id)] })),
+        update((s) => ({ ...s, myRecipes: [recipe, ...s.myRecipes.filter((r) => r.id !== recipe.id)] })),
       deleteRecipe: (id) =>
-        setState((s) => ({
+        update((s) => ({
           ...s,
           myRecipes: s.myRecipes.filter((r) => r.id !== id),
           favoriteIds: s.favoriteIds.filter((f) => f !== id),
         })),
       setFavorite: (recipe, favorite) =>
-        setState((s) => {
+        update((s) => {
           const isCommunity = recipe.source.kind === "community";
           return {
             ...s,
@@ -639,36 +756,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           };
         }),
       setShared: (recipeId, communityId) =>
-        setState((s) => {
+        update((s) => {
           const shared = { ...s.shared };
           if (communityId) shared[recipeId] = communityId;
           else delete shared[recipeId];
           return { ...s, shared };
         }),
       cacheTranslation: (recipeId, language, text) =>
-        setState((s) => ({
+        update((s) => ({
           ...s,
           translations: { ...s.translations, [recipeId]: { ...s.translations[recipeId], [language]: text } },
         })),
       setTextOverride: (recipeId, language, text) =>
-        setState((s) => {
+        update((s) => {
           const forRecipe = { ...s.textOverrides[recipeId] };
           if (text) forRecipe[language] = text;
           else delete forRecipe[language];
           return { ...s, textOverrides: { ...s.textOverrides, [recipeId]: forRecipe } };
         }),
       markFlagged: (recipeId) =>
-        setState((s) => (s.flaggedIds.includes(recipeId) ? s : { ...s, flaggedIds: [...s.flaggedIds, recipeId] })),
-      addMyPhoto: (photo) => setState((s) => ({ ...s, myPhotos: [photo, ...s.myPhotos] })),
-      updateMyPhoto: (id, patch) => setState((s) => ({ ...s, myPhotos: s.myPhotos.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
-      removeMyPhoto: (id) => setState((s) => ({ ...s, myPhotos: s.myPhotos.filter((p) => p.id !== id) })),
+        update((s) => (s.flaggedIds.includes(recipeId) ? s : { ...s, flaggedIds: [...s.flaggedIds, recipeId] })),
+      addMyPhoto: (photo) => update((s) => ({ ...s, myPhotos: [photo, ...s.myPhotos] })),
+      updateMyPhoto: (id, patch) => update((s) => ({ ...s, myPhotos: s.myPhotos.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
+      removeMyPhoto: (id) => update((s) => ({ ...s, myPhotos: s.myPhotos.filter((p) => p.id !== id) })),
       auth: session,
       deviceClaim,
       setAuth: (auth) => {
         setAuthToken(auth?.token ?? null);
         setSession(auth);
         setDeviceClaim(null);
-        setState((s) => ({
+        update((s) => ({
           ...s,
           // Nach jeder An- und Abmeldung übernimmt die nächste Anmeldung, was das Gerät dann ohne Konto hat.
           claimedFor: null,
@@ -679,13 +796,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isAdmin: session?.user.role === "admin",
       refreshOverrides: async () => {
         const catalogOverrides = await api.overrides();
-        setState((s) => ({ ...s, catalogOverrides }));
+        update((s) => ({ ...s, catalogOverrides }));
       },
-      setRating: (recipeId, rating) => setState((s) => ({ ...s, ratings: { ...s.ratings, [recipeId]: rating } })),
+      setRating: (recipeId, rating) => update((s) => ({ ...s, ratings: { ...s.ratings, [recipeId]: rating } })),
       topPhotos,
       refreshFeedback: async () => {
         const [ratings, top] = await Promise.all([api.ratings(), api.topPhotos()]);
-        setState((s) => ({ ...s, ratings }));
+        update((s) => ({ ...s, ratings }));
         setTopPhotos(top);
       },
       imageFor: (recipe) => {
@@ -701,10 +818,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAiConsent: (aiConsent) => {
         // Sofort, nicht erst nach dem nächsten Rendern: Gleich nach „Einverstanden“ geht die Anfrage los.
         setApiAiConsent(aiConsent);
-        setState((s) => ({ ...s, aiConsent }));
+        update((s) => ({ ...s, aiConsent }));
       },
     };
-  }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, owner, refreshDiary, deviceClaim]);
+  }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, dataSyncState, owner, refreshSync, update, deviceClaim]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

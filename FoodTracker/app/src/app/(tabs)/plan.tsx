@@ -196,6 +196,13 @@ export default function PlanScreen() {
         <Card title={t("plan.onboardingTitle")} icon="👋">
           <Muted>{t("plan.onboardingText")}</Muted>
           <Button label={t("plan.onboardingStart")} onPress={() => router.push("/onboarding")} />
+          {/* Neues Gerät: erst anmelden, dann kommen Plan und Essgewohnheiten vom Konto (lib/dataSync.ts). */}
+          {HAS_SERVER && !store.auth ? (
+            <>
+              <Muted>{t("plan.onboardingSignInText")}</Muted>
+              <Button label={t("plan.onboardingSignIn")} variant="secondary" onPress={() => router.push("/login")} />
+            </>
+          ) : null}
         </Card>
       ) : (
         <Card title={plan ? t("plan.monthSummary") : t("plan.createMonth")} icon="📅">
@@ -209,6 +216,8 @@ export default function PlanScreen() {
               style={styles.input}
               placeholder={t("plan.wishesPlaceholder")}
               defaultValue={settings.preferences}
+              // So viel nimmt der Server für Wünsche an (POST /api/plan).
+              maxLength={1000}
               onChangeText={(preferences) => store.updateSettings({ preferences })}
             />
           ) : null}

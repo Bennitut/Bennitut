@@ -26,6 +26,7 @@ import type {
   ShoppingItem,
 } from "./types";
 import { aiConsentHeaders, type AiConsent } from "./aiConsent";
+import type { DataSyncRequest, DataSyncResponse } from "./dataSync";
 import type { DeviceClaim } from "./deviceClaim";
 import type { DiarySyncRequest, DiarySyncResponse } from "./diary";
 import { resolveImageUri } from "./serverImages";
@@ -108,8 +109,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // bricht nach 240 Sekunden selbst ab und meldet „ai_timeout“; ohne Server soll die App nicht ewig warten.
   const slow = path.startsWith("/api/analyze") || /^\/api\/recipes\/(import|translate|improve)$/.test(path) || path === "/api/plan";
   const controller = new AbortController();
-  // Die Sicherung des Tagebuchs schickt beim ersten Mal alles (bis zu 2000 Einträge pro Anfrage).
-  const timer = setTimeout(() => controller.abort(), slow ? 300_000 : path === "/api/diary/sync" ? 60_000 : 10_000);
+  // Der Abgleich schickt beim ersten Mal alles (Tagebuch bis zu 2000 Einträge pro Anfrage, dazu Plan und Vorrat).
+  const syncing = path === "/api/diary/sync" || path === "/api/sync";
+  const timer = setTimeout(() => controller.abort(), slow ? 300_000 : syncing ? 60_000 : 10_000);
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       signal: controller.signal,
@@ -189,6 +191,9 @@ export const api = {
 
   /** Tagebuch abgleichen (siehe lib/diary.ts, syncDiary). */
   diarySync: (body: DiarySyncRequest) => post<DiarySyncResponse>("/api/diary/sync", body),
+
+  /** Einstellungen, Plan und Vorrat mit dem Konto abgleichen (siehe lib/dataSync.ts, syncData) – nur angemeldet. */
+  dataSync: (body: DataSyncRequest) => post<DataSyncResponse>("/api/sync", body),
 
   importRecipe: (body: { url?: string; caption?: string; frames: ImagePayload[]; language: string }) =>
     postAi<{ recipe: Recipe; author: string | null }>("/api/recipes/import", body),

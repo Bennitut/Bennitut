@@ -24,8 +24,22 @@ const BAR_LEGEND: Record<"day" | "week" | "month", TKey> = { day: "history.barsD
 const DAYS_PAGE = 30;
 
 export default function ProfileScreen() {
-  const { settings, updateSettings, diary, diaryState, importDiary, diarySync, refreshDiary, auth, setAuth, isAdmin, deviceClaim, aiConsent, setAiConsent } =
-    useStore();
+  const {
+    settings,
+    updateSettings,
+    diary,
+    diaryState,
+    importDiary,
+    diarySync,
+    dataSyncStatus,
+    refreshSync,
+    auth,
+    setAuth,
+    isAdmin,
+    deviceClaim,
+    aiConsent,
+    setAiConsent,
+  } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
   const [range, setRange] = useState<HistoryRange>(7);
@@ -35,11 +49,11 @@ export default function ProfileScreen() {
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
   /** Bestätigung nach „Erlaubnis widerrufen“ (KI-Funktionen). */
   const [aiRevoked, setAiRevoked] = useState(false);
-  // Beim Öffnen auch Einträge anderer Geräte holen (mit Konto).
+  // Beim Öffnen holen, was andere Geräte geändert haben (Tagebuch; mit Konto auch Plan, Vorrat und Einstellungen).
   useFocusEffect(
     useCallback(() => {
-      if (HAS_SERVER) refreshDiary();
-    }, [refreshDiary]),
+      if (HAS_SERVER) refreshSync();
+    }, [refreshSync]),
   );
   // undefined = wird geprüft, null = keine Antwort. Bei jedem Öffnen neu, z. B. nachdem Ollama gestartet wurde.
   const [health, setHealth] = useState<ServerHealth | null | undefined>(undefined);
@@ -64,22 +78,42 @@ export default function ProfileScreen() {
   const maxKcal = Math.max(target * 1.3, ...history.bars.map((b) => b.kcal));
   const thisYear = today().slice(0, 4);
 
+  /** „14:05“ bzw. mit Datum, wenn es nicht heute war. */
+  const syncTime = (iso: string | null) => {
+    const at = iso ? new Date(iso) : null;
+    const time = at ? at.toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" }) : "";
+    const sameDay = at && at.toDateString() === new Date().toDateString();
+    return at && !sameDay ? `${at.toLocaleDateString(i18n.language)} ${time}` : time;
+  };
   const syncText = (() => {
     switch (diarySync.state) {
       case "off":
         return t("history.syncLocal");
-      case "synced": {
-        const at = diarySync.at ? new Date(diarySync.at) : null;
-        const time = at ? at.toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" }) : "";
-        const sameDay = at && at.toDateString() === new Date().toDateString();
-        return t("history.syncDone", { time: at && !sameDay ? `${at.toLocaleDateString(i18n.language)} ${time}` : time });
-      }
+      case "synced":
+        return t("history.syncDone", { time: syncTime(diarySync.at) });
       case "syncing":
         return t("history.syncRunning");
       case "offline":
         return t("history.syncOffline");
       default:
         return t("history.syncWaiting");
+    }
+  })();
+  // Plan, Einkaufsliste, Vorrat und Essgewohnheiten: nur mit Konto auf allen Geräten (lib/dataSync.ts).
+  const dataText = (() => {
+    switch (dataSyncStatus.state) {
+      case "off":
+        return null;
+      case "local":
+        return t("history.dataLocal");
+      case "synced":
+        return t("history.dataDone", { time: syncTime(dataSyncStatus.at) });
+      case "syncing":
+        return t("history.dataRunning");
+      case "offline":
+        return t("history.dataOffline");
+      default:
+        return t("history.dataWaiting");
     }
   })();
 
@@ -295,6 +329,7 @@ export default function ProfileScreen() {
       <Card title={t("history.backupTitle")} icon="💾">
         <Text style={styles.text}>{syncText}</Text>
         {HAS_SERVER ? <Muted>{t(auth ? "history.syncSignedIn" : "history.syncAccount")}</Muted> : null}
+        {dataText ? <Text style={styles.text}>{dataText}</Text> : null}
         <Button label={t("history.exportCsv")} variant="secondary" onPress={() => exportHistory("csv")} />
         <Button label={t("history.exportJson")} variant="secondary" onPress={() => exportHistory("json")} />
         <Button label={t("history.importJson")} variant="secondary" onPress={importHistory} />
