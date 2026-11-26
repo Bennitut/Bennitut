@@ -61,6 +61,8 @@ FoodTracker/
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
     ├── src/diary/        Sicherung der Ernährungshistorie (eine Datei pro Konto bzw. Gerät unter data/diary/)
+    ├── src/storage/      Speicherschicht: SQLite-Datei (data/foodtracker.db) oder Postgres (DATABASE_URL),
+    │                     versionierte Migrationen, einmaliger Umzug aus den JSON-Dateien älterer Fassungen
     ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und
     │                     Kochvideos je Sprache (videos/de.ts … es.ts, geprüft per YouTube-oEmbed)
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
@@ -132,7 +134,7 @@ Voraussetzungen: Node.js 22+, für die App die **Expo Go**-App für SDK 58 auf d
 # Backend – Einstellungen in server/.env (Vorlage: server/.env.example), z. B. ANTHROPIC_API_KEY oder Ollama
 cd server
 npm install
-npm start                              # http://localhost:3000, Community-Rezepte in data/community.json, Fotos/Bewertungen in data/feedback.json
+npm start                              # http://localhost:3000, Konten in data/foodtracker.db, Community-Rezepte in data/community.json, Fotos/Bewertungen in data/feedback.json
 
 # App (zweites Terminal)
 cd app
@@ -202,7 +204,9 @@ vom alten Speicherort, gesperrter Schlüsselbund; Passwortlänge genau wie im Se
 vielen Versuchen) sowie die Einwilligung vor der KI (gilt nur für die aktuelle Fassung, Unlesbares heißt „nicht erlaubt“,
 gleicher Header und gleiche Fassung wie im Server, Texte für jede KI-Funktion in allen Sprachen, Abschnitt
 „Mindestalter“ ohne Platzhalter).
-Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
+Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem die Speicherschicht mit SQLite und mit Postgres (pg-mem,
+eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig: Migrationen, Konten und Sitzungen,
+gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
 die Sicherung des Tagebuchs und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
 Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash,
 Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt) und dass ohne
@@ -288,8 +292,29 @@ und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
 - Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → „Anmelden
   oder registrieren“ die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
 
-Konten, Sitzungen und Admin-Änderungen an Rezepten liegen in `data/users.json` und `data/recipe-overrides.json`, die
-Sicherung der Ernährungshistorie in `data/diary/` (eine Datei pro Konto bzw. Geräte-ID, `DIARY_DIR`).
+Konten, Sitzungen und Codes zum Zurücksetzen liegen in der Datenbank (nächster Abschnitt), Admin-Änderungen an Rezepten
+in `data/recipe-overrides.json`, die Sicherung der Ernährungshistorie in `data/diary/` (eine Datei pro Konto bzw.
+Geräte-ID, `DIARY_DIR`).
+
+## Datenbank
+
+Konten und Sitzungen speichert der Server in einer Datenbank (`src/storage/`); nach und nach kommen alle Daten dazu
+(Vorrang 1, 9.2 in `BACKLOG.md`):
+
+- **Ohne Einstellung** eine Datei auf dem eigenen Rechner: `server/data/foodtracker.db` (SQLite, in Node.js ab 22.13
+  eingebaut – nichts zu installieren, keine nativen Pakete; anderer Ort mit `DATABASE_FILE`). Übersteht auch ein hart
+  geschlossenes Server-Fenster. Sichern: Server beenden, Datei kopieren.
+- **Mit `DATABASE_URL`** Postgres, z. B. kostenlos bei [Neon](https://neon.tech) oder Supabase – nötig auf kostenlosen
+  Cloud-Diensten, wo Dateien beim Neustart verloren gehen. Die Verbindungsadresse enthält das Passwort der Datenbank:
+  nur in `server/.env` bzw. beim Hoster eintragen. Ohne `sslmode=…` in der Adresse ist die Verbindung verschlüsselt
+  (außer zu `localhost`).
+- **Migrationen:** Beim Start legt der Server fehlende Tabellen an (`src/storage/migrations.ts`, gemerkt in
+  `schema_migrations`). Hat eine neuere Fassung die Datenbank schon umgebaut, startet eine ältere nicht, statt Daten zu
+  verderben. Dasselbe SQL läuft auf SQLite und Postgres.
+- **Umzug:** Liegt noch die Konten-Datei älterer Fassungen (`data/users.json`) da, übernimmt der Server sie beim Start
+  einmal – mit denselben Konto-IDs (daran hängen Tagebuch-Sicherung und Fotos) und den noch gültigen Anmeldungen – und
+  löscht sie danach.
+- **Grenze:** Eine SQLite-Datei gehört genau einem laufenden Server.
 
 ## Instagram und TikTok
 
@@ -315,8 +340,9 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 
 ## Grenzen dieser Version
 
-- Konten, Community-Rezepte, Fotos und Bewertungen liegen in JSON-Dateien; für den echten Betrieb gehört das in
-  eine Datenbank (und Fotos in einen Bildspeicher). Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
+- Konten und Sitzungen liegen in der Datenbank (SQLite oder Postgres); Community-Rezepte, Fotos, Bewertungen, Meldungen,
+  Admin-Änderungen und die Tagebuch-Sicherung noch in JSON-Dateien – sie ziehen als Nächstes um (Fotos dann als Dateien
+  bzw. in einen Bildspeicher, nicht in die Datenbank). Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
 - Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
   Fotos stammen aus freien Lizenzen (CC0, Public Domain, CC BY, CC BY-SA, über Openverse von Wikimedia Commons
