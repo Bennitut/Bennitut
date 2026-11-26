@@ -52,7 +52,9 @@ export async function storeRecipeImage(images: ImageStore, recipe: Recipe): Prom
   if (!stored) return { recipe: withImage(undefined), imageKey: null };
   const key = newImageKey(stored.type);
   await images.put(key, stored);
-  return { recipe: withImage({ ...image, uri: imageUri(key) }), imageKey: key };
+  // Der Pfad zum Foto im Bildspeicher des eigenen Kontos (nur für den Abgleich, siehe types.ts) geht nicht an andere.
+  const { server: _own, ...shared } = image;
+  return { recipe: withImage({ ...shared, uri: imageUri(key) }), imageKey: key };
 }
 
 /** Bilder erst nach der Transaktion löschen: Scheitert sie, bleibt alles, wie es war. */

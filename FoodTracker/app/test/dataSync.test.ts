@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { openSqlite } from "../../server/src/storage/db";
+import { MemoryImageStore } from "../../server/src/storage/images";
 import { migrate } from "../../server/src/storage/migrations";
 import { SyncStore } from "../../server/src/storage/sync";
 import { USER_DATA, UserDataSyncBody, syncUserData } from "../../server/src/sync/userData";
@@ -86,6 +87,7 @@ async function server() {
   const db = openSqlite(":memory:");
   await migrate(db);
   const store = new SyncStore(db);
+  const images = new MemoryImageStore();
   const requests: DataSyncRequest[] = [];
   const call =
     (owner: string) =>
@@ -93,7 +95,7 @@ async function server() {
       requests.push(request);
       // Wie über HTTP: JSON hin und zurück, und der Server prüft die Anfrage (400 bei allem, was er nicht annimmt).
       const body = UserDataSyncBody.parse(JSON.parse(JSON.stringify(request)));
-      return JSON.parse(JSON.stringify(await syncUserData(store, owner, body))) as DataSyncResponse;
+      return JSON.parse(JSON.stringify(await syncUserData(store, owner, body, images))) as DataSyncResponse;
     };
   const run = async (device: Device, owner = "user:1") => {
     device.state = (await syncData(device.state, owner, call(owner)))(device.state);

@@ -1,8 +1,9 @@
 import { batches, type Db, type Queryable } from "./db.js";
 
 // Allgemeine Tabelle für den Abgleich zwischen App und Server (Vorrang 1, 9.2): pro Besitzer („user:<Konto-ID>“ bzw.
-// „device:<Geräte-ID>“) und Art („diary“ für die Ernährungshistorie, „settings“, „plan“ und „pantry“ für Einstellungen,
-// Plan und Vorrat eines Kontos – sync/userData.ts; später eigene Rezepte) Datensätze mit Eintrags-ID, Revision,
+// „device:<Geräte-ID>“) und Art („diary“ für die Ernährungshistorie, „settings“, „plan“, „pantry“, „recipes“,
+// „favorites“ und „texts“ für Einstellungen, Plan, Vorrat, eigene Rezepte, Favoriten und Rezepttexte eines Kontos –
+// sync/userData.ts) Datensätze mit Eintrags-ID, Revision,
 // Zeitpunkt der letzten Änderung und Inhalt – oder einer Löschmarke (Inhalt NULL), damit Gelöschtes von anderen
 // Geräten nicht zurückkommt. Die Revision zählt pro Besitzer und Art hoch
 // (sync_revisions); die App merkt sich, bis zu welcher sie alles kennt, und fragt beim nächsten Mal nur nach Neuerem.
@@ -35,6 +36,13 @@ export interface SyncKind {
    * die IDs der entfernten Datensätze (sie fehlen dann auch in der Antwort).
    */
   afterChanges?: (tx: Queryable, owner: string) => Promise<string[]>;
+  /**
+   * Für jede Änderung, die übernommen wird, kurz vor dem Speichern (in derselben Transaktion, `current` ist die bisherige
+   * Fassung): darf den Inhalt anpassen, z. B. ein Foto als data-URI in den Bildspeicher legen und durch dessen Pfad
+   * ersetzen (sync/userData.ts). Liefert den Datensatz, wie er gespeichert wird – unverändert dasselbe Objekt. Weicht
+   * er ab, steht die gespeicherte Fassung in der Antwort, damit die App sie kennt.
+   */
+  prepare?: (change: SyncRecord, current: SyncRecord | undefined) => Promise<SyncRecord>;
 }
 
 export interface SyncResult<T = unknown> {
@@ -135,9 +143,9 @@ export class SyncStore {
   constructor(private readonly db: Db) {}
 
   /**
-   * Übernimmt `changes` (was neuer ist) und liefert, was seit `since` dazugekommen ist – ohne das gerade Übernommene,
-   * dafür mit der Fassung des Servers, wo die geschickte älter war. Alles oder nichts: Ist der Besitzer zu voll
-   * (SyncFullError), bleibt alles, wie es war.
+   * Übernimmt `changes` (was neuer ist) und liefert, was seit `since` dazugekommen ist – ohne das gerade Übernommene
+   * (außer es wurde beim Speichern angepasst, siehe `prepare`), dafür mit der Fassung des Servers, wo die geschickte
+   * älter war. Alles oder nichts: Ist der Besitzer zu voll (SyncFullError), bleibt alles, wie es war.
    */
   async sync<T>(kind: SyncKind, owner: string, since: number, changes: readonly SyncRecord<T>[]): Promise<SyncResult<T>> {
     return this.db.transaction(async (tx) => {
@@ -147,6 +155,8 @@ export class SyncStore {
       let count: number | undefined;
       const applied = new Map<string, StoredSyncRecord>();
       const conflicts = new Map<string, StoredSyncRecord>();
+      /** Übernommenes, das beim Speichern angepasst wurde – die App bekommt die gespeicherte Fassung. */
+      const adjusted = new Map<string, StoredSyncRecord>();
       // Der Reihe nach wie geschickt; kommt eine ID mehrmals vor, zählt der Vergleich mit dem schon Übernommenen.
       for (const change of changes) {
         const current = applied.get(change.id) ?? stored.get(change.id);
@@ -159,8 +169,12 @@ export class SyncStore {
           if (count >= kind.maxRecords) throw new SyncFullError();
           count++;
         }
-        applied.set(change.id, { id: change.id, updatedAt: change.updatedAt, data: change.data, rev: ++rev });
+        const record = kind.prepare ? await kind.prepare(change, current) : change;
+        const saved: StoredSyncRecord = { id: change.id, updatedAt: change.updatedAt, data: record.data, rev: ++rev };
+        applied.set(change.id, saved);
         conflicts.delete(change.id);
+        if (record.data !== change.data) adjusted.set(change.id, saved);
+        else adjusted.delete(change.id);
       }
       let removed = new Set<string>();
       if (applied.size > 0) {
@@ -176,7 +190,7 @@ export class SyncStore {
       const more = rows.length > kind.pageSize;
       const page = rows.slice(0, kind.pageSize).map(toStored);
       const inPage = new Set(page.map((r) => r.id));
-      const extra = [...conflicts.values()].filter((r) => !inPage.has(r.id) && !removed.has(r.id));
+      const extra = [...conflicts.values(), ...adjusted.values()].filter((r) => !inPage.has(r.id) && !removed.has(r.id));
       return {
         rev: more ? page[page.length - 1]!.rev : rev,
         changes: [...page, ...extra].map(strip) as SyncRecord<T>[],

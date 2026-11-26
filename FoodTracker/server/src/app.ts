@@ -23,7 +23,7 @@ import { openSqlite, type Db } from "./storage/db.js";
 import { MemoryImageStore, isImageKey, type ImageStore } from "./storage/images.js";
 import { migrate } from "./storage/migrations.js";
 import { SyncFullError, SyncStore } from "./storage/sync.js";
-import { IsoTime, UserDataSyncBody, exportUserData, syncUserData } from "./sync/userData.js";
+import { IsoTime, UserDataSyncBody, exportUserData, removeUserData, syncUserData } from "./sync/userData.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
 const MediaType = z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -324,8 +324,10 @@ export function createApp({
   );
 
   /**
-   * Fotos aus dem Bildspeicher (Galerie der Rezepte, Fotos geteilter Rezepte) – öffentlich wie die Galerie selbst. Unter
-   * einem Schlüssel liegt immer dasselbe Bild, deshalb darf der Browser es lange zwischenspeichern.
+   * Fotos aus dem Bildspeicher (Galerie der Rezepte, Fotos geteilter Rezepte, Fotos eigener Rezepte eines Kontos) – wer
+   * den Pfad kennt, bekommt das Bild; der Schlüssel ist eine zufällige UUID, Pfade zu Fotos eigener Rezepte bekommt nur
+   * das Konto selbst. Unter einem Schlüssel liegt immer dasselbe Bild, deshalb darf der Browser es lange
+   * zwischenspeichern – „private“: nur der Browser bzw. die App, kein Zwischenspeicher unterwegs (z. B. Cloudflare).
    */
   app.get("/api/images/:key", async (c) => {
     const key = c.req.param("key");
@@ -333,7 +335,7 @@ export function createApp({
     if (!image) return c.json({ error: "not_found" }, 404);
     return c.body(image.bytes, 200, {
       "Content-Type": image.type,
-      "Cache-Control": "public, max-age=31536000, immutable",
+      "Cache-Control": "private, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
     });
   });
@@ -476,14 +478,15 @@ export function createApp({
     }
   });
 
-  // Abgleich von Einstellungen (Profil und Fragebogen), Plan mit Einkaufsliste und Vorrat zwischen den Geräten eines
-  // Kontos (sync/userData.ts, in der App lib/dataSync.ts) – nur mit Konto, ohne bleiben diese Daten auf dem Gerät.
+  // Abgleich von Einstellungen (Profil und Fragebogen), Plan mit Einkaufsliste, Vorrat, eigenen Rezepten (Fotos in den
+  // Bildspeicher), Favoriten und Rezepttexten zwischen den Geräten eines Kontos (sync/userData.ts, in der App
+  // lib/dataSync.ts) – nur mit Konto, ohne bleiben diese Daten auf dem Gerät.
   app.post("/api/sync", async (c) => {
     const user = await currentUser(c);
     if (!user) throw new AuthError(bearer(c) ? "invalid_token" : "unauthorized");
     const body = UserDataSyncBody.parse(await c.req.json());
     try {
-      return c.json(await syncUserData(synced, `user:${user.id}`, body));
+      return c.json(await syncUserData(synced, `user:${user.id}`, body, images));
     } catch (e) {
       if (e instanceof SyncFullError) return c.json({ error: "sync_full" }, 413);
       throw e;
@@ -620,8 +623,9 @@ export function createApp({
   });
 
   /**
-   * Konto löschen (Art. 17 DSGVO) – mit allen Daten auf dem Server: Sicherung des Tagebuchs, Einstellungen, Plan und
-   * Vorrat, geteilte Rezepte, Favoriten, Fotos, Sterne und Meldungen. Konten mit Passwort bestätigen mit dem Passwort.
+   * Konto löschen (Art. 17 DSGVO) – mit allen Daten auf dem Server: Sicherung des Tagebuchs, Einstellungen, Plan,
+   * Vorrat, eigene Rezepte mit Fotos, Favoriten, Rezepttexte, geteilte Rezepte, Fotos, Sterne und Meldungen. Konten
+   * mit Passwort bestätigen mit dem Passwort.
    */
   app.delete("/api/auth/me", async (c) => {
     const user = await requireUser(c);
@@ -635,7 +639,7 @@ export function createApp({
     const actor = `user:${user.id}`;
     await community.removeActor(actor);
     await feedback.removeActor(actor);
-    await synced.remove(actor);
+    await removeUserData(synced, actor, images);
     if (user.role === "admin") await overrides.anonymize(user.name);
     await users.delete(user.id);
     return c.body(null, 204);
@@ -654,7 +658,7 @@ export function createApp({
       exportedAt,
       account: { ...me(user), lastLoginAt: user.lastLoginAt, ...(user.provider === "password" ? { emailVerified: user.emailVerified === true } : {}) },
       diary: await diary.entries(actor),
-      ...(await exportUserData(synced, actor)),
+      ...(await exportUserData(synced, actor, images)),
       community: await community.exportFor(actor),
       ...(await feedback.exportFor(actor)),
     });
