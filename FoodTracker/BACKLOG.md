@@ -14,12 +14,12 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 26.11.2026, 22 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 1 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
-Teilschritt in der Reihenfolge 9.1 bis 9.5. Konten mit E-Mail und Passwort gibt es seit 25.11. im Server und seit 26.11.
-in der App, seit 26.11. abends kommt beim Anmelden mit ins Konto, was das Gerät ohne Konto auf dem Server hatte, und
-seit 26.11. spätabends fragt die App vor der ersten KI-Funktion um Erlaubnis (mit dem Eltern-Hinweis, kein
-Mindestalter) – damit ist 9.1 fertig. Als Nächstes 9.2 (Speicherschicht im Server). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
+Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
+Seit 27.11. gibt es die Speicherschicht (SQLite-Datei oder Postgres mit `DATABASE_URL`, versionierte Migrationen), und
+Konten und Sitzungen liegen dort. Als Nächstes 9.2, Teil 2 (Tagebuch-Sicherung in die Datenbank). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -91,12 +91,27 @@ weiterverwenden statt doppelt bauen. Pro Lauf ein abgeschlossener, grüner Teils
 
 **9.2 Dauerhafte Speicherung**
 
-- [ ] Eine Speicherschicht im Server für alle Nutzerdaten: Profil und Fragebogen, Pläne, Einkaufsliste, Vorrat,
-  Tagebuch/Historie, eigene und importierte Rezepte (Fotos als Dateien bzw. in einem Objektspeicher, nicht in der
-  Datenbank). Mit `DATABASE_URL` Postgres (für kostenlose Anbieter wie Neon oder Supabase), ohne `DATABASE_URL` eine
-  lokale Datei unter `server/data/`. Versionierte Migrationen; Tests ohne echte Datenbank (z. B. pg-mem oder die
-  Datei-Variante). Konten und Sitzungen gehören auch dorthin (auf kostenlosen Cloud-Diensten gehen Dateien beim Neustart
-  verloren).
+Ziel: eine Speicherschicht im Server für alle Nutzerdaten – Profil und Fragebogen, Pläne, Einkaufsliste, Vorrat,
+Tagebuch/Historie, eigene und importierte Rezepte (Fotos als Dateien bzw. in einem Objektspeicher, nicht in der
+Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Dateien beim Neustart verloren). Mit
+`DATABASE_URL` Postgres (für kostenlose Anbieter wie Neon oder Supabase), ohne `DATABASE_URL` eine lokale Datei unter
+`server/data/`. Versionierte Migrationen; Tests ohne echte Datenbank. In Teilschritten:
+
+- [x] Speicherschicht mit SQLite-Datei oder Postgres, Konten und Sitzungen in der Datenbank (Teil 1) – erledigt
+  27.11.2026: `server/src/storage/db.ts` – dasselbe SQL für SQLite (`node:sqlite`, in Node.js eingebaut, keine nativen
+  Pakete; `data/foodtracker.db`, `DATABASE_FILE`) und Postgres (`pg`, `DATABASE_URL`; verschlüsselt, wenn die Adresse
+  kein `sslmode` nennt; Verbindung beim Start geprüft, ohne die Adresse auszugeben). `migrations.ts` mit
+  `schema_migrations` (Migration 1: Konten, Sitzungen, Codes, `storage_meta`); eine von einer neueren Fassung umgebaute
+  Datenbank lässt den Server nicht starten. `UserStore` liegt in der Datenbank (asynchron); Codes zählen jeden Versuch
+  vor dem Vergleich (auch bei gleichzeitigen Anfragen höchstens fünf). `data/users.json` übernimmt der Server beim Start
+  einmal (gleiche Konto-IDs, gültige Anmeldungen) und löscht sie. Startmeldung „Daten: …“, sauberes Schließen beim
+  Beenden. Tests auf SQLite und auf Postgres über pg-mem (nachgebaut im Speicher). 28 Server-Tests (155),
+  `npm run web:account` mit eigener Datenbank grün.
+- [ ] Tagebuch-Sicherung in die Datenbank (Teil 2): Einträge und Löschmarken als Zeilen statt einer Datei pro Konto bzw.
+  Gerät, mit einmaligem Umzug aus `data/diary/`. Gleich als allgemeine Tabelle für den Abgleich (Besitzer, Art,
+  Eintrags-ID, Revision, Zeitstempel, Inhalt oder Löschmarke), damit Plan, Vorrat und Co. sie mitnutzen.
+- [ ] Community-Rezepte, Favoriten, Bewertungen, Meldungen und Admin-Änderungen in die Datenbank (Teil 3), mit Umzug aus
+  den JSON-Dateien; Fotos als Dateien (`data/photos/`) bzw. in einem Objektspeicher statt als data-URI.
 - [ ] Abgleich App ↔ Server wie in 8.2 (Eintrags-ID, Löschmarken, Zeitstempel), jetzt für alle genannten Daten; offline
   weiter nutzbar, Abgleich sobald verbunden. Wie beim Tagebuch geht beim ersten Abgleich mit einem Konto alles vom Gerät
   hoch (Rest von 9.1 „lokale Daten ins Konto“, ohne Duplikate); bei Einzelstücken wie Plan und Einstellungen gewinnt
@@ -572,6 +587,17 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   `m_putenschnitzel_natur` (Kartoffelpfanne mit Bohnen, ohne Pute), `v_raeuchertofu_broetchen` (Keto-Avocado-Brötchen),
   `w_rind_madras` (veganes Madras-Curry statt Rind), `m_lachs_ruehrei_brot` (Krabbenrührei statt Lachs). Bei der
   Daueraufgabe „Videos je Sprache“ (Teil „de, wo es fehlt“) zusammen mit der Calzone ersetzen. (24.11.2026)
+- **Postgres nur mit pg-mem getestet:** Die Tests laufen auf SQLite und auf pg-mem (Postgres nachgebaut im Speicher).
+  pg-mem rollt Transaktionen nicht zurück (das prüfen die SQLite-Tests) und versteht `CREATE TABLE IF NOT EXISTS` für
+  schon vorhandene Tabellen nicht (umgangen). Vor dem Start mit Neon einmal gegen ein echtes Postgres prüfen (9.3 bzw.
+  9.5): Tabellen anlegen, registrieren, anmelden, Server neu starten, noch angemeldet. (27.11.2026)
+- **`node:sqlite` gilt in Node 22 als experimentell:** `npm start` blendet die Warnung „SQLite is an experimental
+  feature“ aus (`--disable-warning=ExperimentalWarning`), die Tests zeigen sie. Die genutzte Schnittstelle
+  (`DatabaseSync`, `prepare`, `exec`) gibt es unverändert seit Node 22.13; ändert eine künftige Node-Version etwas,
+  schlagen die Tests an. Benjamin hat Node 26. (27.11.2026)
+- **Letzter Admin bei Postgres:** Entmachten sich zwei Admins gleichzeitig gegenseitig, kann das bei Postgres beides
+  klappen (Standard-Isolation READ COMMITTED); bei SQLite laufen Transaktionen nacheinander. Unwahrscheinlich, bei Bedarf
+  mit `SELECT … FOR UPDATE` lösen. (27.11.2026)
 - **Nach „Konto löschen“ geht die Historie wieder in die Sicherung pro Gerät:** Ohne Konto sichert die App das Tagebuch
   automatisch unter der Geräte-ID (so gewünscht, 8.2). Wer sein Konto löscht, damit seine Daten vom Server verschwinden,
   hat die Historie danach also wieder dort, nur unter der Geräte-ID. Zusammen mit „Sicherung der Historie startet ohne
