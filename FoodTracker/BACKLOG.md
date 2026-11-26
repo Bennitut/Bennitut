@@ -14,7 +14,7 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 6 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 7 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
@@ -22,8 +22,10 @@ Seit 27.11. gibt es die Speicherschicht (SQLite-Datei oder Postgres mit `DATABAS
 liegt alles, was der Server speichert – Konten, Sitzungen, Tagebuch-Sicherung (in einer allgemeinen Tabelle für den
 Abgleich), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und Admin-Änderungen –, die Fotos selbst als Dateien
 im Bildspeicher (`data/photos/`). Seit 27.11., 6 Uhr gleicht die App mit Konto auch **Plan mit Einkaufsliste, Vorrat und
-Essgewohnheiten** zwischen den Geräten ab (9.2 Teil 4). Als Nächstes 9.2 Teil 5: eigene und importierte Rezepte,
-Favoriten und Texte, Fotos eigener Rezepte im Bildspeicher. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+Essgewohnheiten** zwischen den Geräten ab (9.2 Teil 4), seit 7 Uhr auch **eigene und importierte Rezepte mit Fotos,
+Favoriten und Rezepttexte** (Teil 5; die Fotos legt der Server in den Bildspeicher des Kontos, auf dem Gerät bleiben sie
+offline sichtbar). Als Nächstes 9.2 Teil 6: eigene Fotos der Galerie mit „Nur ich“, dann die Server-Adresse. Danach
+Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -150,11 +152,29 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   Änderungen, beim Öffnen des Profils und beim Zurückkehren in die App. Profil: Zeile zum Abgleich; Plan: „Schon ein
   Konto? Anmelden“ vor dem Fragebogen. Export und „Konto löschen“ mit Plan, Vorrat und Essgewohnheiten; Datenschutz B7.
   13 Server-Tests (226), 13 App-Tests (200), `npm run web:account` prüft zwei Browser mit einem Konto.
-- [ ] Eigene und importierte Rezepte, Favoriten (samt gespeicherten Community-Rezepten), übersetzte und mit KI
+- [x] Eigene und importierte Rezepte, Favoriten (samt gespeicherten Community-Rezepten), übersetzte und mit KI
   verbesserte Texte abgleichen (Teil 5), nach demselben Muster (`lib/dataSync.ts`, neue Art im Server). Fotos eigener
   Rezepte gehören nicht in die Datenbank: beim Abgleich in den Bildspeicher (dem Konto zugeordnet, Pfad statt data-URI,
   vorher verkleinern), auf dem Gerät weiter offline sichtbar. Dabei „Kopie eines geteilten Rezepts behält den Pfad zum
-  Foto“ (unten) lösen. Eigene Fotos der Galerie mit „Nur ich“ ebenfalls.
+  Foto“ (unten) lösen. – erledigt 27.11.2026: Arten `recipes` (je Rezept `{ recipe, sharedAs? }`, bis 100 KB ohne Foto,
+  höchstens 3000), `favorites` (je Favorit, bei Community-Rezepten mit der Kopie, ohne Fotos vom Gerät) und `texts`
+  (`t:`/`o:<Sprache>:<Rezept>`) in `POST /api/sync`. Fotos: Die App schickt eine data-URI einmal (bis rund 1,5 MB),
+  der Server legt sie beim Speichern in den Bildspeicher (neue Schnittstelle `prepare` in `SyncStore`) und schickt die
+  gespeicherte Fassung mit dem Pfad zurück; die App behält ihr Foto und merkt sich den Pfad (`image.server`), den sie
+  danach statt des Fotos schickt – ändert ein anderes Gerät nur den Namen, bleibt das Foto, ersetzt es das Foto, gilt
+  dessen. Jeder Eintrag hat seine eigene Datei (Kopien bekommen eine; damit ist die Kopie eines geteilten Rezepts
+  gelöst), Fotos im Netz bleiben verlinkt, Unlesbares fällt auf dem Server weg; ersetzte Fotos, gelöschte Rezepte und
+  „Konto löschen“ löschen die Dateien, scheitert das Speichern, auch die neuen. Beim ersten Abgleich mit einem Konto
+  gehen die Fotos selbst (der Server kennt den Pfad vielleicht nicht), ohne doppelte Dateien. Große Fotos verteilt die
+  App auf mehrere Anfragen (bis 4 MB je Art). Export mit Rezepten (Fotos als data-URI), Favoriten und Texten; Bilder
+  mit `Cache-Control: private`; Datenschutz B7. „Vorher verkleinern“: Fotos verkleinert die App schon beim Aufnehmen
+  (800 px), Vorschaubilder von Importen siehe „Ideen und Erkenntnisse“. 8 Server-Tests (234), 10 App-Tests (210),
+  `npm run web:account` mit einer Kopie samt eigenem Foto und einem Favoriten in einem frischen Browser.
+- [ ] Eigene Fotos der Galerie (`myPhotos`) abgleichen (Teil 6): private („Nur ich“) mit dem Foto im Bildspeicher wie
+  bei eigenen Rezepten (`prepare`, eigene Datei je Eintrag, offline sichtbar mit `server`), öffentliche nur als Eintrag
+  mit `remoteId` (das Foto liegt schon in der Galerie) – dann kann man ein eigenes öffentliches Foto auch auf einem
+  anderen Gerät löschen. Im Rezept und in `imageFor` ein eigenes Foto ohne Datei auf dem Gerät über die Galerie bzw. den
+  Pfad zeigen.
 - [ ] Server-Adresse: `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie bisher der
   Laptop im WLAN. Dabei die Abgleich-Marken an die Datenbank binden (unter „Ideen und Erkenntnisse“: „Neuer Server,
   alte Abgleich-Marken“).
@@ -505,6 +525,23 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - ✅ **Häkchen der Einkaufsliste im Browser ohne Zustand:** react-native-web 0.21 übergeht `accessibilityState`; die
   Zeilen hatten kein `aria-checked`, Screenreader sagten nie „angehakt“. (27.11.2026) Erledigt 27.11.2026 mit
   `aria-checked` bzw. `aria-expanded` in `shopping.tsx`.
+- **Vorschaubilder importierter Rezepte werden nicht verkleinert:** Eigene Fotos verkleinert die App beim Aufnehmen
+  auf 800 px (rund 100 KB), das Vorschaubild eines Imports kommt vom Server, wie es ist (bis rund 450 KB, `ai/tasks.ts`),
+  und geht so auch in den Abgleich. Beim Speichern des Imports wie ein Foto verkleinern (`expo-image-manipulator`, schon
+  in der App) – spart Speicher auf dem Gerät und im Bildspeicher. GIF-Vorschaubilder nimmt der Bildspeicher nicht an
+  (sie bleiben nur auf dem Gerät). (27.11.2026)
+- **Server-Umzug auf eine leere Datenbank und Fotos eigener Rezepte:** Gleicht nach einem Umzug ohne Datenbank (oder
+  mit „Neuer Server, alte Abgleich-Marken“ gelöst) zuerst ein Gerät ab, das ein Rezept nur mit Pfad kennt, speichert
+  der neue Server es ohne Foto (der Pfad zeigt ins Leere); das Gerät mit dem Foto hat dieselbe Fassung und schickt es
+  nicht noch einmal. Beim Umzug Datenbank und `data/photos/` mitnehmen (steht für `SERVER-HOSTING.md` an); sonst
+  könnte der Server bei gleichem Zeitpunkt eine Fassung mit Foto der ohne vorziehen. (27.11.2026)
+- **Bilddateien werden in der Transaktion geschrieben:** Beim Abgleich eigener Rezepte legt `prepare` das Foto
+  innerhalb der Transaktion in den Bildspeicher (bei SQLite warten andere Schreibende so lange). Mit dem Ordner
+  `data/photos/` sind das Millisekunden; mit einem Objektspeicher (9.3, Anfrage übers Netz) die Fotos vorher außerhalb
+  der Transaktion hochladen und nur noch den Schlüssel eintragen. (27.11.2026)
+- **Fotos eigener Rezepte sind über ihren Pfad ohne Anmeldung abrufbar:** wie die Galerie – der Schlüssel ist eine
+  zufällige UUID, den Pfad bekommt nur das Konto (Datenschutz B7 sagt es so). Strenger wäre, private Fotos nur mit
+  Sitzungstoken auszuliefern (in der App `Image` mit `headers`, im Browser über `fetch` und eine Blob-Adresse). (27.11.2026)
 - **Chips melden ihren Zustand im Browser nicht:** `Chip` in `components/ui.tsx` nutzt `accessibilityState={{ selected,
   disabled }}` – im Browser wirkungslos (siehe oben). Auf `aria-selected`/`aria-disabled` umstellen und danach alle
   Rauchtests laufen lassen (Playwright behandelt `aria-disabled` als „nicht anklickbar“). (27.11.2026)
@@ -672,11 +709,13 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Admin-Änderungen merken sich nur den Namen:** „Zuletzt geändert von“ an Katalogrezepten ist der Anzeigename des
   Admins. Löscht ein Admin sein Konto, wird jeder Eintrag mit diesem Namen zu „Gelöschtes Konto“ – auch der eines
   anderen Admins mit gleichem Namen. Besser zusätzlich die Konto-ID speichern (neue Migration). (27.11.2026)
-- **Kopie eines geteilten Rezepts behält den Pfad zum Foto:** Wer ein Community-Rezept als eigene Kopie speichert,
+- ✅ **Kopie eines geteilten Rezepts behält den Pfad zum Foto:** Wer ein Community-Rezept als eigene Kopie speichert,
   bekommt das Foto als Pfad im Bildspeicher des Servers (nicht als Datei auf dem Gerät). Ohne Server zeigt die Kopie
   den Platzhalter; nach einem Umzug ohne den Ordner `data/photos/` oder wenn die Autorin das Rezept zurückzieht, bleibt
   das Bild leer (teilt man die Kopie selbst, bekommt sie eine eigene Bilddatei). Mit dem Abgleich eigener Rezepte (9.2)
-  lösen: Fotos eigener Rezepte ebenfalls in den Bildspeicher, dem Konto zugeordnet. (27.11.2026)
+  lösen: Fotos eigener Rezepte ebenfalls in den Bildspeicher, dem Konto zugeordnet. (27.11.2026) Erledigt 27.11.2026 mit
+  9.2 Teil 5: Mit Konto bekommt die Kopie beim Abgleich eine eigene Datei im Bildspeicher des Kontos, die bleibt, wenn
+  das Original verschwindet. Ohne Konto bleibt es beim Pfad des Originals (ohne Server Platzhalter).
 - **Neuer Server, alte Abgleich-Marken:** Die App merkt sich beim Tagebuch (seit 9.2 Teil 4 auch bei Plan, Vorrat und
   Einstellungen, `lib/dataSync.ts`) nur Besitzer und Revision, nicht, welcher Server bzw. welche Datenbank. Zieht der Server auf eine neue, leere Datenbank um (z. B. vom Laptop zu Render mit Neon)
   oder bekommt die App eine andere Server-Adresse, schicken Geräte, die schon abgeglichen hatten, nur noch ihre neuen
