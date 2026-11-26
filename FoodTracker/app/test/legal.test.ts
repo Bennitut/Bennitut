@@ -166,10 +166,24 @@ describe("Texte der App", () => {
   it("bleiben mit Server ein Entwurf, bis Teil B fertig ist", () => {
     const missing = missingLegalInfo({ withServer: true }, COMPLETE);
     assert.ok(missing.some((p) => p.type === "ANGABE" && p.label.startsWith("Hoster")));
-    assert.ok(missing.some((p) => p.type === "ENTSCHEIDUNG" && p.label.startsWith("Mindestalter")));
     const text = allText(datenschutz({ withServer: true }, COMPLETE));
     assert.ok(text.includes("Teil B – Funktionen mit Server"));
     assert.ok(text.includes("B6. Sicherung der Ernährungshistorie"));
+  });
+
+  it("nennen mit Server kein Mindestalter, aber die Zustimmung eines Elternteils und die Einwilligung vor der KI", () => {
+    const sections = datenschutz({ withServer: true }, COMPLETE);
+    const age = sections.find((s) => /^\d+\. Mindestalter$/.test(s.title));
+    assert.ok(age, "Abschnitt Mindestalter");
+    const ageText = age.blocks.join("\n");
+    assert.ok(!ageText.includes("[["), "keine Platzhalter mehr");
+    for (const expected of ["kein Mindestalter", "unter 14", "Zustimmung eines Elternteils", "bis 18", "§ 4 Abs. 4 DSG"]) {
+      assert.ok(ageText.includes(expected), `fehlt: ${expected}`);
+    }
+    const missing = missingLegalInfo({ withServer: true }, COMPLETE);
+    assert.ok(!missing.some((p) => p.label.startsWith("Mindestalter") || p.label.startsWith("Einwilligung")), JSON.stringify(missing));
+    const ai = sections.find((s) => s.title === "B3. KI-Funktionen");
+    assert.ok(ai?.blocks.some((b) => b.includes("vor der ersten Nutzung") && b.includes("„KI-Funktionen“") && b.includes("widerrufen")));
   });
 
   it("nummerieren die Abschnitte lückenlos", () => {

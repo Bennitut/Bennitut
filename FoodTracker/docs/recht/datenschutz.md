@@ -188,10 +188,17 @@ zum Training der Modelle verwendet (Stand 18.08.2026). [[PRÜFEN: Grundlage der 
 Vertrag zur Auftragsverarbeitung von Anthropic; aktuelle Fristen.]] Fotos für die Erkennung speichert der Server
 nicht.
 
-Rechtsgrundlage: deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du jederzeit widerrufen kannst. Schreibst du
-Gesundheitsangaben in ein Wunschfeld oder zeigt ein Foto solche, gilt zusätzlich Art. 9 Abs. 2 lit. a DSGVO
-(ausdrückliche Einwilligung). [[ENTSCHEIDUNG: Einwilligung vor der ersten Nutzung abfragen; Mindestalter, siehe
-Abschnitt 7.]]
+Rechtsgrundlage: deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schreibst du Gesundheitsangaben in ein Wunschfeld
+oder zeigt ein Foto solche, gilt zusätzlich Art. 9 Abs. 2 lit. a DSGVO (ausdrückliche Einwilligung). FoodTracker fragt
+vor der ersten Nutzung einer KI-Funktion danach und schickt ohne deine Zustimmung nichts an die KI. Im Profil unter
+„KI-Funktionen“ kannst du die Einwilligung jederzeit mit Wirkung für die Zukunft widerrufen; vor der nächsten
+KI-Funktion fragt FoodTracker dann wieder. Zum Alter siehe Abschnitt 7 „Mindestalter“.
+
+> **Für Benjamin, vor dem Veröffentlichen löschen:** Die App merkt sich die Einwilligung (Fassung und Zeitpunkt) auf
+> dem Gerät und nennt dem Server bei jeder KI-Anfrage die Fassung (Header `X-AI-Consent`); ohne lehnt der Server ab
+> (`server/src/ai/consent.ts`). Ändert sich wesentlich, was an wen geht, die Fassung in `app/src/lib/aiConsent.ts` und
+> im Server erhöhen – dann fragt die App neu. Auf dem Server gespeichert wird die Einwilligung bisher nicht (Nachweis
+> nach Art. 7 Abs. 1 DSGVO, siehe `BACKLOG.md`).
 
 Für den Rezept-Import fragt der Server mit dem Link, den du eingibst, die öffentliche Schnittstelle von TikTok
 (`tiktok.com`) bzw. von Meta für Instagram (`graph.facebook.com`) ab. Deine IP-Adresse erfahren diese Dienste dabei
@@ -256,9 +263,13 @@ E-Mail dsb@dsb.gv.at, https://www.dsb.gv.at
 
 ## 7. Mindestalter
 
-[[ENTSCHEIDUNG: noch offen (Stand 24.11.2026; Benjamins erste Einschätzung: kein Mindestalter nötig). In Österreich
-können Kinder ab 14 selbst in Online-Dienste einwilligen (§ 4 Abs. 4 DSG); für Gesundheitsdaten verlangt die
-herrschende Meinung auch über 14 die Zustimmung der Eltern. Wichtig vor allem für Teil B (Konto, KI-Funktionen).]]
+> **Für Benjamin, vor dem Veröffentlichen löschen:** Erscheint nur mit Server (wie Teil B). Entschieden am 24.11.2026:
+> kein Mindestalter, aber der Hinweis zur Zustimmung eines Elternteils ([`README.md`](README.md), Entscheidung 3).
+
+FoodTracker hat kein Mindestalter und fragt nicht nach deinem Alter – auch Konto und KI-Funktionen stehen allen offen.
+Bist du unter 14, brauchst du für ein Konto und die KI-Funktionen die Zustimmung eines Elternteils; für
+Gesundheitsangaben wie Allergien oder dein Ernährungstagebuch gilt das bis 18 (§ 4 Abs. 4 DSG, Art. 8 und 9 DSGVO).
+Darauf weist FoodTracker bei der Registrierung und vor der ersten Nutzung der KI-Funktionen hin.
 
 ## 8. Änderungen
 

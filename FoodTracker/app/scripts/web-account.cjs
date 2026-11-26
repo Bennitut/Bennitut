@@ -8,7 +8,11 @@
 //                                     # vergeben hat, gehören danach dem Konto), Anmeldung bleibt nach dem Neuladen
 //                                     # (eigener Schlüssel, nicht im übrigen Zustand), Passwort ändern (falsch/richtig),
 //                                     # Abmelden, Anmelden mit altem und neuem Passwort, „Passwort vergessen?“ bis zum
-//                                     # falschen Code, „Meine Daten exportieren“, Konto löschen (falsch/richtig)
+//                                     # falschen Code, „Meine Daten exportieren“, Konto löschen (falsch/richtig);
+//                                     # danach die Einwilligung vor den KI-Funktionen: „Nicht jetzt“ schickt nichts,
+//                                     # „Einverstanden“ schickt mit Header (der Server ohne KI meldet das), danach
+//                                     # keine Frage mehr, ohne Header lehnt der Server ab, Widerruf im Profil, dann
+//                                     # fragt die App wieder; „Mindestalter“ in der Datenschutzerklärung
 //   npm run web:account -- --no-build # mit dem vorhandenen dist-account/
 //
 // Der Server bekommt SMTP_HOST auf einen Port, an dem niemand lauscht: So erscheint „Passwort vergessen?“, die Mail
@@ -253,6 +257,58 @@ async function main() {
     await button("Anmelden").last().click();
     await see("E-Mail-Adresse oder Passwort stimmt nicht.", "Anmelden nach dem Löschen");
     step("Konto löschen (falsch, dann richtig), danach keine Anmeldung mehr");
+
+    // Einwilligung vor den KI-Funktionen: Ohne „Einverstanden“ geht keine KI-Anfrage an den Server.
+    const improveRequests = [];
+    page.on("request", (r) => r.url().includes("/api/recipes/improve") && improveRequests.push(r.headers()["x-ai-consent"] ?? null));
+    const dialogTitle = () => page.getByText("KI-Funktionen erlauben?", { exact: true });
+    const improveButton = () => button("✨ Text mit KI verbessern");
+    await page.goto(`${site}/recipe/shakshuka`, { waitUntil: "networkidle" });
+    await improveButton().click();
+    await see("KI-Funktionen erlauben?", "Frage vor der ersten KI-Funktion");
+    await see("Zum Verbessern schickt FoodTracker", "was an die KI geht");
+    await see("Bist du unter 14, brauchst du dafür die Zustimmung eines Elternteils", "Hinweis zur Zustimmung eines Elternteils vor der KI");
+    await see("willigst du ausdrücklich ein", "ausdrückliche Einwilligung für Gesundheitsangaben");
+    await button("Nicht jetzt").click();
+    await dialogTitle().waitFor({ state: "hidden", timeout: 5_000 });
+    await page.waitForTimeout(300);
+    if (improveRequests.length > 0) failures.push(`„Nicht jetzt“ hat trotzdem ${improveRequests.length} KI-Anfrage(n) geschickt`);
+    step("„Nicht jetzt“: Dialog zu, keine KI-Anfrage");
+
+    await improveButton().click();
+    await see("KI-Funktionen erlauben?", "Frage nach „Nicht jetzt“ erneut");
+    await button("Einverstanden").click();
+    // Der Testserver hat keine KI: Die Anfrage kommt an (mit Einwilligung) und meldet das.
+    await see("Auf dem Server ist keine KI eingerichtet", "KI-Anfrage nach der Einwilligung");
+    if (improveRequests.length !== 1 || improveRequests[0] !== "1") failures.push(`Nach „Einverstanden“: ${JSON.stringify(improveRequests)}`);
+    const consent = await page.evaluate(() => JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}").aiConsent);
+    if (consent?.version !== 1 || Number.isNaN(Date.parse(consent?.at))) failures.push(`Einwilligung nicht gespeichert: ${JSON.stringify(consent)}`);
+    await improveButton().click();
+    await page.waitForTimeout(500);
+    if (await dialogTitle().isVisible()) failures.push("Nach der Einwilligung wird trotzdem wieder gefragt");
+    if (improveRequests.length !== 2) failures.push(`Zweite KI-Anfrage fehlt: ${JSON.stringify(improveRequests)}`);
+    const withoutHeader = await fetch(`${API}/api/recipes/improve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Device-Id": "e2e-geraet-0001" },
+      body: JSON.stringify({ text: { name: "Shakshuka" }, ingredients: [{ name: "Eier", amount: "4" }], cookMinutes: 20 }),
+    });
+    if (withoutHeader.status !== 403 || (await withoutHeader.json()).error !== "ai_consent_required") failures.push(`Server ohne Einwilligung: HTTP ${withoutHeader.status}`);
+    step("„Einverstanden“: Anfrage mit Einwilligung (Server ohne KI meldet das), danach keine Frage mehr; ohne Header lehnt der Server ab");
+
+    await page.goto(`${site}/profile`, { waitUntil: "networkidle" });
+    await see("Erlaubt seit", "Einwilligung im Profil");
+    await button("Erlaubnis widerrufen").click();
+    await see("Widerrufen. Vor der nächsten KI-Funktion fragt FoodTracker wieder.", "Widerruf im Profil");
+    await page.waitForTimeout(300);
+    if (await page.evaluate(() => JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}").aiConsent)) failures.push("Einwilligung nach dem Widerruf noch gespeichert");
+    await page.goto(`${site}/recipe/shakshuka`, { waitUntil: "networkidle" });
+    await improveButton().click();
+    await see("KI-Funktionen erlauben?", "Frage nach dem Widerruf");
+    await button("§ Datenschutzerklärung").click();
+    await page.waitForURL(/\/legal$/);
+    await see("FoodTracker hat kein Mindestalter", "Abschnitt Mindestalter (mit Server)");
+    if (improveRequests.length !== 2) failures.push(`Nach dem Widerruf trotzdem gesendet: ${JSON.stringify(improveRequests)}`);
+    step("Widerruf im Profil, danach fragt die App wieder; „Mindestalter“ in der Datenschutzerklärung");
   } catch (e) {
     failures.push(e.message);
     await page.screenshot({ path: path.join(os.tmpdir(), "foodtracker-account-fehler.png"), fullPage: true }).catch(() => {});

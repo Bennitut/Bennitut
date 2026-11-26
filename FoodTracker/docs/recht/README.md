@@ -57,14 +57,17 @@ Alles in `app/src/legal/angaben.ts` (Variante B):
    Namensnennung). Sobald alle Fotos umgezogen sind, entfällt Abschnitt 4 der Datenschutzerklärung; bis dahin gilt er
    für die restlichen (Fortschritt in `BACKLOG.md`, Vorrang „Rezeptfotos selbst ausliefern“). Nicht gewählt: (b) erst
    nach einem Tipp laden, (c) so lassen.
-3. **Mindestalter – noch offen** (Stand 24.11.2026; deine erste Einschätzung: keins nötig). In Österreich können
-   Kinder ab 14 selbst in Online-Dienste einwilligen (§ 4 Abs. 4 DSG laut Bird & Bird); für sensible Daten
-   (Gesundheit, Religion) verlangt die herrschende Meinung auch über 14 die Zustimmung der Eltern. Ohne Server bekommst
-   du keine Daten, mit Server schon (Teil B: Konto, KI-Funktionen, Sicherung der Historie). Bis zur Antwort steht in
-   Teil B ein Platzhalter; ohne Server zeigt die App den Abschnitt nicht.
+3. ✅ **Mindestalter: keins** (entschieden am 24.11.2026, nachdem du die Folgen kanntest). Die App bleibt für alle
+   offen, auch Konto und KI-Funktionen; keine Altersgrenze und keine Altersprüfung. In Österreich können Kinder ab 14
+   selbst in Online-Dienste einwilligen (§ 4 Abs. 4 DSG laut Bird & Bird); für sensible Daten (Gesundheit, Religion)
+   verlangt die herrschende Meinung auch über 14 die Zustimmung der Eltern. Deshalb weist FoodTracker bei der
+   Registrierung und vor der ersten Nutzung der KI-Funktionen darauf hin, dass Kinder unter 14 – und bei
+   Gesundheitsangaben Minderjährige unter 18 – nur mit Zustimmung eines Elternteils einwilligen; Abschnitt 7 der
+   Datenschutzerklärung sagt dasselbe. Ohne Server zeigt die App den Abschnitt nicht (dann bekommst du keine Daten).
 4. **Später, mit Server:** Teil B der Datenschutzerklärung ergänzen (Hoster, Vertragspartner bei Anthropic,
-   Lieferdienst, Speicherfristen) und vor dem ersten Senden sensibler Angaben eine ausdrückliche Einwilligung
-   einholen (Art. 9 DSGVO). Konto löschen fehlt noch in App und Server (Recht auf Löschung, Art. 17 DSGVO).
+   Lieferdienst, Speicherfristen). Die ausdrückliche Einwilligung vor den KI-Funktionen (Art. 9 DSGVO) fragt die App
+   seit 26.11.2026 vor der ersten Nutzung ab (im Profil widerrufbar); offen ist sie noch für die Sicherung der
+   Ernährungshistorie (B6). Konto löschen gibt es seit 26.11.2026 in App und Server (Recht auf Löschung, Art. 17 DSGVO).
 
 ## Wo die Texte stehen
 

@@ -189,12 +189,17 @@ export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN):
     ],
   });
   if (withServer) {
-    // Das Mindestalter betrifft vor allem Konto und KI-Funktionen; noch offen (Benjamins erste Einschätzung vom
-    // 24.11.2026: keins nötig). Bis zur Antwort bleibt der Abschnitt ein Platzhalter.
+    // Kein Mindestalter (Benjamins Entscheidung vom 24.11.2026, nachdem er die Folgen kannte), aber der Hinweis zur
+    // Zustimmung eines Elternteils – so steht er auch bei der Registrierung und vor der ersten KI-Funktion.
     sections.push({
       title: `${number++}. Mindestalter`,
       level: 2,
-      blocks: ["[[ENTSCHEIDUNG: Mindestalter für Konto und KI-Funktionen – noch offen, siehe docs/recht/README.md, Entscheidung 3.]]"],
+      blocks: [
+        "FoodTracker hat kein Mindestalter und fragt nicht nach deinem Alter – auch Konto und KI-Funktionen stehen allen " +
+          "offen. Bist du unter 14, brauchst du für ein Konto und die KI-Funktionen die Zustimmung eines Elternteils; für " +
+          "Gesundheitsangaben wie Allergien oder dein Ernährungstagebuch gilt das bis 18 (§ 4 Abs. 4 DSG, Art. 8 und 9 " +
+          "DSGVO). Darauf weist FoodTracker bei der Registrierung und vor der ersten Nutzung der KI-Funktionen hin.",
+      ],
     });
   }
   sections.push({
@@ -277,9 +282,11 @@ function partB(): LegalSection[] {
           "werden sie nicht zum Training der Modelle verwendet (Stand 18.08.2026). [[PRÜFEN: Grundlage der Übermittlung " +
           "in die USA laut Vertrag zur Auftragsverarbeitung von Anthropic; aktuelle Fristen.]] Fotos für die Erkennung " +
           "speichert der Server nicht.",
-        "Rechtsgrundlage: deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du jederzeit widerrufen kannst. Schreibst " +
-          "du Gesundheitsangaben in ein Wunschfeld oder zeigt ein Foto solche, gilt zusätzlich Art. 9 Abs. 2 lit. a DSGVO " +
-          "(ausdrückliche Einwilligung). [[ENTSCHEIDUNG: Einwilligung vor der ersten Nutzung abfragen; Mindestalter.]]",
+        "Rechtsgrundlage: deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schreibst du Gesundheitsangaben in ein " +
+          "Wunschfeld oder zeigt ein Foto solche, gilt zusätzlich Art. 9 Abs. 2 lit. a DSGVO (ausdrückliche Einwilligung). " +
+          "FoodTracker fragt vor der ersten Nutzung einer KI-Funktion danach und schickt ohne deine Zustimmung nichts an " +
+          "die KI. Im Profil unter „KI-Funktionen“ kannst du die Einwilligung jederzeit mit Wirkung für die Zukunft " +
+          "widerrufen; vor der nächsten KI-Funktion fragt FoodTracker dann wieder. Zum Alter siehe Abschnitt „Mindestalter“.",
         "Für den Rezept-Import fragt der Server mit dem Link, den du eingibst, die öffentliche Schnittstelle von TikTok " +
           "(tiktok.com) bzw. von Meta für Instagram (graph.facebook.com) ab. Deine IP-Adresse erfahren diese Dienste " +
           "dabei nicht, die Anfrage stellt der Server.",

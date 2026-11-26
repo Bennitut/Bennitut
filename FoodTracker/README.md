@@ -26,6 +26,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Vorrat** | Eigener Tab mit dem aktuellen Lagerbestand der Küche, nach Kategorien sortiert, mit geschätzter Resthaltbarkeit („bald verbrauchen“), Mengen zum Nachzählen und Rezeptvorschlägen, die mit dem Vorhandenen kochbar sind. Was man in der Einkaufsliste abhakt, bucht ein Tipp auf „Abgehaktes in den Vorrat“ als ganze Packungen in den Vorrat – auch ohne Server; was später doch geliefert wird, kommt nicht doppelt dazu. |
 | **Lieferdienst** | Die Einkaufsliste wird mit einem Tipp bestellt. Gelieferte Ware landet automatisch im Vorrat. |
 | **Automatisches Tracking** | Hakt man eine geplante Mahlzeit als „Gegessen“ ab, wird sie ins Tagebuch übernommen und die Zutaten werden vom Vorrat abgezogen. |
+| **Einwilligung vor der KI** | Bevor eine KI-Funktion zum ersten Mal Daten schickt (Foto einer Mahlzeit, Kassenbon, Import, Übersetzen, „Text mit KI verbessern“, Wünsche im Plan), fragt die App einmal: was an wen geht (Claude von Anthropic oder ein Modell auf dem Server selbst), ausdrückliche Einwilligung für Gesundheitsangaben und der Hinweis zur Zustimmung eines Elternteils (kein Mindestalter). „Nicht jetzt“ schickt nichts – Wünsche im Plan entfallen dann mit Hinweis. Widerrufen im Profil unter „KI-Funktionen“. Die App nennt dem Server bei jeder KI-Anfrage die Fassung der Einwilligung (`X-AI-Consent`), ohne lehnt er mit `403 ai_consent_required` ab. |
 | **Impressum & Datenschutz** | Unter 👤 Profil, in der Web-Version zusätzlich oben auf jeder Seite („Impressum“): Impressum (Angaben nach § 5 E-Commerce-Gesetz und Offenlegung nach § 25 Mediengesetz) und Datenschutzerklärung (Österreich, auf Deutsch). Die eigenen Angaben stehen an einer Stelle (`app/src/legal/angaben.ts`); solange eine fehlt, zeigt die App „Entwurf“, und die Web-Version für GitHub Pages wird nicht gebaut. |
 
 Kreislauf: **Plan → Einkaufsliste → Abhaken oder Bestellung → Vorrat → Kochen/Essen → Tagebuch.**
@@ -48,14 +49,14 @@ FoodTracker/
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
 │   ├── src/legal/        Impressum und Datenschutzerklärung: angaben.ts (eigene Angaben, nur hier eintragen), texte.ts
-│   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten, Tagebuch und Historie)
+│   └── test/             Tests der App-Logik (Datum, Vorrat, Einkaufsliste → Vorrat, Nährwerte, Planer, Neuplanen, Übersetzungen, Rezepttexte, Rezeptlisten, Tagebuch und Historie, Einwilligung vor der KI)
 ├── docs/recht/   Entwürfe für Impressum und Datenschutzerklärung (Österreich) mit Platzhaltern für die eigenen Angaben
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 ├── reports/      Tagesberichte der Nachtschicht als PDF (make-report.cjs, Test: node --test reports/make-report.test.cjs)
 └── server/   Backend (Node, Hono, TypeScript)
     ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
     ├── src/ai/           KI für Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge: Prompts in tasks.ts,
-    │                     Claude oder Ollama über provider.ts (eine Stelle für alle KI-Anfragen)
+    │                     Claude oder Ollama über provider.ts (eine Stelle für alle KI-Anfragen), Einwilligung in consent.ts
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
     ├── src/community/    Geteilte Rezepte und Favoriten
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
@@ -116,7 +117,9 @@ Zeile, ob der Server erreichbar ist und mit welcher KI (Claude, lokal, ohne KI).
 erst nach dem Server gestartet wird. Fest wählen mit `AI_PROVIDER=claude` oder `AI_PROVIDER=ollama`; anderes Modell
 mit `OLLAMA_MODEL` (Alternative mit Bildverständnis: `qwen3-vl:8b`). Lokal dauert eine Antwort oft 20–90 Sekunden, die
 erste länger (das Modell wird geladen). Ohne KI melden Foto, Kassenbon, Import, Übersetzen und KI-Wünsche „Auf dem
-Server ist keine KI eingerichtet“ – alles andere geht auch so. Alle Variablen erklärt `server/.env.example`.
+Server ist keine KI eingerichtet“ – alles andere geht auch so. Alle Variablen erklärt `server/.env.example`. Vor der
+ersten KI-Funktion fragt die App einmal um Erlaubnis (widerrufbar im Profil unter „KI-Funktionen“); KI-Anfragen ohne
+Einwilligung lehnt der Server ab (`403 ai_consent_required`, Header `X-AI-Consent`).
 
 **Instagram:** Instagram gibt die Beschreibung ohne Anmeldung oft nicht heraus. Dann die Caption des Beitrags
 kopieren und beim Import ins Feld „Beschreibung“ einfügen.
@@ -179,7 +182,8 @@ cd app && npm run check      # Typecheck + Lint (ESLint, ohne Warnungen) + Tests
 cd app && npm run web:export && npm run web:smoke   # Web-Version bauen und im Browser durchklicken
 cd app && npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe wie auf GitHub Pages (/Bennitut/)
                                                                  # (solange Impressum-Angaben fehlen: web:pages -- --entwurf)
-cd app && npm run web:account   # Konten im Browser mit echtem Server (eigener Port 3917, leere Daten im Temp-Ordner)
+cd app && npm run web:account   # Konten und Einwilligung vor der KI im Browser mit echtem Server (eigener Port 3917,
+                                # leere Daten im Temp-Ordner)
 ```
 
 Einzeln: `npm run typecheck` und `npm test` (in beiden Ordnern) bzw. `npm run lint` (App).
@@ -195,11 +199,15 @@ aus dem alten Speicherort, nichts wird automatisch gelöscht, Löschmarken, Abgl
 Auswertung bis „Alles“, CSV und Import ohne Duplikate), Impressum/Datenschutz (Platzhalter erkennen, vollständige
 Texte ohne Server, Teil B nur mit Server, lückenlose Nummerierung) und die Anmeldung (Sitzung im eigenen Speicher, Umzug
 vom alten Speicherort, gesperrter Schlüsselbund; Passwortlänge genau wie im Server, E-Mail-Adresse, Wartezeit nach zu
-vielen Versuchen).
+vielen Versuchen) sowie die Einwilligung vor der KI (gilt nur für die aktuelle Fassung, Unlesbares heißt „nicht erlaubt“,
+gleicher Header und gleiche Fassung wie im Server, Texte für jede KI-Funktion in allen Sprachen, Abschnitt
+„Mindestalter“ ohne Platzhalter).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
 die Sicherung des Tagebuchs und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
 Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash,
-Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt).
+Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt) und dass ohne
+Einwilligung keine Anfrage an die KI geht (`403 ai_consent_required` für jede KI-Funktion, Eingaben werden vorher
+geprüft, Planen ohne Wünsche braucht keine).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
 abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal),
 prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen, und zuletzt die
@@ -208,7 +216,9 @@ vollem Speicher) und „Impressum & Datenschutz“ (Link oben auf jeder Seite, �
 `npm run web:account` baut die Web-Version für einen Server auf Port 3917, startet ihn mit leeren Daten und spielt im
 Browser durch: Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren (Sterne, die das
 Gerät vorher ohne Konto vergeben hat, gehören danach dem Konto), Anmeldung nach dem Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
-Daten exportieren“ und Konto löschen.
+Daten exportieren“ und Konto löschen; danach die Einwilligung vor der KI („Nicht jetzt“ schickt nichts, „Einverstanden“
+schickt mit Einwilligung, danach keine Frage mehr, der Server lehnt Anfragen ohne ab, Widerruf im Profil, Abschnitt
+„Mindestalter“ in der Datenschutzerklärung).
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet
