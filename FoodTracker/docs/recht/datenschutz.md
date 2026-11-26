@@ -249,15 +249,25 @@ Nutzung einer Geräte-Kennung]]
 Unabhängig vom Server kannst du deine Historie im Profil jederzeit als Datei speichern und wieder importieren
 (Abschnitt 2).
 
-### B7. Plan, Einkaufsliste, Vorrat und Essgewohnheiten (mit Konto)
+### B7. Plan, Einkaufsliste, Vorrat, eigene Rezepte und Essgewohnheiten (mit Konto)
 
 Bist du angemeldet, gleicht FoodTracker diese Daten zwischen deinen Geräten ab, damit du überall denselben Stand hast:
 deine Antworten aus dem Fragebogen (Abschnitt 2, auch Unverträglichkeiten und Körperdaten), Sprache, Region und
 Anzeigename, den Monatsplan mit den Rezepten, die nur darin vorkommen, was du darin als gegessen, eingekauft und in den
-Vorrat gebucht abgehakt hast, und deinen Vorrat (Zutat, Einkaufstag, Menge). Der Server speichert sie zu deinem Konto,
-je Eintrag mit dem Zeitpunkt der letzten Änderung; Gelöschtes bleibt als Löschmarke ohne Inhalt, damit es von anderen
-Geräten nicht zurückkommt. Häkchen eines abgelösten Plans löscht er. Fotos vom Gerät gehen dabei nicht mit. Ohne Konto
-bleiben diese Daten auf deinem Gerät.
+Vorrat gebucht abgehakt hast, deinen Vorrat (Zutat, Einkaufstag, Menge), deine eigenen und importierten Rezepte samt
+Foto (und ob du sie in der Community geteilt hast), deine Favoriten (bei Community-Rezepten mit der gespeicherten Kopie)
+und die Rezepttexte, die die KI für dich übersetzt oder verbessert hat. Der Server speichert sie zu deinem Konto, je
+Eintrag mit dem Zeitpunkt der letzten Änderung; Gelöschtes bleibt als Löschmarke ohne Inhalt, damit es von anderen
+Geräten nicht zurückkommt. Häkchen eines abgelösten Plans löscht er. Ohne Konto bleiben diese Daten auf deinem Gerät.
+
+Fotos eigener Rezepte legt der Server als Bilddatei zu deinem Konto ab, nicht in der Datenbank. Abrufbar sind sie über
+eine zufällige, nicht erratbare Adresse, die nur deine Geräte bekommen; löschst du das Rezept oder ersetzt das Foto,
+löscht der Server die Datei. Auf dem Gerät, auf dem du das Foto aufgenommen hast, bleibt es zusätzlich gespeichert.
+Fotos aus der Galerie eines Rezepts, die du mit „Nur ich“ gespeichert hast, bleiben vorerst nur auf dem Gerät.
+
+> **Für Benjamin:** „Nicht erratbar“ heißt eine zufällige UUID (122 Bit) im Pfad `/api/images/<UUID>.jpg`. Wer den
+> Pfad kennt, bekommt das Bild ohne Anmeldung – wie bei den Fotos der Galerie. Der Server schickt die Pfade eigener Fotos
+> nur an das Konto selbst und bittet, sie unterwegs nicht zwischenzuspeichern („Cache-Control: private“).
 
 [[PRÜFEN: Unverträglichkeiten und Körperdaten sind Gesundheitsdaten (Art. 9 DSGVO). Sicherer Weg wie bei B6: den
 Abgleich erst nach einer ausdrücklichen Einwilligung starten und im Profil abschaltbar machen. Heute beginnt er mit der
