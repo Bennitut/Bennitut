@@ -58,12 +58,12 @@ FoodTracker/
     ├── src/ai/           KI für Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge: Prompts in tasks.ts,
     │                     Claude oder Ollama über provider.ts (eine Stelle für alle KI-Anfragen), Einwilligung in consent.ts
     ├── src/social/       Instagram/TikTok-Beiträge laden (nur erlaubte Hosts)
-    ├── src/community/    Geteilte Rezepte und Favoriten
+    ├── src/community/    Geteilte Rezepte und Favoriten, Fotos, Sterne und „Problem melden“ (in der Datenbank)
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
     ├── src/diary/        Sicherung der Ernährungshistorie (in der Datenbank, pro Konto bzw. Gerät)
     ├── src/storage/      Speicherschicht: SQLite-Datei (data/foodtracker.db) oder Postgres (DATABASE_URL),
-    │                     versionierte Migrationen, Tabelle für den Abgleich mit der App (sync.ts), einmaliger
-    │                     Umzug aus den JSON-Dateien älterer Fassungen
+    │                     versionierte Migrationen, Tabelle für den Abgleich mit der App (sync.ts), Bildspeicher für
+    │                     Fotos (images.ts, data/photos/), einmaliger Umzug aus den JSON-Dateien älterer Fassungen
     ├── src/data/         125 Zutaten (5 Sprachen, Allergene, Packungen, Haltbarkeit) und 236 Rezepte mit Küche, Foto und
     │                     Kochvideos je Sprache (videos/de.ts … es.ts, geprüft per YouTube-oEmbed)
     └── scripts/          translate-ui: neue App-Sprache mit Claude erzeugen
@@ -135,7 +135,7 @@ Voraussetzungen: Node.js 22+, für die App die **Expo Go**-App für SDK 58 auf d
 # Backend – Einstellungen in server/.env (Vorlage: server/.env.example), z. B. ANTHROPIC_API_KEY oder Ollama
 cd server
 npm install
-npm start                              # http://localhost:3000, Konten in data/foodtracker.db, Community-Rezepte in data/community.json, Fotos/Bewertungen in data/feedback.json
+npm start                              # http://localhost:3000, alle Daten in data/foodtracker.db, Fotos als Dateien in data/photos/
 
 # App (zweites Terminal)
 cd app
@@ -204,10 +204,14 @@ Texte ohne Server, Teil B nur mit Server, lückenlose Nummerierung) und die Anme
 vom alten Speicherort, gesperrter Schlüsselbund; Passwortlänge genau wie im Server, E-Mail-Adresse, Wartezeit nach zu
 vielen Versuchen) sowie die Einwilligung vor der KI (gilt nur für die aktuelle Fassung, Unlesbares heißt „nicht erlaubt“,
 gleicher Header und gleiche Fassung wie im Server, Texte für jede KI-Funktion in allen Sprachen, Abschnitt
-„Mindestalter“ ohne Platzhalter).
+„Mindestalter“ ohne Platzhalter) und die Fotos aus dem Bildspeicher des Servers (Adresse des Servers erst beim
+Anzeigen, ohne Server ein Platzhalter, derselbe Pfad wie im Server).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem die Speicherschicht mit SQLite und mit Postgres (pg-mem,
 eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig: Migrationen, Konten und Sitzungen,
-gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
+gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und
+Admin-Änderungen auf beiden Datenbanken (Fotos als Dateien, nur echte Bilder, Bilddateien verschwinden mit dem Foto,
+dem Rezept bzw. dem Konto, Übernahme ins Konto ohne Doppeltes, Umzug aus `community.json`, `feedback.json` und
+`recipe-overrides.json`), die Auslieferung der Bilder, Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
 die Sicherung des Tagebuchs (ebenfalls auf beiden Datenbanken: Seiten, neuere Fassung gewinnt, Grenze ohne halbe
 Änderungen, viele Einträge in Paketen, gleichzeitige Abgleiche, Übernahme ins Konto, Umzug aus `data/diary/` mit
 denselben Revisionen) und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
@@ -221,7 +225,9 @@ prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine F
 Ernährungshistorie (Umzug in den eigenen Speicher, „Alles“, Export, Import nach gelöschten Browserdaten, Hinweis bei
 vollem Speicher) und „Impressum & Datenschutz“ (Link oben auf jeder Seite, „Entwurf“, solange Angaben fehlen); er braucht Playwright (einmalig im App-Ordner: `npm install --no-save playwright && npx playwright install chromium`).
 `npm run web:account` baut die Web-Version für einen Server auf Port 3917, startet ihn mit leeren Daten und spielt im
-Browser durch: Umzug einer Tagebuch-Sicherung aus `data/diary/` beim Start, Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren (Sterne, die das
+Browser durch: Umzug einer Tagebuch-Sicherung aus `data/diary/` beim Start, Umzug von Community-Rezepten, Fotos mit
+Sternen und Admin-Änderungen aus den JSON-Dateien (die App zeigt die Fotos danach vom Server: Galerie, Foto eines
+geteilten Rezepts, geändertes Katalogrezept), Umzug der Anmeldung aus einer älteren Version, Fehler vor dem Absenden, Hinweis zur Zustimmung eines Elternteils, Registrieren (Sterne, die das
 Gerät vorher ohne Konto vergeben hat, und sein Tagebuch gehören danach dem Konto), Anmeldung nach dem Neuladen, Passwort ändern, Abmelden, altes und neues Passwort, „Passwort vergessen?“ bis zum (falschen) Code, „Meine
 Daten exportieren“ (mit Tagebuch) und Konto löschen (danach ist auch das Tagebuch des Kontos weg); danach die Einwilligung vor der KI („Nicht jetzt“ schickt nichts, „Einverstanden“
 schickt mit Einwilligung, danach keine Frage mehr, der Server lehnt Anfragen ohne ab, Widerruf im Profil, Abschnitt
@@ -295,13 +301,15 @@ und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
 - Zum Ausprobieren: `ALLOW_DEV_LOGIN=1 ADMIN_EMAILS=du@example.com npm start` und in der App unter 👤 → „Anmelden
   oder registrieren“ die Test-Anmeldung mit dieser E-Mail nutzen – du bist dann Admin.
 
-Konten, Sitzungen, Codes zum Zurücksetzen und die Sicherung der Ernährungshistorie liegen in der Datenbank (nächster
-Abschnitt), Admin-Änderungen an Rezepten in `data/recipe-overrides.json`.
+Konten, Sitzungen, Codes zum Zurücksetzen, die Sicherung der Ernährungshistorie und die Admin-Änderungen an
+Katalogrezepten liegen in der Datenbank (nächster Abschnitt).
 
 ## Datenbank
 
-Konten, Sitzungen und die Sicherung der Ernährungshistorie speichert der Server in einer Datenbank (`src/storage/`); nach
-und nach kommen alle Daten dazu (Vorrang 1, 9.2 in `BACKLOG.md`):
+Alles, was der Server speichert, liegt in einer Datenbank (`src/storage/`): Konten und Sitzungen, die Sicherung der
+Ernährungshistorie, geteilte Rezepte mit Favoriten, Fotos mit Sternen, Sterne für Rezepte, „Problem melden“ und die
+Admin-Änderungen an Katalogrezepten – nur die Fotos selbst nicht (siehe „Fotos“). Plan, Vorrat und eigene Rezepte
+liegen bisher nur auf dem Gerät; der Abgleich dafür kommt als Nächstes (Vorrang 1, 9.2 in `BACKLOG.md`).
 
 - **Ohne Einstellung** eine Datei auf dem eigenen Rechner: `server/data/foodtracker.db` (SQLite, in Node.js ab 22.13
   eingebaut – nichts zu installieren, keine nativen Pakete; anderer Ort mit `DATABASE_FILE`). Übersteht auch ein hart
@@ -318,11 +326,24 @@ und nach kommen alle Daten dazu (Vorrang 1, 9.2 in `BACKLOG.md`):
   Eintrags-ID mit Revision, Zeitpunkt der letzten Änderung und Inhalt als JSON oder einer Löschmarke. Die Revision zählt
   pro Besitzer und Art hoch (`sync_revisions`); die App fragt nur nach dem, was nach ihrer letzten Revision kam.
   Gleichzeitige Abgleiche desselben Besitzers laufen nacheinander (bei Postgres sperrt die Zeile in `sync_revisions`).
+- **Fotos** (Galerie der Rezepte, Foto eines geteilten Rezepts) speichert der Server als Bilddateien in
+  `server/data/photos/` (anderer Ort mit `PHOTOS_DIR`), in der Datenbank steht nur ihr Schlüssel. Die App bekommt
+  einen Pfad (`/api/images/<Schlüssel>`) statt der früheren data-URI und setzt erst beim Anzeigen die Adresse des
+  Servers davor (`app/src/lib/serverImages.ts`) – so passt er auch nach einem Umzug des Servers. `GET
+  /api/images/<Schlüssel>` liefert das Bild mit langem Zwischenspeicher (ein Schlüssel zeigt immer dasselbe Bild).
+  Angenommen werden nur JPEG, PNG und WebP – erkannt an den ersten Bytes, nicht an der Angabe des Absenders (sonst `400
+  invalid_image`). Löschen eines Fotos, eines geteilten Rezepts oder des Kontos löscht auch die Bilddateien; „Meine
+  Daten exportieren“ enthält die eigenen Fotos wieder als data-URI. Sichern: den Ordner zusammen mit der Datenbank
+  kopieren. Auf Cloud-Diensten, die Dateien beim Neustart verlieren, braucht es dafür einen Objektspeicher (9.3).
 - **Umzug:** Liegt noch die Konten-Datei älterer Fassungen (`data/users.json`) da, übernimmt der Server sie beim Start
   einmal – mit denselben Konto-IDs (daran hängen Tagebuch-Sicherung und Fotos) und den noch gültigen Anmeldungen – und
   löscht sie danach. Ebenso die Sicherung der Ernährungshistorie aus `data/diary/` (eine Datei pro Konto bzw. Gerät,
   anderer Ort mit `DIARY_DIR`): mit denselben Revisionen, damit Geräte, die schon abgeglichen haben, nichts verpassen;
-  unlesbare Dateien bleiben liegen, die Startmeldung nennt sie.
+  unlesbare Dateien bleiben liegen, die Startmeldung nennt sie. Genauso `data/community.json` (geteilte Rezepte mit
+  Favoriten), `data/feedback.json` (Fotos mit Sternen, Sterne für Rezepte, Meldungen) und `data/recipe-overrides.json`
+  (Admin-Änderungen): mit denselben IDs, die Fotos daraus als Dateien in den Bildspeicher; was die Datenbank schon
+  hat, bleibt; eine unlesbare Datei bleibt liegen (anderer Ort mit `COMMUNITY_FILE`, `FEEDBACK_FILE`,
+  `OVERRIDES_FILE`).
 - **Grenze:** Eine SQLite-Datei gehört genau einem laufenden Server.
 
 ## Instagram und TikTok
@@ -349,9 +370,10 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 
 ## Grenzen dieser Version
 
-- Konten, Sitzungen und die Tagebuch-Sicherung liegen in der Datenbank (SQLite oder Postgres); Community-Rezepte, Fotos,
-  Bewertungen, Meldungen und Admin-Änderungen noch in JSON-Dateien – sie ziehen als Nächstes um (Fotos dann als Dateien
-  bzw. in einen Bildspeicher, nicht in die Datenbank). Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
+- Alles, was der Server speichert, liegt in der Datenbank (SQLite oder Postgres), Fotos als Dateien in
+  `data/photos/` – auf Cloud-Diensten ohne dauerhafte Dateien braucht es dafür noch einen Objektspeicher (9.3). Plan,
+  Vorrat und eigene Rezepte liegen nur auf dem Gerät, bis der Abgleich dafür kommt. Ohne Anmeldung zählt weiter eine
+  anonyme Geräte-ID.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
 - Alle Rezepttexte im Katalog sind eigens für FoodTracker geschrieben und dürfen kommerziell genutzt werden.
   Fotos stammen aus freien Lizenzen (CC0, Public Domain, CC BY, CC BY-SA, über Openverse von Wikimedia Commons

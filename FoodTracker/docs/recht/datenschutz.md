@@ -209,14 +209,16 @@ nicht, die Anfrage stellt der Server.
 - **Rezepte teilen:** Geteilte Rezepte sind für alle sichtbar, mit deinem Anzeigenamen. Favoriten anderer zählen als
   „Likes“ (gespeichert wird die Geräte-Kennung bzw. das Konto).
 - **Fotos:** Öffentliche Fotos (verkleinert) erscheinen mit deinem Anzeigenamen in der Galerie des Rezepts und können
-  bewertet werden; das bestbewertete Foto sehen alle als Rezeptbild. Fotos mit „Nur ich“ bleiben auf deinem Gerät.
+  bewertet werden; das bestbewertete Foto sehen alle als Rezeptbild. Der Server speichert sie als Bilddateien, ebenso
+  das Foto eines geteilten Rezepts. Fotos mit „Nur ich“ bleiben auf deinem Gerät.
 - **Sterne für Rezepte** werden je Gerät bzw. Konto gespeichert und nur als Durchschnitt angezeigt.
 - **„Problem melden“:** gespeichert werden Rezept, Grund, deine Notiz und die Geräte-Kennung bzw. das Konto.
 - Admins können Fotos, geteilte Rezepte und Meldungen sehen und löschen sowie Konten sperren.
 
-Du kannst eigene Fotos und geteilte Rezepte selbst löschen. Rechtsgrundlage: Bereitstellung der gewünschten
-Funktion (Art. 6 Abs. 1 lit. b DSGVO), bei Meldungen und Moderation mein berechtigtes Interesse an richtigen Rezepten
-und an einer Community ohne Missbrauch (Art. 6 Abs. 1 lit. f DSGVO). [[ANGABE: Speicherdauer]]
+Du kannst eigene Fotos und geteilte Rezepte selbst löschen; der Server löscht dabei auch die Bilddateien.
+Rechtsgrundlage: Bereitstellung der gewünschten Funktion (Art. 6 Abs. 1 lit. b DSGVO), bei Meldungen und Moderation
+mein berechtigtes Interesse an richtigen Rezepten und an einer Community ohne Missbrauch (Art. 6 Abs. 1 lit. f
+DSGVO). [[ANGABE: Speicherdauer]]
 
 ### B5. Lieferdienst
 
