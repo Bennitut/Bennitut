@@ -9,6 +9,9 @@
 //                                     # (eigener Schlüssel, nicht im übrigen Zustand), Passwort ändern (falsch/richtig),
 //                                     # Abmelden, Anmelden mit altem und neuem Passwort, „Passwort vergessen?“ bis zum
 //                                     # falschen Code, „Meine Daten exportieren“, Konto löschen (falsch/richtig);
+//                                     # dabei die Sicherung des Tagebuchs in der Datenbank (Umzug einer Datei aus
+//                                     # data/diary/ beim Start, Eintrag vom Gerät landet im Konto, im Export und ist
+//                                     # nach dem Löschen weg);
 //                                     # danach die Einwilligung vor den KI-Funktionen: „Nicht jetzt“ schickt nichts,
 //                                     # „Einverstanden“ schickt mit Header (der Server ohne KI meldet das), danach
 //                                     # keine Frage mehr, ohne Header lehnt der Server ab, Widerruf im Profil, dann
@@ -53,6 +56,25 @@ function serveDist() {
     fs.createReadStream(file).pipe(res);
   });
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
+}
+
+/** Wie viele Datensätze des Abgleichs (z. B. Tagebuch) ein Besitzer in der Datenbank des Test-Servers hat. */
+function syncRecordsOf(file, owner) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    return Number(db.prepare("SELECT COUNT(*) AS n FROM sync_records WHERE owner = ?").get(owner).n);
+  } finally {
+    db.close();
+  }
+}
+
+/** Sicherung eines Tagebuchs, wie sie Server bis 27.11.2026 unter data/diary/ ablegten (eine Datei pro Besitzer). */
+function writeLegacyDiary(dir, owner, entry) {
+  fs.mkdirSync(dir, { recursive: true });
+  const name = `${require("node:crypto").createHash("sha256").update(owner).digest("hex").slice(0, 40)}.json`;
+  const record = { id: entry.id, updatedAt: entry.updatedAt, entry, rev: 1 };
+  fs.writeFileSync(path.join(dir, name), JSON.stringify({ owner, rev: 1, records: { [entry.id]: record } }));
 }
 
 /** Wie viele Konten mit dieser Adresse in der Datenbank des Test-Servers stehen (zweite Verbindung, nur lesend). */
@@ -123,6 +145,18 @@ async function main() {
   }
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "foodtracker-account-"));
+  // Ein Gerät, das seine Historie noch bei einer älteren Fassung gesichert hat (Datei statt Datenbank).
+  const nutrients = { kcal: 640, protein: 24, carbs: 72, fat: 22 };
+  const oldDevice = "e2e-alt-geraet-0001";
+  writeLegacyDiary(path.join(dataDir, "diary"), `device:${oldDevice}`, {
+    id: "alt-datei-1",
+    date: "2026-11-19",
+    time: "18:30",
+    title: "Krautfleckerl",
+    nutrients,
+    source: "plan",
+    updatedAt: "2026-11-19T17:30:00.000Z",
+  });
   const api = await startServer(dataDir);
   const web = await serveDist();
   const site = `http://127.0.0.1:${web.address().port}`;
@@ -148,7 +182,21 @@ async function main() {
   };
   const step = (text) => console.log(`✓ ${text}`);
 
+  // Jeder Abgleich des Tagebuchs muss klappen (401 nur, wenn eine Sitzung gerade endet).
+  page.on("response", (r) => r.url().includes("/api/diary/sync") && r.status() !== 200 && r.status() !== 401 && failures.push(`Abgleich des Tagebuchs: HTTP ${r.status()}`));
+  const diaryOf = async (headers) => {
+    const res = await fetch(`${API}/api/diary/sync`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ since: 0, changes: [] }) });
+    return res.ok ? (await res.json()).changes : [];
+  };
+
   try {
+    // Umzug beim Start: Die Datei der älteren Fassung ist in der Datenbank und danach gelöscht.
+    if (!/Sicherung der Ernährungshistorie aus .* übernommen: 1 Konto bzw\. Gerät mit 1 Eintrag/.test(api.log())) failures.push(`Umzug aus data/diary/ nicht gemeldet:\n${api.log()}`);
+    if (fs.existsSync(path.join(dataDir, "diary"))) failures.push("data/diary/ liegt nach dem Umzug noch da");
+    const fromFile = await diaryOf({ "X-Device-Id": oldDevice });
+    if (fromFile.length !== 1 || fromFile[0].entry?.title !== "Krautfleckerl" || fromFile[0].updatedAt !== "2026-11-19T17:30:00.000Z") failures.push(`Tagebuch aus der Datei: ${JSON.stringify(fromFile)}`);
+    step("Sicherung des Tagebuchs beim Start aus data/diary/ in die Datenbank übernommen");
+
     // Umzug: Eine ältere Version speicherte die Anmeldung im übrigen Zustand – sie muss erhalten bleiben und in den
     // eigenen Speicher wandern, ohne dass das Token im übrigen Zustand bleibt.
     const legacy = await (
@@ -161,7 +209,9 @@ async function main() {
     await page.addInitScript((auth) => {
       if (sessionStorage.getItem("e2e-legacy")) return;
       sessionStorage.setItem("e2e-legacy", "1");
-      localStorage.setItem("foodtracker/state/v2", JSON.stringify({ deviceId: "e2e-geraet-0000", auth }));
+      // Dazu ein Eintrag im Tagebuch, wie es die App bis November 2026 im übrigen Zustand speicherte.
+      const diary = [{ id: "e2e-tagebuch-1", date: "2026-11-20", time: "12:15", title: "Kaspressknödel", nutrients: { kcal: 640, protein: 24, carbs: 72, fat: 22 }, source: "manuell" }];
+      localStorage.setItem("foodtracker/state/v2", JSON.stringify({ deviceId: "e2e-geraet-0000", auth, diary }));
     }, { token: legacy.token, user: legacy.user });
     await page.goto(`${site}/profile`, { waitUntil: "networkidle" });
     await see("Angemeldet als Ältere Version", "Anmeldung aus einer älteren Version");
@@ -206,6 +256,16 @@ async function main() {
     const ratings = await (await fetch(`${API}/api/recipes/ratings`, { headers: { "X-Device-Id": deviceId ?? "", Authorization: `Bearer ${token}` } })).json();
     if (ratings.shakshuka?.mine !== 4) failures.push(`Sterne ohne Konto nicht im Konto: ${JSON.stringify(ratings.shakshuka)}`);
     step("Gerätedaten beim Registrieren ins Konto übernommen (Sterne ohne Konto gehören dem Konto, Hinweis im Profil)");
+    // Das Tagebuch des Geräts kommt im Hintergrund ins Konto (Übernahme bzw. erster Abgleich mit dem Konto).
+    const account = await (await fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    if (!account.id) failures.push(`Konto nicht abrufbar: ${JSON.stringify(account)}`);
+    let inAccount = [];
+    for (let i = 0; i < 50 && !inAccount.some((r) => r.id === "e2e-tagebuch-1"); i++) {
+      await page.waitForTimeout(200);
+      inAccount = await diaryOf({ "X-Device-Id": "e2e-geraet-0001", Authorization: `Bearer ${token}` });
+    }
+    if (inAccount.find((r) => r.id === "e2e-tagebuch-1")?.entry?.title !== "Kaspressknödel") failures.push(`Tagebuch nicht im Konto: ${JSON.stringify(inAccount)}`);
+    step("Tagebuch vom Gerät in der Datenbank beim Konto");
     await page.reload({ waitUntil: "networkidle" });
     await see("Angemeldet als Nachtschicht", "nach dem Neuladen");
     const storage = await page.evaluate(() => ({ session: localStorage.getItem("foodtracker.session.v1"), state: localStorage.getItem("foodtracker/state/v2") }));
@@ -254,8 +314,9 @@ async function main() {
     if (!/^foodtracker-konto-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename())) failures.push(`Dateiname ${download.suggestedFilename()}`);
     if (exported.format !== "foodtracker-account-export" || exported.account?.email !== email) failures.push("Export ohne Konto");
     if (JSON.stringify(exported).includes("scrypt$")) failures.push("Export enthält den Passwort-Hash");
+    if (!exported.diary?.some((e) => e.id === "e2e-tagebuch-1" && e.title === "Kaspressknödel")) failures.push(`Export ohne Tagebuch: ${JSON.stringify(exported.diary)}`);
     await see("gespeichert (Downloads)", "Export");
-    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash");
+    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash, mit Tagebuch");
 
     await button("🗑️ Konto löschen").click();
     await see("Das lässt sich nicht rückgängig machen.", "Rückfrage");
@@ -266,12 +327,13 @@ async function main() {
     await button("Konto endgültig löschen").click();
     await see("Dein Konto ist gelöscht.", "Konto löschen");
     if (accountsWith(path.join(dataDir, "foodtracker.db"), email) !== 0) failures.push("Konto steht nach dem Löschen noch auf dem Server");
+    if (syncRecordsOf(path.join(dataDir, "foodtracker.db"), `user:${account.id}`) !== 0) failures.push("Tagebuch des Kontos steht nach dem Löschen noch auf dem Server");
     await button("Anmelden oder registrieren").click();
     await field("E-Mail").fill(email);
     await field("Passwort").fill(second);
     await button("Anmelden").last().click();
     await see("E-Mail-Adresse oder Passwort stimmt nicht.", "Anmelden nach dem Löschen");
-    step("Konto löschen (falsch, dann richtig), danach keine Anmeldung mehr");
+    step("Konto löschen (falsch, dann richtig), danach keine Anmeldung und kein Tagebuch des Kontos mehr");
 
     // Einwilligung vor den KI-Funktionen: Ohne „Einverstanden“ geht keine KI-Anfrage an den Server.
     const improveRequests = [];
