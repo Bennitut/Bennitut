@@ -101,6 +101,28 @@ export class DiaryStore {
     return { rev, changes: [...page, ...extra].map(strip), more };
   }
 
+  /**
+   * Übernimmt die Sicherung von `from` (z. B. „device:<id>“) in `to` („user:<id>“), danach gibt es die von `from` nicht
+   * mehr. Wie beim Abgleich gewinnt die neuere Fassung, bei Gleichstand das Löschen; Übernommenes bekommt eine neue
+   * Revision, damit es auch die anderen Geräte des Kontos erreicht. Liefert die Zahl übernommener Einträge (ohne
+   * Löschmarken). Wirft DiaryFullError, ohne etwas zu ändern, wenn `to` dafür zu voll ist.
+   */
+  transfer(from: string, to: string): number {
+    if (from === to) return 0;
+    const source = Object.values(this.load(from).records).sort((a, b) => a.rev - b.rev);
+    const target = this.load(to);
+    const incoming = source.filter((r) => !target.records[r.id] || wins(r, target.records[r.id]!));
+    const added = incoming.filter((r) => !target.records[r.id]).length;
+    if (added > 0 && Object.keys(target.records).length + added > this.maxRecords) throw new DiaryFullError();
+    for (const record of incoming) {
+      target.rev++;
+      target.records[record.id] = { ...strip(record), rev: target.rev };
+    }
+    if (incoming.length > 0) this.save(target);
+    if (source.length > 0) this.remove(from);
+    return incoming.filter((r) => r.entry !== null).length;
+  }
+
   /** Anzahl gespeicherter Einträge (ohne Löschmarken), z. B. für Tests. */
   count(owner: string): number {
     return Object.values(this.load(owner).records).filter((r) => r.entry !== null).length;

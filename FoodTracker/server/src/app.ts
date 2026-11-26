@@ -128,7 +128,11 @@ const ImportBody = z
   })
   .refine((b) => b.url || b.caption || b.frames.length > 0, "URL, Text oder Videobilder angeben");
 
-const DeviceId = z.string().min(8).max(100);
+/**
+ * Zufällige Kennung des Geräts (in der App aus Buchstaben und Ziffern). Nur diese Zeichen: Sonst könnte sich jemand
+ * mit „user:<Konto-ID>“ als fremdes Konto ausgeben – Konten handeln intern unter genau diesem Namen (actorId).
+ */
+const DeviceId = z.string().regex(/^[A-Za-z0-9_-]{8,100}$/);
 const Stars = z.object({ stars: z.number().int().min(1).max(5) });
 const RecipeIdParam = z.string().min(1).max(200);
 /** Eigene Fotos kommen verkleinert als data-URI aus der App. */
@@ -537,6 +541,27 @@ export function createApp({
     requireStrong(body.newPassword);
     const { token, user } = await countingFailures(key, () => users.resetPassword(email, body.code, body.newPassword));
     return c.json({ token, user: me(user) });
+  });
+
+  /**
+   * Nach dem Anmelden: Was dieses Gerät ohne Konto auf dem Server hat – Sicherung des Tagebuchs, geteilte Rezepte,
+   * Favoriten, Fotos, Sterne und Meldungen –, gehört danach dem Konto, ohne Doppeltes (Regeln bei den Speichern). Die
+   * Sicherung unter der Geräte-ID ist danach weg. Die App ruft das nach jeder Anmeldung einmal auf; ein zweiter Aufruf
+   * findet nichts mehr. Wer die Geräte-ID kennt, könnte die Daten des Geräts auch sonst schon verwalten.
+   */
+  app.post("/api/auth/claim-device", (c) => {
+    const user = requireUser(c);
+    const device = deviceId(c);
+    const actor = `user:${user.id}`;
+    // Zuerst das Tagebuch: Nur dort kann es scheitern (Konto voll), dann bleibt alles beim Gerät.
+    let diaryEntries: number;
+    try {
+      diaryEntries = diary.transfer(`device:${device}`, actor);
+    } catch (e) {
+      if (e instanceof DiaryFullError) return c.json({ error: "diary_full" }, 413);
+      throw e;
+    }
+    return c.json({ ...community.transferActor(device, actor), ...feedback.transferActor(device, actor), diary: diaryEntries });
   });
 
   /**

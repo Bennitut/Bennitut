@@ -172,6 +172,54 @@ export class FeedbackStore {
     };
   }
 
+  /**
+   * Beim Anmelden: Fotos, Sterne und Meldungen eines Geräts ohne Konto gehören danach dem Konto. Nichts doppelt: Hat
+   * das Konto dasselbe Rezept bzw. Foto schon bewertet oder dasselbe Rezept gemeldet, gilt die Fassung des Kontos (Sterne
+   * haben keinen Zeitpunkt, und eine Person bewertet bzw. meldet jedes Rezept einmal). Eigene Fotos bleiben auch danach
+   * ohne eigene Sterne. Liefert, wie viele Fotos, Sterne und Meldungen übernommen wurden.
+   */
+  transferActor(from: string, to: string): { photos: number; ratings: number; flags: number } {
+    const moved = { photos: 0, ratings: 0, flags: 0 };
+    if (from === to) return moved;
+    let changed = false;
+    const take = (ratings: Record<string, number>, allowed: boolean) => {
+      if (!(from in ratings)) return;
+      const stars = ratings[from]!;
+      delete ratings[from];
+      changed = true;
+      if (allowed && !(to in ratings)) {
+        ratings[to] = stars;
+        moved.ratings++;
+      }
+    };
+    for (const p of this.data.photos) {
+      if (p.authorId === from) {
+        p.authorId = to;
+        moved.photos++;
+        changed = true;
+      }
+      take(p.ratings, p.authorId !== to);
+      // Ein Foto des Geräts, das das Konto schon bewertet hatte, ist jetzt ein eigenes.
+      if (p.authorId === to && to in p.ratings) {
+        delete p.ratings[to];
+        changed = true;
+      }
+    }
+    for (const ratings of Object.values(this.data.recipeRatings)) take(ratings, true);
+    const flagged = new Set(this.data.flags.filter((f) => f.authorId === to).map((f) => f.recipeId));
+    this.data.flags = this.data.flags.filter((f) => {
+      if (f.authorId !== from) return true;
+      changed = true;
+      if (flagged.has(f.recipeId)) return false;
+      f.authorId = to;
+      flagged.add(f.recipeId);
+      moved.flags++;
+      return true;
+    });
+    if (changed) this.save();
+    return moved;
+  }
+
   /** Beim Löschen eines Kontos: eigene Fotos, vergebene Sterne und Meldungen entfernen. */
   removeActor(actor: string) {
     this.data.photos = this.data.photos.filter((p) => p.authorId !== actor);

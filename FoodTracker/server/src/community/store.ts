@@ -108,6 +108,34 @@ export class CommunityStore {
     };
   }
 
+  /**
+   * Beim Anmelden: Was ein Gerät ohne Konto geteilt und als Favorit markiert hat, gehört danach dem Konto – ein
+   * Favorit, den das Konto schon hat, zählt nicht doppelt. Liefert, wie viele Rezepte und Favoriten übernommen wurden.
+   */
+  transferActor(from: string, to: string): { recipes: number; likes: number } {
+    let recipes = 0;
+    let likes = 0;
+    let changed = false;
+    if (from === to) return { recipes, likes };
+    for (const r of this.recipes) {
+      if (r.authorId === from) {
+        r.authorId = to;
+        recipes++;
+        changed = true;
+      }
+      if (r.likedBy.includes(from)) {
+        r.likedBy = r.likedBy.filter((d) => d !== from);
+        changed = true;
+        if (!r.likedBy.includes(to)) {
+          r.likedBy.push(to);
+          likes++;
+        }
+      }
+    }
+    if (changed) this.save();
+    return { recipes, likes };
+  }
+
   /** Beim Löschen eines Kontos: geteilte Rezepte entfernen und Favoriten zurücknehmen. */
   removeActor(actor: string) {
     this.recipes = this.recipes.filter((r) => r.authorId !== actor);
