@@ -5,17 +5,52 @@ import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
 import { createApp } from "./app.js";
 import { mailerFromEnv } from "./mail/mailer.js";
 import { lanAddresses, startupMessage } from "./startInfo.js";
+import { openDatabase, type Db } from "./storage/db.js";
+import { importLegacyUsers } from "./storage/legacy.js";
+import { migrate } from "./storage/migrations.js";
 
 /** Kommagetrennte Liste aus einer Umgebungsvariable. */
 const list = (value: string | undefined) => (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 const port = Number(process.env.PORT ?? 3000);
+
+// Datenbank (storage/db.ts): mit DATABASE_URL Postgres, sonst die SQLite-Datei. Lieber gar nicht starten als ohne
+// Konten – die Meldung sagt, was zu tun ist (die Adresse selbst nie ausgeben, sie enthält das Passwort).
+const databaseUrl = process.env.DATABASE_URL?.trim() || undefined;
+let db: Db;
+try {
+  db = await openDatabase({ url: databaseUrl, file: process.env.DATABASE_FILE?.trim() || "data/foodtracker.db" });
+  await migrate(db);
+} catch (e) {
+  const reason = (e as { code?: string }).code ? `${(e as Error).message} (${(e as { code?: string }).code})` : (e as Error).message;
+  console.error(`\nDie Datenbank lässt sich nicht öffnen: ${reason}`);
+  if (databaseUrl) console.error("Stimmt DATABASE_URL in server/.env? Ohne DATABASE_URL nimmt der Server eine Datei auf diesem Rechner.");
+  console.error("");
+  process.exit(1);
+}
+
+// Einmaliger Umzug der Konten aus der JSON-Datei älterer Fassungen (storage/legacy.ts).
+const usersFile = process.env.USERS_FILE?.trim() || "data/users.json";
+try {
+  const moved = await importLegacyUsers(db, usersFile);
+  if (moved) {
+    const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+    console.log(
+      `Konten aus ${usersFile} in die Datenbank übernommen: ${n(moved.users, "Konto", "Konten")}, ` +
+        `${n(moved.sessions, "Anmeldung bleibt", "Anmeldungen bleiben")} gültig` +
+        `${moved.skipped ? ` (${n(moved.skipped, "Eintrag", "Einträge")} gab es schon oder war unlesbar)` : ""}. Die alte Datei ist gelöscht.`,
+    );
+  }
+} catch (e) {
+  console.error(`Konten aus ${usersFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+}
+
 const ai = new Ai(aiSettingsFromEnv());
 const mailer = mailerFromEnv();
 const app = createApp({
   communityFile: process.env.COMMUNITY_FILE ?? "data/community.json",
   feedbackFile: process.env.FEEDBACK_FILE ?? "data/feedback.json",
-  usersFile: process.env.USERS_FILE ?? "data/users.json",
+  db,
   overridesFile: process.env.OVERRIDES_FILE ?? "data/recipe-overrides.json",
   diaryDir: process.env.DIARY_DIR ?? "data/diary",
   auth: {
@@ -40,6 +75,7 @@ const server = serve({ fetch: app.fetch, port }, async () => {
       envFile: envFileLoaded ? ENV_FILE : null,
       platform: process.platform,
       mail: mailer !== null,
+      storage: db.description,
     }),
   );
   if (process.env.ALLOW_DEV_LOGIN === "1") console.log("\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN.");
@@ -50,3 +86,15 @@ server.on("error", (err: NodeJS.ErrnoException) => {
   console.error(`\nPort ${port} ist schon belegt – läuft der FoodTracker-Server schon in einem anderen Fenster? Das andere Fenster schließen und neu starten.\n`);
   process.exit(1);
 });
+
+// Beim Beenden (Strg+C, Fenster schließen, Hoster stoppt den Dienst) die Datenbank sauber schließen – laufende
+// Transaktionen werden noch fertig. Nach drei Sekunden auf jeden Fall beenden.
+let stopping = false;
+const stop = () => {
+  if (stopping) return;
+  stopping = true;
+  server.close();
+  setTimeout(() => process.exit(0), 3000).unref();
+  db.close().finally(() => process.exit(0));
+};
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, stop);

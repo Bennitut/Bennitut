@@ -19,6 +19,8 @@ import { corsMiddleware } from "./http/cors.js";
 import { RateLimiter, clientIp } from "./http/rateLimit.js";
 import { resetMail, type Mailer } from "./mail/mailer.js";
 import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetchPost.js";
+import { openSqlite, type Db } from "./storage/db.js";
+import { migrate } from "./storage/migrations.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
 const MediaType = z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -207,7 +209,7 @@ const EmailField = z.string().trim().max(254);
 export function createApp({
   communityFile,
   feedbackFile = null,
-  usersFile = null,
+  db = openSqlite(":memory:"),
   overridesFile = null,
   diaryDir = null,
   auth = NO_AUTH,
@@ -220,7 +222,11 @@ export function createApp({
 }: {
   communityFile: string | null;
   feedbackFile?: string | null;
-  usersFile?: string | null;
+  /**
+   * Datenbank für Konten und Sitzungen (storage/db.ts: SQLite-Datei oder Postgres); fehlende Migrationen führt der
+   * Server vor der ersten Anfrage aus. Ohne Angabe nur im Speicher (Tests).
+   */
+  db?: Db;
   overridesFile?: string | null;
   /** Ordner für die Sicherung der Ernährungshistorie (eine Datei pro Konto bzw. Gerät); null = nur im Speicher. */
   diaryDir?: string | null;
@@ -239,29 +245,29 @@ export function createApp({
 }) {
   const community = new CommunityStore(communityFile);
   const feedback = new FeedbackStore(feedbackFile);
-  const users = new UserStore(usersFile, auth.adminEmails.map((e) => e.toLowerCase()), passwordCost);
+  const users = new UserStore(db, auth.adminEmails.map((e) => e.toLowerCase()), passwordCost);
   const overrides = new OverrideStore(overridesFile);
   const diary = new DiaryStore(diaryDir);
   /** Katalog inklusive Änderungen der Admins. */
   const catalogRecipes = () => overrides.apply(RECIPES);
 
   const bearer = (c: Context) => c.req.header("Authorization")?.match(/^Bearer (.+)$/)?.[1];
-  const currentUser = (c: Context): User | undefined => {
+  const currentUser = async (c: Context): Promise<User | undefined> => {
     const token = bearer(c);
     return token ? users.userForToken(token) : undefined;
   };
   /** Wer handelt: angemeldetes Konto, sonst die anonyme Geräte-ID. */
-  const actorId = (c: Context) => {
-    const user = currentUser(c);
+  const actorId = async (c: Context) => {
+    const user = await currentUser(c);
     return user ? `user:${user.id}` : deviceId(c);
   };
-  const requireUser = (c: Context): User => {
-    const user = currentUser(c);
+  const requireUser = async (c: Context): Promise<User> => {
+    const user = await currentUser(c);
     if (!user) throw new AuthError("unauthorized");
     return user;
   };
-  const requireAdmin = (c: Context): User => {
-    const user = requireUser(c);
+  const requireAdmin = async (c: Context): Promise<User> => {
+    const user = await requireUser(c);
     if (user.role !== "admin") throw new AuthError("forbidden");
     return user;
   };
@@ -272,6 +278,13 @@ export function createApp({
    */
   const requireConsent = (c: Context) => requireAiConsent(c.req.header(AI_CONSENT_HEADER));
   const app = new Hono();
+  // Vor der ersten Anfrage den Aufbau der Datenbank auf den Stand bringen (index.ts macht das schon beim Start).
+  const ready = migrate(db);
+  ready.catch(() => undefined);
+  app.use("*", async (_c, next) => {
+    await ready;
+    await next();
+  });
 
   // Zuerst CORS, damit auch Vorab-Anfragen (OPTIONS) und Fehlerantworten im Browser ankommen.
   app.use("/api/*", corsMiddleware(corsOrigins));
@@ -377,12 +390,12 @@ export function createApp({
   });
 
   // Bewertungen, Fotos und Meldungen zu Rezepten (Katalog, eigene und Community).
-  app.get("/api/recipes/ratings", (c) => c.json(feedback.recipeRatings(actorId(c))));
+  app.get("/api/recipes/ratings", async (c) => c.json(feedback.recipeRatings(await actorId(c))));
 
-  app.get("/api/recipes/top-photos", (c) => c.json(feedback.topPhotos(actorId(c))));
+  app.get("/api/recipes/top-photos", async (c) => c.json(feedback.topPhotos(await actorId(c))));
 
-  app.get("/api/recipes/flags", (c) => {
-    requireAdmin(c);
+  app.get("/api/recipes/flags", async (c) => {
+    await requireAdmin(c);
     return c.json(feedback.flagSummary());
   });
 
@@ -404,37 +417,39 @@ export function createApp({
 
   app.post("/api/recipes/:id/rating", async (c) => {
     const { stars } = Stars.parse(await c.req.json());
-    return c.json(feedback.rateRecipe(actorId(c), RecipeIdParam.parse(c.req.param("id")), stars));
+    return c.json(feedback.rateRecipe(await actorId(c), RecipeIdParam.parse(c.req.param("id")), stars));
   });
 
-  app.get("/api/recipes/:id/photos", (c) => c.json(feedback.photos(RecipeIdParam.parse(c.req.param("id")), actorId(c))));
+  app.get("/api/recipes/:id/photos", async (c) => c.json(feedback.photos(RecipeIdParam.parse(c.req.param("id")), await actorId(c))));
 
   app.post("/api/recipes/:id/photos", async (c) => {
     const body = PhotoBody.parse(await c.req.json());
-    const photo = feedback.addPhoto(actorId(c), RecipeIdParam.parse(c.req.param("id")), currentUser(c)?.name ?? body.authorName, body.uri);
+    const user = await currentUser(c);
+    const actor = user ? `user:${user.id}` : deviceId(c);
+    const photo = feedback.addPhoto(actor, RecipeIdParam.parse(c.req.param("id")), user?.name ?? body.authorName, body.uri);
     return photo === "limit" ? c.json({ error: "photo_limit" }, 429) : c.json(photo, 201);
   });
 
   app.post("/api/photos/:id/rating", async (c) => {
     const { stars } = Stars.parse(await c.req.json());
-    const photo = feedback.ratePhoto(actorId(c), c.req.param("id"), stars);
+    const photo = feedback.ratePhoto(await actorId(c), c.req.param("id"), stars);
     return photo ? c.json(photo) : c.json({ error: "not_found" }, 404);
   });
 
-  app.delete("/api/photos/:id", (c) =>
-    feedback.removePhoto(actorId(c), c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
+  app.delete("/api/photos/:id", async (c) =>
+    feedback.removePhoto(await actorId(c), c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
   );
 
   app.post("/api/recipes/:id/flags", async (c) => {
     const body = z.object({ reason: z.enum(FLAG_REASONS), note: z.string().trim().max(500).default("") }).parse(await c.req.json());
-    feedback.flag(actorId(c), RecipeIdParam.parse(c.req.param("id")), body.reason, body.note);
+    feedback.flag(await actorId(c), RecipeIdParam.parse(c.req.param("id")), body.reason, body.note);
     return c.body(null, 204);
   });
 
   // Sicherung der Ernährungshistorie: Die App schickt Neues, Geändertes und Gelöschtes und bekommt, was sie noch nicht
   // kennt (siehe app/src/lib/diary.ts). Mit Konto gehört die Historie dem Konto, sonst der Geräte-ID.
   app.post("/api/diary/sync", async (c) => {
-    const user = currentUser(c);
+    const user = await currentUser(c);
     // Abgelaufene Sitzung: nicht still unter der Geräte-ID speichern, sondern melden – die App meldet dann ab.
     if (bearer(c) && !user) throw new AuthError("invalid_token");
     const owner = user ? `user:${user.id}` : `device:${deviceId(c)}`;
@@ -452,21 +467,21 @@ export function createApp({
   app.post("/api/auth/apple", async (c) => {
     const body = z.object({ identityToken: z.string().min(10).max(5000), fullName: z.string().trim().max(80).optional() }).parse(await c.req.json());
     const identity = await verifyAppleToken(body.identityToken, auth.appleAudiences);
-    const { token, user } = users.login({ provider: "apple", sub: identity.sub, email: identity.email, name: body.fullName ?? null });
+    const { token, user } = await users.login({ provider: "apple", sub: identity.sub, email: identity.email, name: body.fullName ?? null });
     return c.json({ token, user: me(user) });
   });
 
   app.post("/api/auth/google", async (c) => {
     const body = z.object({ idToken: z.string().min(10).max(5000) }).parse(await c.req.json());
     const identity = await verifyGoogleToken(body.idToken, auth.googleAudiences);
-    const { token, user } = users.login({ provider: "google", sub: identity.sub, email: identity.email, name: identity.name });
+    const { token, user } = await users.login({ provider: "google", sub: identity.sub, email: identity.email, name: identity.name });
     return c.json({ token, user: me(user) });
   });
 
   app.post("/api/auth/dev", async (c) => {
     if (!auth.allowDevLogin) return c.json({ error: "not_found" }, 404);
     const body = z.object({ name: z.string().trim().min(1).max(40), email: z.string().email().optional() }).parse(await c.req.json());
-    const { token, user } = users.login({ provider: "dev", sub: (body.email ?? body.name).toLowerCase(), email: body.email ?? null, name: body.name });
+    const { token, user } = await users.login({ provider: "dev", sub: (body.email ?? body.name).toLowerCase(), email: body.email ?? null, name: body.name });
     return c.json({ token, user: me(user) });
   });
 
@@ -516,7 +531,7 @@ export function createApp({
 
   /** Neues Passwort; andere Geräte werden abgemeldet, dieses bleibt angemeldet. */
   app.post("/api/auth/password", async (c) => {
-    const user = requireUser(c);
+    const user = await requireUser(c);
     const body = z.object({ currentPassword: PasswordField, newPassword: PasswordField }).parse(await c.req.json());
     const key = `user:${user.id}`;
     const wait = authLimits.failures.wait(key);
@@ -533,7 +548,7 @@ export function createApp({
     const email = normalizeEmail(body.email);
     const wait = authLimits.forgot.hit(clientIp(c, trustProxy)) || authLimits.forgot.hit(`email:${email}`);
     if (wait) return tooMany(c, wait);
-    const reset = users.createResetCode(email);
+    const reset = await users.createResetCode(email);
     if (reset) {
       // Im Hintergrund senden, damit die Antwort nicht länger dauert, wenn es das Konto gibt. Im Protokoll nur der
       // Fehlercode – SMTP-Meldungen enthalten oft die Adresse.
@@ -562,8 +577,8 @@ export function createApp({
    * Sicherung unter der Geräte-ID ist danach weg. Die App ruft das nach jeder Anmeldung einmal auf; ein zweiter Aufruf
    * findet nichts mehr. Wer die Geräte-ID kennt, könnte die Daten des Geräts auch sonst schon verwalten.
    */
-  app.post("/api/auth/claim-device", (c) => {
-    const user = requireUser(c);
+  app.post("/api/auth/claim-device", async (c) => {
+    const user = await requireUser(c);
     const device = deviceId(c);
     const actor = `user:${user.id}`;
     // Zuerst das Tagebuch: Nur dort kann es scheitern (Konto voll), dann bleibt alles beim Gerät.
@@ -582,7 +597,7 @@ export function createApp({
    * Favoriten, Fotos, Sterne und Meldungen. Konten mit Passwort bestätigen mit dem Passwort.
    */
   app.delete("/api/auth/me", async (c) => {
-    const user = requireUser(c);
+    const user = await requireUser(c);
     const body = z.object({ password: PasswordField.optional() }).parse(await c.req.json().catch(() => ({})));
     if (user.passwordHash) {
       const key = `user:${user.id}`;
@@ -595,13 +610,13 @@ export function createApp({
     feedback.removeActor(actor);
     diary.remove(actor);
     if (user.role === "admin") overrides.anonymize(user.name);
-    users.delete(user.id);
+    await users.delete(user.id);
     return c.body(null, 204);
   });
 
   /** „Meine Daten exportieren“ (Art. 15 und 20 DSGVO): alles, was der Server zum Konto speichert, als JSON. */
-  app.get("/api/auth/export", (c) => {
-    const user = requireUser(c);
+  app.get("/api/auth/export", async (c) => {
+    const user = await requireUser(c);
     const actor = `user:${user.id}`;
     const exportedAt = new Date().toISOString();
     c.header("Content-Disposition", `attachment; filename="foodtracker-konto-${exportedAt.slice(0, 10)}.json"`);
@@ -628,36 +643,35 @@ export function createApp({
     }),
   );
 
-  app.get("/api/auth/me", (c) => c.json(me(requireUser(c))));
+  app.get("/api/auth/me", async (c) => c.json(me(await requireUser(c))));
 
   app.patch("/api/auth/me", async (c) => {
-    const user = requireUser(c);
+    const user = await requireUser(c);
     const { name } = z.object({ name: z.string().trim().min(1).max(40) }).parse(await c.req.json());
-    return c.json(me(users.rename(user.id, name)!));
+    return c.json(me((await users.rename(user.id, name))!));
   });
 
-  app.post("/api/auth/logout", (c) => {
+  app.post("/api/auth/logout", async (c) => {
     const token = bearer(c);
-    if (token) users.logout(token);
+    if (token) await users.logout(token);
     return c.body(null, 204);
   });
 
   /** Nutzerverzeichnis für angemeldete Nutzer:innen – ohne E-Mail-Adressen. */
-  app.get("/api/users", (c) => {
-    requireUser(c);
+  app.get("/api/users", async (c) => {
+    await requireUser(c);
     return c.json(
-      users
-        .list(c.req.query("q") ?? "")
+      (await users.list(c.req.query("q") ?? ""))
         .filter((u) => !u.blocked)
         .map((u) => ({ ...UserStore.toPublic(u), photos: feedback.photoCount(`user:${u.id}`), recipes: community.count(`user:${u.id}`) })),
     );
   });
 
   // Admin-Bereich: Nutzer, Meldungen, Fotos, Community und Katalogrezepte verwalten.
-  app.get("/api/admin/users", (c) => {
-    requireAdmin(c);
+  app.get("/api/admin/users", async (c) => {
+    await requireAdmin(c);
     return c.json(
-      users.list(c.req.query("q") ?? "").map((u) => ({
+      (await users.list(c.req.query("q") ?? "")).map((u) => ({
         ...me(u),
         blocked: u.blocked,
         lastLoginAt: u.lastLoginAt,
@@ -668,36 +682,36 @@ export function createApp({
   });
 
   app.patch("/api/admin/users/:id", async (c) => {
-    const admin = requireAdmin(c);
+    const admin = await requireAdmin(c);
     const patch = z.object({ role: z.enum(ROLES).optional(), blocked: z.boolean().optional() }).parse(await c.req.json());
     if (c.req.param("id") === admin.id && patch.blocked) return c.json({ error: "cannot_block_self" }, 400);
-    const result = users.update(c.req.param("id"), patch);
+    const result = await users.update(c.req.param("id"), patch);
     if (result === "last_admin") return c.json({ error: "last_admin" }, 400);
     return result ? c.json(me(result)) : c.json({ error: "not_found" }, 404);
   });
 
-  app.delete("/api/admin/flags/:recipeId", (c) => {
-    requireAdmin(c);
+  app.delete("/api/admin/flags/:recipeId", async (c) => {
+    await requireAdmin(c);
     return c.json({ resolved: feedback.resolveFlags(c.req.param("recipeId")) });
   });
 
-  app.get("/api/admin/photos", (c) => {
-    requireAdmin(c);
-    return c.json(feedback.recentPhotos(actorId(c)));
+  app.get("/api/admin/photos", async (c) => {
+    await requireAdmin(c);
+    return c.json(feedback.recentPhotos(await actorId(c)));
   });
 
-  app.delete("/api/admin/photos/:id", (c) => {
-    requireAdmin(c);
+  app.delete("/api/admin/photos/:id", async (c) => {
+    await requireAdmin(c);
     return feedback.removePhotoAsAdmin(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
   });
 
-  app.delete("/api/admin/community/:id", (c) => {
-    requireAdmin(c);
+  app.delete("/api/admin/community/:id", async (c) => {
+    await requireAdmin(c);
     return community.removeAsAdmin(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
   });
 
   app.put("/api/admin/recipes/:id", async (c) => {
-    const admin = requireAdmin(c);
+    const admin = await requireAdmin(c);
     const id = c.req.param("id");
     if (!RECIPES.some((r) => r.id === id)) return c.json({ error: "not_found" }, 404);
     const patch = RecipeBody.pick({ name: true, steps: true, otherIngredients: true, translations: true, mealTypes: true, cookMinutes: true, ingredients: true, media: true })
@@ -707,28 +721,29 @@ export function createApp({
     return c.json(overrides.set(id, patch as Parameters<typeof overrides.set>[1], admin.name));
   });
 
-  app.delete("/api/admin/recipes/:id", (c) => {
-    requireAdmin(c);
+  app.delete("/api/admin/recipes/:id", async (c) => {
+    await requireAdmin(c);
     return overrides.remove(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404);
   });
 
-  app.get("/api/community/recipes", (c) => {
+  app.get("/api/community/recipes", async (c) => {
     const sort = c.req.query("sort") === "new" ? "new" : "popular";
-    return c.json(community.list(actorId(c), { sort, query: c.req.query("q") ?? "" }));
+    return c.json(community.list(await actorId(c), { sort, query: c.req.query("q") ?? "" }));
   });
 
   app.post("/api/community/recipes", async (c) => {
     const body = z.object({ authorName: z.string().trim().min(1).max(40), recipe: RecipeBody }).parse(await c.req.json());
-    return c.json(community.publish(actorId(c), currentUser(c)?.name ?? body.authorName, asRecipe(body.recipe)), 201);
+    const user = await currentUser(c);
+    return c.json(community.publish(user ? `user:${user.id}` : deviceId(c), user?.name ?? body.authorName, asRecipe(body.recipe)), 201);
   });
 
-  app.post("/api/community/recipes/:id/like", (c) => {
-    const view = community.toggleLike(actorId(c), c.req.param("id"));
+  app.post("/api/community/recipes/:id/like", async (c) => {
+    const view = community.toggleLike(await actorId(c), c.req.param("id"));
     return view ? c.json(view) : c.json({ error: "not_found" }, 404);
   });
 
-  app.delete("/api/community/recipes/:id", (c) =>
-    community.remove(actorId(c), c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
+  app.delete("/api/community/recipes/:id", async (c) =>
+    community.remove(await actorId(c), c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not_found" }, 404),
   );
 
   app.get("/api/delivery/providers", (c) =>

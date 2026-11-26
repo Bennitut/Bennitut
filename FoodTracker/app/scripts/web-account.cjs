@@ -55,12 +55,28 @@ function serveDist() {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
 }
 
+/** Wie viele Konten mit dieser Adresse in der Datenbank des Test-Servers stehen (zweite Verbindung, nur lesend). */
+function accountsWith(file, email) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    return Number(db.prepare("SELECT COUNT(*) AS n FROM users WHERE email = ?").get(email).n);
+  } finally {
+    db.close();
+  }
+}
+
 async function startServer(dataDir) {
   const child = spawn(process.execPath, [path.join(SERVER, "node_modules/tsx/dist/cli.mjs"), "src/index.ts"], {
     cwd: SERVER,
     env: {
       ...process.env,
       PORT: String(PORT),
+      // Eigene, leere Datenbank – nie die echte (server/data/foodtracker.db oder DATABASE_URL aus server/.env).
+      DATABASE_FILE: path.join(dataDir, "foodtracker.db"),
+      DATABASE_URL: "",
+      // Auch die Datei für den Umzug alter Konten im Temp-Ordner – sonst übernähme (und löschte) der Test-Server eine
+      // echte server/data/users.json.
       USERS_FILE: path.join(dataDir, "users.json"),
       COMMUNITY_FILE: path.join(dataDir, "community.json"),
       FEEDBACK_FILE: path.join(dataDir, "feedback.json"),
@@ -249,8 +265,7 @@ async function main() {
     await field("Zum Bestätigen: dein Passwort").fill(second);
     await button("Konto endgültig löschen").click();
     await see("Dein Konto ist gelöscht.", "Konto löschen");
-    const users = JSON.parse(fs.readFileSync(path.join(dataDir, "users.json"), "utf8"));
-    if (JSON.stringify(users).includes(email)) failures.push("Konto steht nach dem Löschen noch auf dem Server");
+    if (accountsWith(path.join(dataDir, "foodtracker.db"), email) !== 0) failures.push("Konto steht nach dem Löschen noch auf dem Server");
     await button("Anmelden oder registrieren").click();
     await field("E-Mail").fill(email);
     await field("Passwort").fill(second);

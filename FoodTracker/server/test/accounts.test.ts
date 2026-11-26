@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { createApp, defaultAuthLimits, type AuthLimits } from "../src/app.js";
 import { hashPassword, needsRehash, passwordProblem, verifyPassword } from "../src/auth/password.js";
 import { UserStore } from "../src/auth/users.js";
 import { RateLimiter } from "../src/http/rateLimit.js";
+import { openSqlite, type Db } from "../src/storage/db.js";
 import type { Mailer } from "../src/mail/mailer.js";
 import { resetMail } from "../src/mail/mailer.js";
 
@@ -26,10 +27,10 @@ interface Sent {
   text: string;
 }
 
-function setup(options: { mailer?: Mailer | null; limits?: Partial<AuthLimits>; usersFile?: string | null } = {}) {
+function setup(options: { mailer?: Mailer | null; limits?: Partial<AuthLimits>; db?: Db } = {}) {
   const app = createApp({
     communityFile: null,
-    usersFile: options.usersFile ?? null,
+    db: options.db,
     auth: { appleAudiences: [], googleAudiences: [], adminEmails: ["chefin@example.com"], allowDevLogin: true },
     ai: noAi,
     mailer: options.mailer ?? null,
@@ -178,14 +179,16 @@ describe("Registrieren und anmelden mit E-Mail und Passwort", () => {
     expect((await register("c@example.com", "Gulasch-Suppe!", undefined, "198.51.100.8")).status).toBe(201);
   });
 
-  it("speichert Konten in der Datei nur mit Hash", async () => {
-    const usersFile = join(tmp, "users.json");
-    const first = setup({ usersFile });
+  it("speichert Konten dauerhaft in der Datenbank, Passwörter nur als Hash", async () => {
+    const file = join(tmp, "konten.db");
+    const first = setup({ db: openSqlite(file) });
     await first.register("datei@example.com", "Topfenstrudel 42", "Dora");
-    const raw = readFileSync(usersFile, "utf8");
-    expect(raw).toContain("scrypt$");
-    expect(raw).not.toContain("Topfenstrudel");
-    const second = setup({ usersFile });
+    const check = openSqlite(file);
+    expect((await check.get<{ password_hash: string }>("SELECT password_hash FROM users WHERE email = ?", ["datei@example.com"]))?.password_hash).toMatch(/^scrypt\$/);
+    await check.close();
+    for (const f of [file, `${file}-wal`]) if (existsSync(f)) expect(readFileSync(f).toString("latin1")).not.toContain("Topfenstrudel");
+    // Ein neu gestarteter Server (neue Verbindung zur selben Datei) kennt das Konto.
+    const second = setup({ db: openSqlite(file) });
     const res = await second.login("datei@example.com", "Topfenstrudel 42");
     expect(res.status).toBe(200);
     expect(((await res.json()) as { user: { name: string } }).user.name).toBe("Dora");
@@ -365,13 +368,14 @@ describe("Konto löschen und Daten exportieren", () => {
     expect((await call("GET", "/api/auth/me", undefined, { token })).status).toBe(401);
   });
 
-  it("räumt auch die Datei mit den Konten auf", async () => {
-    const usersFile = join(tmp, "users-loeschen.json");
-    const { call, register, tokenOf } = setup({ usersFile });
+  it("löscht das Konto samt Sitzungen auch aus der Datenbank", async () => {
+    const db = openSqlite(join(tmp, "konten-loeschen.db"));
+    const { call, register, tokenOf } = setup({ db });
     const token = await tokenOf(await register("raus@example.com", "Palatschinken!"));
-    expect(readFileSync(usersFile, "utf8")).toContain("raus@example.com");
+    expect(await new UserStore(db).list()).toHaveLength(1);
     await call("DELETE", "/api/auth/me", { password: "Palatschinken!" }, { token });
-    expect(readFileSync(usersFile, "utf8")).not.toContain("raus@example.com");
-    expect(new UserStore(usersFile).list()).toHaveLength(0);
+    expect(await new UserStore(db).list()).toHaveLength(0);
+    expect(await db.all("SELECT * FROM sessions")).toEqual([]);
+    expect(await db.all("SELECT * FROM users WHERE email = ?", ["raus@example.com"])).toEqual([]);
   });
 });

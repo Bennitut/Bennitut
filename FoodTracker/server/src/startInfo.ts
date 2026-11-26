@@ -41,6 +41,8 @@ export function startupMessage(input: {
   platform: NodeJS.Platform;
   /** Ob ein Mail-Dienst (SMTP_*) eingerichtet ist – nur dann gibt es „Passwort vergessen?“. */
   mail?: boolean;
+  /** Wo Konten und Sitzungen liegen (Db.description), z. B. „SQLite-Datei data/foodtracker.db“. */
+  storage?: string;
 }): string {
   const { port, addresses } = input;
   const lines = [
@@ -58,6 +60,7 @@ export function startupMessage(input: {
             ? "  E-Mail:              eingerichtet – „Passwort vergessen?“ schickt einen Code."
             : "  E-Mail:              nicht eingerichtet – „Passwort vergessen?“ ist ausgeblendet (SMTP_* in server/.env).",
         ]),
+    ...(input.storage ? [`  Daten:               ${input.storage}`] : []),
     `  Einstellungen:       ${input.envFile ?? "keine server/.env (Vorlage: server/.env.example)"}`,
   ];
   if (input.platform === "win32") {

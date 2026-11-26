@@ -25,4 +25,10 @@ describe("Startmeldung des Servers", () => {
     expect(text).toContain("http://192.168.1.23:3000/api/health");
     expect(startupMessage({ port: 3000, addresses: [], ai: { provider: null, model: null, state: "not_configured" }, ollama: OLLAMA, envFile: null, platform: "linux" })).not.toContain("Firewall");
   });
+
+  it("nennt, wo die Daten liegen", () => {
+    const base = { port: 3000, addresses: [], ai: { provider: null, model: null, state: "not_configured" } as const, ollama: OLLAMA, envFile: null, platform: "linux" as const };
+    expect(startupMessage({ ...base, storage: "SQLite-Datei data/foodtracker.db" })).toContain("Daten:               SQLite-Datei data/foodtracker.db");
+    expect(startupMessage(base)).not.toContain("Daten:");
+  });
 });
