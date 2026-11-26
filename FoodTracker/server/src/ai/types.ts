@@ -34,9 +34,10 @@ export class AnalysisError extends Error {
 /**
  * Keine KI nutzbar (in der App errors.ai_<code>):
  * not_configured – weder Claude-Schlüssel noch erreichbares Ollama; model_missing – Ollama läuft, das Modell fehlt;
- * unavailable – die KI ist ausgefallen oder lehnt ab; timeout – die Antwort hat zu lange gedauert.
+ * unavailable – die KI ist ausgefallen oder lehnt ab; timeout – die Antwort hat zu lange gedauert;
+ * consent_required – die Anfrage nennt keine Einwilligung in die KI-Funktionen (ai/consent.ts).
  */
-export type AiErrorCode = "not_configured" | "model_missing" | "unavailable" | "timeout";
+export type AiErrorCode = "not_configured" | "model_missing" | "unavailable" | "timeout" | "consent_required";
 
 export class AiError extends Error {
   constructor(
@@ -48,7 +49,10 @@ export class AiError extends Error {
   }
 }
 
-export const AI_ERROR_STATUS = { not_configured: 503, model_missing: 503, unavailable: 503, timeout: 504 } as const satisfies Record<
-  AiErrorCode,
-  number
->;
+export const AI_ERROR_STATUS = {
+  not_configured: 503,
+  model_missing: 503,
+  unavailable: 503,
+  timeout: 504,
+  consent_required: 403,
+} as const satisfies Record<AiErrorCode, number>;

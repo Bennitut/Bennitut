@@ -47,7 +47,8 @@ export function corsMiddleware(extraOrigins: readonly string[] = []) {
   return cors({
     origin: (origin) => (isAllowedOrigin(origin, extra) ? origin : null),
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Device-Id"],
+    // X-AI-Consent: Einwilligung in die KI-Funktionen (ai/consent.ts).
+    allowHeaders: ["Content-Type", "Authorization", "X-Device-Id", "X-AI-Consent"],
     maxAge: 600,
   });
 }

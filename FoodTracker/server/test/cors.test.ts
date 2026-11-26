@@ -71,7 +71,7 @@ describe("CORS-Header", () => {
     expect(res.status).toBe(204);
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("http://192.168.1.20:8081");
     expect(res.headers.get("Access-Control-Allow-Methods")).toContain("POST");
-    expect(res.headers.get("Access-Control-Allow-Headers")?.toLowerCase()).toBe("content-type,authorization,x-device-id");
+    expect(res.headers.get("Access-Control-Allow-Headers")?.toLowerCase()).toBe("content-type,authorization,x-device-id,x-ai-consent");
   });
 
   it("gibt fremden Websites keine Erlaubnis", async () => {
@@ -85,7 +85,11 @@ describe("CORS-Header", () => {
     const invalid = await app.request("/api/plan", { method: "POST", headers, body: JSON.stringify({ startDate: "morgen" }) });
     expect(invalid.status).toBe(400);
     expect(invalid.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:8081");
-    const noKi = await app.request("/api/recipes/translate", { method: "POST", headers, body: JSON.stringify({ text: { name: "Suppe" }, targetLanguage: "en" }) });
+    const noKi = await app.request("/api/recipes/translate", {
+      method: "POST",
+      headers: { ...headers, "X-AI-Consent": "1" },
+      body: JSON.stringify({ text: { name: "Suppe" }, targetLanguage: "en" }),
+    });
     expect(noKi.status).toBe(503);
     expect(noKi.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:8081");
     expect(await noKi.json()).toEqual({ error: "ai_not_configured" });

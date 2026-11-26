@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
+import { AI_CONSENT_HEADER, requireAiConsent } from "./ai/consent.js";
 import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
 import { analyzeMealPhoto, analyzeReceipt, generateRecipes, improveRecipe, importRecipe, translateRecipe } from "./ai/tasks.js";
 import { AI_ERROR_STATUS, AiError, AnalysisError } from "./ai/types.js";
@@ -265,6 +266,11 @@ export function createApp({
     return user;
   };
   const me = (user: User) => ({ id: user.id, name: user.name, email: user.email, role: user.role, provider: user.provider, createdAt: user.createdAt });
+  /**
+   * Vor jeder KI-Anfrage: Die App nennt im Header die Fassung der Einwilligung, der zugestimmt wurde (ai/consent.ts).
+   * Erst nach dem Prüfen der Eingaben, damit Fehler in der Anfrage wie bisher als 400 bzw. 422 ankommen.
+   */
+  const requireConsent = (c: Context) => requireAiConsent(c.req.header(AI_CONSENT_HEADER));
   const app = new Hono();
 
   // Zuerst CORS, damit auch Vorab-Anfragen (OPTIONS) und Fehlerantworten im Browser ankommen.
@@ -311,11 +317,13 @@ export function createApp({
 
   app.post("/api/analyze/meal", async (c) => {
     const body = ImageBody.parse(await c.req.json());
+    requireConsent(c);
     return c.json(await analyzeMealPhoto(ai, { data: body.imageBase64, mediaType: body.mediaType }, body.language));
   });
 
   app.post("/api/analyze/receipt", async (c) => {
     const body = ImageBody.parse(await c.req.json());
+    requireConsent(c);
     const receipt = await analyzeReceipt(ai, { data: body.imageBase64, mediaType: body.mediaType }, body.language);
     const pantry = receipt.items.flatMap((i) =>
       i.isFood && i.ingredientId ? [{ ingredientId: i.ingredientId, amount: i.quantity }] : [],
@@ -325,6 +333,8 @@ export function createApp({
 
   app.post("/api/plan", async (c) => {
     const { preferences, language, recipes, startDate, ...request } = PlanBody.parse(await c.req.json());
+    // Nur Wünsche gehen an die KI; ohne Wünsche plant der Server wie die App selbst.
+    if (preferences) requireConsent(c);
     const extraRecipes = preferences ? await generateRecipes(ai, preferences, 8, language) : [];
     const plan = planMonth({
       request,
@@ -349,7 +359,8 @@ export function createApp({
   app.post("/api/recipes/import", async (c) => {
     const body = ImportBody.parse(await c.req.json());
     if (body.url && !detectPlatform(body.url)) throw new SocialFetchError("unsupported_url");
-    // Ohne KI gleich abbrechen, bevor der Beitrag geladen wird.
+    // Ohne Einwilligung bzw. ohne KI gleich abbrechen, bevor der Beitrag geladen wird.
+    requireConsent(c);
     await ai.require();
     const post = body.url ? await fetchSocialPost(body.url) : null;
     if (post && !post.caption && !post.thumbnail && !body.caption && body.frames.length === 0) {
@@ -361,6 +372,7 @@ export function createApp({
 
   app.post("/api/recipes/translate", async (c) => {
     const body = z.object({ text: RecipeTextBody, targetLanguage: z.string().min(2).max(10) }).parse(await c.req.json());
+    requireConsent(c);
     return c.json(await translateRecipe(ai, body.text, body.targetLanguage));
   });
 
@@ -386,6 +398,7 @@ export function createApp({
         language: Language,
       })
       .parse(await c.req.json());
+    requireConsent(c);
     return c.json(await improveRecipe(ai, body));
   });
 
