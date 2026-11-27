@@ -113,6 +113,28 @@ const ready = async (open: () => Db) => {
   return db;
 };
 
+describe("Kennung der Datenbank beim Abgleich des Tagebuchs (/api/diary/sync)", () => {
+  it("nennt sie in jeder Antwort; mit einer anderen übernimmt der Server nichts und sagt reset", async () => {
+    const device = "device-kennung1";
+    const first = (await (await sync({ since: 0, changes: [entry("k1", "2026-11-27T08:00:00.000Z")] }, device)).json()) as SyncBody & { database: string };
+    expect(first.database).toMatch(/^[0-9a-f-]{36}$/);
+    expect(first.rev).toBe(1);
+    // Dieselbe Kennung: wie bisher.
+    const same = (await (await sync({ database: first.database, since: first.rev, changes: [entry("k2", "2026-11-27T09:00:00.000Z")] }, device)).json()) as SyncBody & { database: string };
+    expect(same).toMatchObject({ database: first.database, rev: 2, changes: [], more: false });
+    expect(same).not.toHaveProperty("reset");
+    // Eine andere Kennung (die App kennt eine andere Datenbank): nichts übernehmen, die App gleicht von vorn ab.
+    const other = await sync({ database: "11111111-2222-4333-8444-555555555555", since: 7, changes: [entry("k3", "2026-11-27T10:00:00.000Z")] }, device);
+    expect(other.status).toBe(200);
+    expect(await other.json()).toEqual({ owner: `device:${device}`, database: first.database, reset: true, rev: 0, changes: [], more: false });
+    const all = (await (await sync({ since: 0, changes: [] }, device)).json()) as SyncBody;
+    expect(all.changes.map((r) => r.id).sort()).toEqual(["k1", "k2"]);
+    // Ältere Apps schicken keine Kennung; zu lange lehnt der Server ab.
+    expect((await sync({ database: "x".repeat(101), since: 0, changes: [] }, device)).status).toBe(400);
+    expect((await sync({ database: "", since: 0, changes: [] }, device)).status).toBe(400);
+  });
+});
+
 describe.each(BACKENDS)("DiaryStore mit %s", (_name, open) => {
   it("liefert in Seiten und schickt bei älteren Fassungen die eigene zurück", async () => {
     const store = new DiaryStore(await ready(open), 3);
@@ -139,7 +161,20 @@ describe.each(BACKENDS)("DiaryStore mit %s", (_name, open) => {
     expect(await store.count("user:1")).toBe(6);
     // Dieselbe Fassung noch einmal ändert nichts und kommt nicht zurück.
     const same = await store.sync("user:1", tie.rev, [records[2] as DiaryRecord]);
-    expect(same).toEqual({ rev: 8, changes: [], more: false });
+    expect(same).toEqual({ rev: 8, changes: [], more: false, database: expect.any(String) });
+  });
+
+  it("übernimmt mit der Kennung einer anderen Datenbank nichts und sagt reset", async () => {
+    const db = await ready(open);
+    const store = new DiaryStore(db);
+    const first = await store.sync("user:1", 0, [entry("r1", "2026-11-27T08:00:00.000Z") as DiaryRecord]);
+    expect(first.database).toBe(await new SyncStore(db).databaseId());
+    expect(await ready(open).then((other) => new SyncStore(other).databaseId())).not.toBe(first.database);
+    const reset = await store.sync("user:1", first.rev, [entry("r2", "2026-11-27T09:00:00.000Z") as DiaryRecord], "eine-andere-datenbank");
+    expect(reset).toEqual({ rev: 0, changes: [], more: false, database: first.database, reset: true });
+    expect(await store.count("user:1")).toBe(1);
+    const again = await store.sync("user:1", first.rev, [entry("r2", "2026-11-27T09:00:00.000Z") as DiaryRecord], first.database);
+    expect(again).toEqual({ rev: 2, changes: [], more: false, database: first.database });
   });
 
   it("begrenzt die Zahl der Einträge pro Besitzer – ohne halbe Änderungen", async () => {
@@ -209,6 +244,25 @@ describe("DiaryStore mit SQLite-Datei", () => {
     expect(again.changes.map((r) => r.id)).toEqual(["f1"]);
     expect(again.rev).toBe(1);
     await second.close();
+  });
+
+  it("behält die Kennung der Datenbank nach einem Neustart – eine neue Datenbank hat eine andere", async () => {
+    const file = join(dir, "kennung.db");
+    const first = openSqlite(file);
+    await migrate(first);
+    const id = (await new DiaryStore(first).sync("device:kennung", 0, [])).database;
+    // Gleichzeitige erste Abfragen legen nur eine Kennung an.
+    const store = new SyncStore(first);
+    expect(new Set(await Promise.all([store.databaseId(), new SyncStore(first).databaseId(), store.databaseId()]))).toEqual(new Set([id]));
+    await first.close();
+    const second = openSqlite(file);
+    await migrate(second);
+    expect((await new DiaryStore(second).sync("device:kennung", 0, [])).database).toBe(id);
+    await second.close();
+    const fresh = openSqlite(join(dir, "kennung-neu.db"));
+    await migrate(fresh);
+    expect(await new SyncStore(fresh).databaseId()).not.toBe(id);
+    await fresh.close();
   });
 
   it("vergibt bei gleichzeitigen Abgleichen jede Revision genau einmal", async () => {

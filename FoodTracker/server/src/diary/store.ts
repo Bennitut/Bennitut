@@ -25,6 +25,13 @@ export interface DiarySyncResult {
   rev: number;
   changes: DiaryRecord[];
   more: boolean;
+  /** Kennung der Datenbank (storage/identity.ts) – die App merkt sie sich mit `rev`. */
+  database: string;
+  /**
+   * true: Die App kannte eine andere Datenbank (neuer Server, neue Adresse). Nichts wurde übernommen, `rev` und
+   * `changes` gelten nicht – die App gleicht von vorn ab (`since` 0, alles hoch).
+   */
+  reset?: true;
 }
 
 /** Art in der Tabelle für den Abgleich (storage/sync.ts). */
@@ -65,11 +72,14 @@ export class DiaryStore {
   /**
    * Übernimmt `changes` (was neuer ist) und liefert, was seit `since` dazugekommen ist – ohne das gerade
    * Übernommene, dafür mit der Fassung des Servers, wo die geschickte älter war. Wirft DiaryFullError, ohne etwas zu
-   * ändern, wenn der Besitzer zu viele Einträge hätte.
+   * ändern, wenn der Besitzer zu viele Einträge hätte. `database`: Kennung der Datenbank, mit der die App zuletzt
+   * abgeglichen hat (ältere Apps schicken keine) – passt sie nicht, ändert sich nichts und die Antwort sagt `reset`.
    */
-  async sync(owner: string, since: number, changes: readonly DiaryRecord[]): Promise<DiarySyncResult> {
+  async sync(owner: string, since: number, changes: readonly DiaryRecord[], database?: string): Promise<DiarySyncResult> {
+    const id = await this.store.databaseId();
+    if (database !== undefined && database !== id) return { rev: 0, changes: [], more: false, database: id, reset: true };
     const result = await this.store.sync(this.kind, owner, since, changes.map(toSync));
-    return { ...result, changes: result.changes.map(fromSync) };
+    return { ...result, changes: result.changes.map(fromSync), database: id };
   }
 
   /**

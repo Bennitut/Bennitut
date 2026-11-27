@@ -23,7 +23,7 @@ import { openSqlite, type Db } from "./storage/db.js";
 import { MemoryImageStore, isImageKey, type ImageStore } from "./storage/images.js";
 import { migrate } from "./storage/migrations.js";
 import { SyncFullError, SyncStore } from "./storage/sync.js";
-import { IsoTime, UserDataSyncBody, exportUserData, removeUserData, syncUserData } from "./sync/userData.js";
+import { DatabaseIdField, IsoTime, UserDataSyncBody, exportUserData, removeUserData, syncUserData } from "./sync/userData.js";
 import { ALLERGENS, CUISINES, FOOD_RULES, type Recipe } from "./types.js";
 
 const MediaType = z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -156,6 +156,8 @@ const DiaryEntryBody = z.object({
   source: z.enum(["foto", "plan", "manuell"]),
 });
 const DiarySyncBody = z.object({
+  /** Kennung der Datenbank, mit der die App zuletzt abgeglichen hat (storage/identity.ts). */
+  database: DatabaseIdField,
   // Höchstens die größte Revision, die Postgres speichern kann (INTEGER, storage/sync.ts).
   since: z.number().int().min(0).max(2_147_483_647).default(0),
   changes: z
@@ -471,7 +473,7 @@ export function createApp({
     const body = DiarySyncBody.parse(await c.req.json());
     const changes = body.changes.map((r) => ({ id: r.id, updatedAt: r.updatedAt, entry: r.entry ? { ...r.entry, id: r.id, updatedAt: r.updatedAt } : null }));
     try {
-      return c.json({ owner, ...(await diary.sync(owner, body.since, changes)) });
+      return c.json({ owner, ...(await diary.sync(owner, body.since, changes, body.database)) });
     } catch (e) {
       if (e instanceof DiaryFullError) return c.json({ error: "diary_full" }, 413);
       throw e;

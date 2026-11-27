@@ -162,6 +162,21 @@ describe("Abgleich von Einstellungen, Plan und Vorrat (/api/sync)", () => {
     expect(await bad({ pantry: one("reis@2026-11-27", null), settings: one("settings", { onboarded: true, neuesFeld: 1 }) })).toBe(200);
   });
 
+  it("nennt die Kennung der Datenbank; mit einer anderen übernimmt der Server nichts und sagt reset", async () => {
+    const { token } = await devLogin("Umzug");
+    const first = await sync({ kinds: { pantry: { since: 0, changes: [{ id: "reis@2026-11-27", updatedAt: T(1), data: { amount: 500 } }] } } }, token);
+    expect(first.database).toBe(await store.databaseId());
+    expect(first).not.toHaveProperty("reset");
+    const pantry = { since: first.kinds.pantry!.rev, changes: [{ id: "milch@2026-11-27", updatedAt: T(2), data: { amount: 1000 } }] };
+    const reset = await sync({ database: "11111111-2222-4333-8444-555555555555", kinds: { pantry } }, token);
+    expect(reset).toEqual({ owner: first.owner, database: first.database, reset: true, kinds: {} });
+    expect(ids((await sync(nothingSince(), token)).kinds.pantry?.changes)).toEqual(["reis@2026-11-27"]);
+    // Mit der richtigen Kennung wie bisher.
+    const same = await sync({ database: first.database, kinds: { pantry } }, token);
+    expect(same.kinds.pantry).toEqual({ rev: 2, changes: [], more: false });
+    expect((await call({ database: "x".repeat(101), kinds: {} }, token)).status).toBe(400);
+  });
+
   it("gehört zu „Meine Daten exportieren“ und verschwindet mit dem Konto", async () => {
     const { token, user } = await devLogin("Export");
     await sync(

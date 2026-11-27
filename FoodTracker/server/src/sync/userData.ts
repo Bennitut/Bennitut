@@ -214,8 +214,15 @@ const changeFor = (kind: UserDataKind) =>
 
 const kindBody = (kind: UserDataKind) => z.object({ since: Rev, changes: z.array(changeFor(kind)).max(5000).default([]) });
 
+/**
+ * Kennung der Datenbank, mit der die App zuletzt abgeglichen hat (storage/identity.ts) – beim Tagebuch und hier. Ältere
+ * Apps schicken keine.
+ */
+export const DatabaseIdField = z.string().min(1).max(100).optional();
+
 /** Anfrage an POST /api/sync: je Art, ab welcher Revision die App alles kennt, und was sie geändert hat. */
 export const UserDataSyncBody = z.object({
+  database: DatabaseIdField,
   kinds: z
     .object({
       settings: kindBody(USER_DATA.settings).optional(),
@@ -233,6 +240,13 @@ export type UserDataSyncRequest = z.infer<typeof UserDataSyncBody>;
 export interface UserDataSyncResponse {
   /** „user:<Konto-ID>“ */
   owner: string;
+  /** Kennung der Datenbank – die App merkt sie sich mit den Revisionen. */
+  database: string;
+  /**
+   * true: Die App kannte eine andere Datenbank (neuer Server, neue Adresse) – nichts wurde übernommen, `kinds` ist leer;
+   * die App gleicht alle Arten von vorn ab.
+   */
+  reset?: true;
   kinds: Partial<Record<UserDataKindName, SyncResult>>;
 }
 
@@ -378,9 +392,13 @@ async function syncPhotos(store: SyncStore, images: ImageStore, gallery: Gallery
  * Gleicht jede genannte Art ab (je Art eine Transaktion, siehe SyncStore.sync). Wirft SyncFullError, wenn das Konto bei
  * einer Art zu viele Einträge hätte – die Arten davor sind dann schon gespeichert; die App schickt beim nächsten Mal
  * alles noch einmal, das schadet nicht. `images`: Bildspeicher für die Fotos eigener Rezepte und eigene Fotos der
- * Galerie; `gallery`: findet öffentliche Fotos in der Galerie (FeedbackStore.galleryPhotos).
+ * Galerie; `gallery`: findet öffentliche Fotos in der Galerie (FeedbackStore.galleryPhotos). Nennt die App eine andere
+ * Kennung der Datenbank (`request.database`), übernimmt der Server nichts und antwortet mit `reset` – sonst landeten
+ * etwa Pfade zu Fotos, die diese Datenbank nicht kennt, ohne Foto im Konto, bevor die App von vorn abgleicht.
  */
 export async function syncUserData(store: SyncStore, owner: string, request: UserDataSyncRequest, images: ImageStore, gallery?: GalleryLookup): Promise<UserDataSyncResponse> {
+  const database = await store.databaseId();
+  if (request.database !== undefined && request.database !== database) return { owner, database, reset: true, kinds: {} };
   const kinds: UserDataSyncResponse["kinds"] = {};
   for (const name of USER_DATA_KINDS) {
     const body = request.kinds[name];
@@ -389,7 +407,7 @@ export async function syncUserData(store: SyncStore, owner: string, request: Use
     else if (name === "photos") kinds[name] = await syncPhotos(store, images, gallery, owner, body.since, body.changes);
     else kinds[name] = await store.sync(USER_DATA[name], owner, body.since, body.changes);
   }
-  return { owner, kinds };
+  return { owner, database, kinds };
 }
 
 /** Beim Löschen des Kontos: alle abgeglichenen Daten (auch das Tagebuch) samt den eigenen Dateien im Bildspeicher. */

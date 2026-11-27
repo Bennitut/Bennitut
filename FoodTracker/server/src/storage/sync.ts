@@ -1,4 +1,5 @@
 import { batches, type Db, type Queryable } from "./db.js";
+import { databaseId } from "./identity.js";
 
 // Allgemeine Tabelle für den Abgleich zwischen App und Server (Vorrang 1, 9.2): pro Besitzer („user:<Konto-ID>“ bzw.
 // „device:<Geräte-ID>“) und Art („diary“ für die Ernährungshistorie, „settings“, „plan“, „pantry“, „recipes“,
@@ -140,7 +141,21 @@ async function countRecords(q: Queryable, owner: string, kind: string, withTombs
 
 /** Abgleich, Übernahme ins Konto und Löschen auf der Tabelle sync_records (Migration 2). */
 export class SyncStore {
+  private id: Promise<string> | undefined;
+
   constructor(private readonly db: Db) {}
+
+  /**
+   * Kennung der Datenbank (storage/identity.ts): Die App bindet ihre Abgleich-Marken daran und gleicht bei einer anderen
+   * Kennung von vorn ab. Einmal gelesen, dann gemerkt; nach einem Fehler beim nächsten Mal neu.
+   */
+  databaseId(): Promise<string> {
+    const id = (this.id ??= databaseId(this.db));
+    id.catch(() => {
+      if (this.id === id) this.id = undefined;
+    });
+    return id;
+  }
 
   /**
    * Übernimmt `changes` (was neuer ist) und liefert, was seit `since` dazugekommen ist – ohne das gerade Übernommene
