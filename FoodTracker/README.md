@@ -53,7 +53,7 @@ FoodTracker/
 ├── docs/recht/   Entwürfe für Impressum und Datenschutzerklärung (Österreich) mit Platzhaltern für die eigenen Angaben
 ├── marketing/clips/  Promo-Clips (Hochkant), Beitragstexte und das Aufnahme-Skript make-clips.cjs
 ├── reports/      Tagesberichte der Nachtschicht als PDF (make-report.cjs, Test: node --test reports/make-report.test.cjs)
-└── server/   Backend (Node, Hono, TypeScript)
+└── server/   Backend (Node, Hono, TypeScript); Dockerfile für einen Server im Internet (siehe „Server im Internet (Docker)“)
     ├── src/planner/      Zero-Waste-Planer (Simulated Annealing + Resteverwertung) und Monatsplaner
     ├── src/ai/           KI für Fotos, Kassenbons, Rezept-Import, Übersetzung, Rezeptvorschläge: Prompts in tasks.ts,
     │                     Claude oder Ollama über provider.ts (eine Stelle für alle KI-Anfragen), Einwilligung in consent.ts
@@ -151,6 +151,41 @@ QR-Code mit der Kamera (iOS) bzw. Expo Go (Android) scannen. Handy und Rechner m
 Die App findet den Server automatisch (gleicher Rechner, Port 3000); einen anderen nennt man ihr wie unter
 „Server-Adresse“ beschrieben.
 
+### Server im Internet (Docker)
+
+Für einen Server, den auch andere erreichen, liegt in `server/` ein **Dockerfile**: Node.js 26 mit dem fertig
+übersetzten JavaScript (`npm run build` → `dist/`), ohne Quelltext und Werkzeuge zum Bauen, läuft nicht als root.
+Zum Testen auf dem Laptop braucht es Docker nicht (`start-test.cmd`). Eine Schritt-für-Schritt-Anleitung für kostenlose
+Hoster kommt mit `docs/SERVER-HOSTING.md` (9.3 in `BACKLOG.md`).
+
+```bash
+cd server
+docker build -t foodtracker-server .
+docker run -d --name foodtracker -p 3000:3000 -v foodtracker-data:/app/data foodtracker-server
+```
+
+- **Einstellungen** als Umgebungsvariablen (`docker run -e NAME=Wert` bzw. in den Einstellungen des Hosters), dieselben
+  wie in `server/.env.example`. Eine `.env` kommt nie ins Image: `.dockerignore` lässt nur `package*.json`,
+  `tsconfig*.json` und `src/` hinein.
+- **Daten:** Ohne `DATABASE_URL` liegen SQLite-Datei und Fotos in `/app/data` – dafür das Volume (`-v`), sonst sind sie
+  weg, sobald der Container ersetzt wird. Hoster ohne dauerhafte Dateien brauchen `DATABASE_URL` (Postgres) und für die
+  Fotos einen Objektspeicher (kommt mit 9.3).
+- **Web-Version (CORS):** Im Image ist `CORS_ORIGINS=https://bennitut.github.io` voreingestellt – die Web-Version auf
+  GitHub Pages darf den Server aus dem Browser nutzen. Für eigene Domains die Variable setzen und die Pages-Adresse mit
+  aufzählen, jede Domain einzeln (mit und ohne `www`), z. B.
+  `CORS_ORIGINS=https://bennitut.github.io,https://example.org,https://www.example.org`. Die Startmeldung zeigt unter
+  „Browser (CORS)“, was gilt; `localhost` und Adressen im eigenen Netz sind immer erlaubt.
+- **Betrieb:** Das Image setzt `NODE_ENV=production` – `ALLOW_DEV_LOGIN` wirkt dann nicht (sonst könnte sich jede:r
+  unter jedem Namen anmelden; die Startmeldung sagt es). Hinter dem HTTPS-Proxy des Hosters `TRUST_PROXY=1` setzen,
+  damit das Rate-Limit die echten Adressen sieht. KI: `ANTHROPIC_API_KEY` (kostet API-Guthaben) oder `OLLAMA_URL` auf
+  einen Rechner mit Ollama.
+- **Health-Check:** `GET /api/health/live` antwortet mit `{"ok":true}`, sobald der Server bereit ist – ohne Datenbank
+  und KI zu fragen (eine kostenlose Datenbank wie Neon darf schlafen, solange niemand die App nutzt, und Ollama hinter
+  einem Tunnel bekommt keine Anfragen). Docker prüft ihn alle 30 Sekunden (`docker ps` zeigt „healthy“), beim Hoster
+  denselben Pfad als Health-Check eintragen. `/api/health` sagt zusätzlich, welche KI nutzbar ist (Profilzeile der App).
+- **Ohne Docker** (Hoster mit Node.js): `npm ci --include=dev && npm run build`, gestartet mit `npm run start:prod`
+  (Node mit `dist/index.js`, ohne `tsx`); `NODE_ENV=production` dann selbst setzen.
+
 ### Server-Adresse
 
 Mit welchem Server die App spricht, steht unter 👤 Profil → **🖥️ Server**. Reihenfolge:
@@ -172,8 +207,9 @@ Mit welchem Server die App spricht, steht unter 👤 Profil → **🖥️ Server
 
 Für die Web-Version auf GitHub Pages: im Repository unter Settings → Secrets and variables → Actions → **Variables**
 die Variable `FOODTRACKER_API_URL` mit der Adresse des Servers anlegen – der Pages-Workflow baut dann mit
-`EXPO_PUBLIC_API_URL`. Der Server braucht dafür https und `CORS_ORIGINS=https://bennitut.github.io` (eine Seite über
-https darf keinen Server ohne https fragen; die App sagt das auch, wenn man so eine Adresse einträgt).
+`EXPO_PUBLIC_API_URL`. Der Server braucht dafür https und `CORS_ORIGINS=https://bennitut.github.io` (im Docker-Image
+voreingestellt; eine Seite über https darf keinen Server ohne https fragen, die App sagt das auch, wenn man so eine
+Adresse einträgt).
 
 Beim Wechsel meldet die App beim bisherigen Server ab (das Token gehört ihm und geht nie an einen anderen Server) und
 nutzt beim neuen eine eigene Geräte-ID – ein anderer Server erfährt so nie die Geräte-ID, mit der das Gerät beim
@@ -219,6 +255,7 @@ cd app && npm run web:pages && npm run web:smoke -- dist-pages   # dasselbe wie 
                                                                  # (solange Impressum-Angaben fehlen: web:pages -- --entwurf)
 cd app && npm run web:account   # Konten und Einwilligung vor der KI im Browser mit echtem Server (eigener Port 3917,
                                 # leere Daten im Temp-Ordner)
+cd server && npm run docker:smoke   # Docker-Image bauen und als Container prüfen (braucht Docker und curl)
 ```
 
 Einzeln: `npm run typecheck` und `npm test` (in beiden Ordnern) bzw. `npm run lint` (App).
@@ -256,7 +293,9 @@ eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig
 gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und
 Admin-Änderungen auf beiden Datenbanken (Fotos als Dateien, nur echte Bilder, Bilddateien verschwinden mit dem Foto,
 dem Rezept bzw. dem Konto, Übernahme ins Konto ohne Doppeltes, Umzug aus `community.json`, `feedback.json` und
-`recipe-overrides.json`), die Auslieferung der Bilder, Planer, KI-Anbieter mit nachgebautem Ollama, CORS,
+`recipe-overrides.json`), die Auslieferung der Bilder, Planer, KI-Anbieter mit nachgebautem Ollama, CORS, den Betrieb
+im Container (Lebenszeichen ohne KI, Health-Check samt Zeitlimit gegen den echten Server, Dev-Login nur zum Testen,
+Startmeldung ohne WLAN und ohne Zugangsdaten aus `OLLAMA_URL`, Dockerfile und `.dockerignore`),
 die Sicherung des Tagebuchs (ebenfalls auf beiden Datenbanken: Seiten, neuere Fassung gewinnt, Grenze ohne halbe
 Änderungen, viele Einträge in Paketen, gleichzeitige Abgleiche, Übernahme ins Konto, Umzug aus `data/diary/` mit
 denselben Revisionen), der Abgleich von Einstellungen, Plan und Vorrat (`POST /api/sync`: nur mit Konto, zwei Geräte,
@@ -289,6 +328,11 @@ schickt mit Einwilligung, danach keine Frage mehr, der Server lehnt Anfragen ohn
 Datenbank): falsche Adresse, Adresse ohne Server („Trotzdem verwenden“), Wechsel – abgemeldet auch beim bisherigen
 Server, eigene Geräte-ID, das Tagebuch kommt beim neuen an; dann zieht dieser Server auf eine leere Datenbank um und die
 App gleicht von vorn ab; zurück zur Standard-Adresse gilt die alte Geräte-ID.
+`npm run docker:smoke` baut das Image, startet es mit einem Volume, wartet, bis der Health-Check „healthy“ meldet, und
+prüft: im Image nur `dist/`, `node_modules/` (ohne Werkzeuge zum Bauen und Testen) und `package.json`, der Server läuft
+nicht als root, Lebenszeichen und `/api/health`, CORS für die Web-Version (und nicht für fremde Websites), Dev-Login aus
+trotz `ALLOW_DEV_LOGIN=1`, die Startmeldung im Container, ein neues Konto, das nach dem Ersetzen des Containers noch
+angemeldet ist, und das rasche Beenden auf SIGTERM. Weitere Argumente für `docker build` über `DOCKER_BUILD_FLAGS`.
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet
