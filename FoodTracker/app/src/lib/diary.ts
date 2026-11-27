@@ -21,6 +21,11 @@ export interface DiarySyncMark {
   owner: string;
   rev: number;
   at: string;
+  /**
+   * Kennung der Datenbank des Servers, zu der `rev` gehört (server/src/storage/identity.ts); null = der Server nennt
+   * keine (ältere Fassung). Fehlt sie (Marke aus der Zeit davor), gleicht die App einmal von vorn ab.
+   */
+  db?: string | null;
 }
 
 export interface DiaryState {
@@ -40,6 +45,8 @@ export interface DiaryRecord {
 }
 
 export interface DiarySyncRequest {
+  /** Kennung der Datenbank, zu der `since` gehört – bei einer anderen übernimmt der Server nichts (`reset`). */
+  database?: string;
   /** Revision des letzten Abgleichs; 0 = alles schicken. */
   since: number;
   changes: DiaryRecord[];
@@ -54,6 +61,13 @@ export interface DiarySyncResponse {
   changes: DiaryRecord[];
   /** true: Es gibt noch mehr, gleich noch einmal ab `rev` fragen. */
   more: boolean;
+  /** Kennung der Datenbank (ältere Server nennen keine). */
+  database?: string;
+  /**
+   * true: Der Server hat eine andere Datenbank als die geschickte `database` (umgezogen, andere Adresse) – er hat nichts
+   * übernommen, die App gleicht von vorn ab.
+   */
+  reset?: boolean;
 }
 
 export const emptyDiary = (): DiaryState => ({ entries: [], deleted: [], pending: [], sync: null });
@@ -203,11 +217,20 @@ export function recordsFor(state: DiaryState, ids?: Iterable<string>): DiaryReco
 export const UPLOAD_CHUNK = 2000;
 const MAX_ROUNDS = 100;
 
+/** Der Server meldet mitten im Abgleich noch einmal eine andere Datenbank (oder `reset` ohne Kennung) – später noch einmal. */
+export class SyncResetError extends Error {
+  constructor() {
+    super("sync_reset");
+  }
+}
+
 /**
  * Gleicht das Tagebuch mit dem Server ab: lädt Neues, Geändertes und Gelöschtes hoch und holt, was die App noch nicht
  * kennt. Ist der Besitzer neu (erster Abgleich, An- oder Abmelden), geht alles hoch und alles kommt zurück – so landet
- * die Historie im Konto und kommt auf einem neuen Gerät zurück. Liefert eine Funktion, die das Ergebnis in den dann
- * aktuellen Stand einarbeitet (in der Zwischenzeit Geändertes bleibt erhalten und wird beim nächsten Mal geschickt).
+ * die Historie im Konto und kommt auf einem neuen Gerät zurück. Genauso, wenn der Server eine andere Datenbank hat als
+ * beim letzten Abgleich (umgezogen, andere Adresse – er sagt dann `reset`) oder die Marke noch ohne Kennung der
+ * Datenbank ist. Liefert eine Funktion, die das Ergebnis in den dann aktuellen Stand einarbeitet (in der Zwischenzeit
+ * Geändertes bleibt erhalten und wird beim nächsten Mal geschickt).
  */
 export async function syncDiary(
   state: DiaryState,
@@ -215,15 +238,31 @@ export async function syncDiary(
   call: (request: DiarySyncRequest) => Promise<DiarySyncResponse>,
   now = () => new Date(),
 ): Promise<(current: DiaryState) => DiaryState> {
-  const fresh = state.sync?.owner !== owner;
+  let fresh = state.sync?.owner !== owner || state.sync.db === undefined;
   let since = fresh ? 0 : (state.sync?.rev ?? 0);
-  const queue = fresh ? recordsFor(state) : recordsFor(state, state.pending);
+  let queue = fresh ? recordsFor(state) : recordsFor(state, state.pending);
+  /** Datenbank, zu der `since` gehört (null: unbekannt bzw. ein Server ohne Kennung) – der Server prüft sie. */
+  let database = fresh ? null : (state.sync?.db ?? null);
   const sent: DiaryRecord[] = [];
   const received: DiaryRecord[] = [];
   let serverOwner = owner;
+  let reset = false;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const chunk = queue.splice(0, UPLOAD_CHUNK);
-    const response = await call({ since, changes: chunk });
+    const response = await call({ ...(database ? { database } : {}), since, changes: chunk });
+    if (response.reset === true) {
+      // Andere Datenbank: Der Server hat nichts übernommen – von vorn, alles hoch und alles zurück (nur einmal).
+      if (reset || typeof response.database !== "string" || !response.database) throw new SyncResetError();
+      reset = true;
+      fresh = true;
+      since = 0;
+      database = response.database;
+      queue = recordsFor(state);
+      sent.length = 0;
+      received.length = 0;
+      continue;
+    }
+    database = typeof response.database === "string" && response.database ? response.database : null;
     sent.push(...chunk);
     received.push(...response.changes.map(normalizeRecord).filter((r): r is DiaryRecord => r !== null));
     if (typeof response.rev === "number" && Number.isInteger(response.rev) && response.rev >= 0) since = response.rev;
@@ -241,7 +280,7 @@ export async function syncDiary(
       ...merged,
       pending: merged.pending.filter((id) => !done.has(id) && known.has(id)),
       // Nicht alles hochgeladen (sehr viele Einträge): beim nächsten Mal mit dem Rest weitermachen.
-      sync: complete || !fresh ? { owner: serverOwner, rev: since, at: now().toISOString() } : current.sync,
+      sync: complete || !fresh ? { owner: serverOwner, rev: since, at: now().toISOString(), db: database } : current.sync,
     };
   };
 }
@@ -322,6 +361,19 @@ export async function saveDiary(storage: KeyValueStorage, state: DiaryState, wri
   }
 }
 
+/**
+ * Abgleich-Marke aus dem Speicher; null, wenn sie unbrauchbar ist. `db` bleibt nur als Text oder null – fehlt sie bzw.
+ * ist sie unlesbar, gleicht die App beim nächsten Mal von vorn ab.
+ */
+export function readSyncMark(raw: unknown): DiarySyncMark | null {
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as Record<string, unknown>;
+  if (typeof m.owner !== "string" || !Number.isInteger(m.rev) || (m.rev as number) < 0) return null;
+  const mark: DiarySyncMark = { owner: m.owner, rev: m.rev as number, at: typeof m.at === "string" ? m.at : "" };
+  if (typeof m.db === "string" || m.db === null) mark.db = m.db;
+  return mark;
+}
+
 export interface LoadedDiary {
   state: DiaryState;
   /** Was gerade im Speicher steht (für `saveDiary`). */
@@ -378,7 +430,7 @@ export async function loadDiary(storage: KeyValueStorage, legacy: unknown, now =
     const deletedAt = isoTime((d as DiaryTombstone)?.deletedAt);
     return typeof d?.id === "string" && deletedAt ? [{ id: d.id, deletedAt }] : [];
   });
-  const sync = meta.sync && typeof meta.sync.owner === "string" && Number.isInteger(meta.sync.rev) ? meta.sync : null;
+  const sync = readSyncMark(meta.sync);
   let state: DiaryState = {
     entries: [...entries.values()].sort(byDateTime),
     deleted,

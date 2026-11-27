@@ -25,6 +25,7 @@ import {
   type SyncedData,
   type SyncedState,
 } from "../src/lib/dataSync";
+import { SyncResetError } from "../src/lib/diary";
 import type { StockItem } from "../src/lib/pantry";
 import type { MonthPlan, MyPhoto, Recipe, ShoppingItem } from "../src/lib/types";
 import { meal, recipe, settings } from "./fixtures";
@@ -787,3 +788,102 @@ describe("Abgleich eigener Fotos der Galerie mit dem Konto", () => {
 });
 
 const findOwnIn = (s: SyncedState, id: string) => s.myRecipes.find((r) => r.id === id);
+
+describe("Abgleich mit dem Konto: neuer Server, neue Datenbank (Abgleich-Marken mit Kennung)", () => {
+  it("gleicht nach dem Umzug auf eine leere Datenbank alle Arten von vorn ab – eigene Fotos gehen als Bild mit", async () => {
+    const laptop = await server();
+    const phone = new Device({ settings: settings(), plan: monthPlan("2026-11-27"), pantry: [post("reis", 500)], myRecipes: [withPhoto("eigen_umzug", jpeg(7))] }, true);
+    await laptop.run(phone);
+    const laptopDb = phone.state.dataSync.settings.mark?.db;
+    assert.match(laptopDb ?? "", /^[0-9a-f-]{36}$/);
+    assert.ok(DATA_KINDS.every((kind) => phone.state.dataSync[kind].mark?.db === laptopDb), "jede Marke kennt die Datenbank");
+    const laptopPath = findOwn(phone, "eigen_umzug")?.media?.image?.server;
+    assert.ok(laptopPath);
+    // Schon abgeglichen; danach nur noch am Vorrat etwas geändert.
+    phone.change({ pantry: [post("reis", 300)] });
+
+    // Der Server zieht um (z. B. Render mit Neon): neue, leere Datenbank und ein leerer Bildspeicher.
+    const cloud = await server();
+    await cloud.run(phone);
+    assert.equal(cloud.requests[0]?.database, laptopDb, "die App nennt die Datenbank ihrer Marken");
+    const again = cloud.requests[1]!;
+    assert.ok(DATA_KINDS.every((kind) => again.kinds[kind]?.since === 0), "nach reset alle Arten von vorn");
+    const sentRecipe = again.kinds.recipes?.changes.find((r) => r.id === "eigen_umzug");
+    assert.equal(photoUri((sentRecipe?.data as { recipe: Recipe }).recipe), jpeg(7), "das Foto selbst – den Pfad kennt der neue Server nicht");
+    const cloudDb = phone.state.dataSync.settings.mark?.db;
+    assert.ok(cloudDb && cloudDb !== laptopDb);
+    assert.equal(again.database, cloudDb);
+    assert.deepEqual(phone.pending(), []);
+    const cloudPath = findOwn(phone, "eigen_umzug")?.media?.image?.server;
+    assert.ok(cloudPath && cloudPath !== laptopPath);
+    assert.equal(photoUri(findOwn(phone, "eigen_umzug")), jpeg(7), "auf dem Handy bleibt das Foto");
+    assert.deepEqual(cloud.images.keys(), [imageKeyOf(cloudPath)]);
+
+    // Ein neues Gerät bekommt vom neuen Server alles, das Foto aus dessen Bildspeicher.
+    const browser = new Device();
+    await cloud.run(browser);
+    assert.deepEqual(data(browser), data(phone));
+    assert.equal(photoUri(findOwn(browser, "eigen_umzug")), cloudPath);
+
+    // Danach wieder nur Neues, mit der Kennung der neuen Datenbank.
+    cloud.requests.length = 0;
+    phone.change({ pantry: [post("reis", 200)] });
+    await cloud.run(phone);
+    assert.equal(cloud.requests.length, 1);
+    assert.equal(cloud.requests[0]?.database, cloudDb);
+    assert.deepEqual(cloud.requests[0]?.kinds.pantry?.changes.map((r) => r.id), ["reis@2026-11-27"]);
+  });
+
+  it("gleicht Marken ohne Kennung (ältere App-Fassung) einmal von vorn ab, eine abweichende Art allein", async () => {
+    const { run, requests } = await server();
+    const d = new Device({ settings: settings(), pantry: [post("reis", 500)] }, true);
+    await run(d);
+    // Wie von einer älteren Fassung gespeichert: Marken ohne Kennung.
+    const saved = JSON.parse(JSON.stringify(d.state.dataSync)) as Record<string, { mark: Record<string, unknown> }>;
+    for (const kind of DATA_KINDS) delete saved[kind]!.mark.db;
+    d.state = { ...d.state, dataSync: readDataSync(saved, d.state) };
+    assert.ok(DATA_KINDS.every((kind) => d.state.dataSync[kind].mark !== null && d.state.dataSync[kind].mark!.db === undefined));
+    requests.length = 0;
+    await run(d);
+    assert.equal(requests[0]?.database, undefined);
+    assert.ok(DATA_KINDS.every((kind) => requests[0]?.kinds[kind]?.since === 0), "einmal von vorn");
+    const db = d.state.dataSync.pantry.mark?.db;
+    assert.ok(DATA_KINDS.every((kind) => d.state.dataSync[kind].mark?.db === db && typeof db === "string"));
+
+    // Eine Art, die zuletzt mit einer anderen Datenbank abglich, fängt allein von vorn an.
+    d.state = { ...d.state, dataSync: { ...d.state.dataSync, pantry: { ...d.state.dataSync.pantry, mark: { ...d.state.dataSync.pantry.mark!, db: "eine-andere" } } } };
+    requests.length = 0;
+    d.change({ settings: { ...d.state.settings, people: 3 } });
+    await run(d);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.database, db);
+    assert.equal(requests[0]?.kinds.pantry?.since, 0);
+    assert.ok((requests[0]?.kinds.settings?.since ?? 0) > 0);
+    assert.deepEqual(requests[0]?.kinds.settings?.changes.map((r) => r.id), ["settings"]);
+    assert.equal(d.state.dataSync.pantry.mark?.db, db);
+  });
+
+  it("gleicht mit einem älteren Server ohne Kennung weiter nur Neues ab und gibt nach zweimal reset auf", async () => {
+    const { call } = await server();
+    const requests: DataSyncRequest[] = [];
+    // Älterer Server: kennt keine Kennung und antwortet ohne.
+    const old = async (request: DataSyncRequest): Promise<DataSyncResponse> => {
+      requests.push(request);
+      const { database: _db, ...response } = await call("user:1")(request);
+      return response;
+    };
+    const d = new Device({ settings: settings(), pantry: [post("reis", 500)] }, true);
+    d.state = (await syncData(d.state, "user:1", old))(d.state);
+    assert.ok(DATA_KINDS.every((kind) => d.state.dataSync[kind].mark?.db === null));
+    d.change({ pantry: [post("reis", 400)] });
+    d.state = (await syncData(d.state, "user:1", old))(d.state);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1]?.database, undefined);
+    assert.deepEqual(requests[1]?.kinds.pantry?.changes.map((r) => r.id), ["reis@2026-11-27"]);
+    assert.ok((requests[1]?.kinds.settings?.since ?? 0) > 0, "kein ständiges Von-vorn");
+    // Sagt der Server immer wieder reset, gibt die App auf (später noch einmal) und ändert nichts.
+    const before = d.state;
+    await assert.rejects(syncData(d.state, "user:1", async () => ({ owner: "user:1", database: `db-${Math.random()}`, reset: true, kinds: {} })), SyncResetError);
+    assert.equal(d.state, before);
+  });
+});

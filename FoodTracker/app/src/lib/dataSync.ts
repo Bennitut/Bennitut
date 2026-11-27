@@ -19,6 +19,7 @@
 //   über den Pfad vom Server. Genauso private eigene Fotos der Galerie („Nur ich“); öffentliche liegen schon in der
 //   Galerie – von ihnen geht nur die ID dort (`remoteId`) hoch, den Pfad trägt der Server ein.
 import { REGIONS, isUILanguage } from "../i18n";
+import { SyncResetError } from "./diary";
 import type { StockItem } from "./pantry";
 import { SERVER_IMAGE_PATH } from "./serverImages";
 import type { MonthPlan, MyPhoto, Recipe, RecipeText, Settings } from "./types";
@@ -56,6 +57,11 @@ export interface SyncMark {
   owner: string;
   rev: number;
   at: string;
+  /**
+   * Kennung der Datenbank des Servers, zu der `rev` gehört (wie beim Tagebuch, lib/diary.ts); null = der Server nennt
+   * keine. Fehlt sie (Marke aus der Zeit davor), gleicht die Art einmal von vorn ab.
+   */
+  db?: string | null;
 }
 
 export interface KindSync {
@@ -78,12 +84,18 @@ export interface RemoteRecord {
 }
 
 export interface DataSyncRequest {
+  /** Kennung der Datenbank, zu der die Revisionen gehören – bei einer anderen übernimmt der Server nichts (`reset`). */
+  database?: string;
   kinds: Partial<Record<DataKind, { since: number; changes: RemoteRecord[] }>>;
 }
 
 export interface DataSyncResponse {
   /** „user:<Konto-ID>“ */
   owner: string;
+  /** Kennung der Datenbank (ältere Server nennen keine). */
+  database?: string;
+  /** true: andere Datenbank als die geschickte – nichts übernommen, alle Arten von vorn abgleichen. */
+  reset?: boolean;
   kinds: Partial<Record<DataKind, { rev: number; changes: RemoteRecord[]; more: boolean }>>;
 }
 
@@ -332,7 +344,10 @@ export function readDataSync(raw: unknown, data: SyncedData): DataSync {
     for (const id of recordsOf(kind, data).keys()) at[id] ??= 0;
     const pending = Array.isArray(k?.pending) ? k.pending.filter((id): id is string => typeof id === "string" && id in at) : [];
     const m = k?.mark;
-    const mark = m && typeof m.owner === "string" && Number.isInteger(m.rev) && m.rev >= 0 && typeof m.at === "string" ? { owner: m.owner, rev: m.rev, at: m.at } : null;
+    const mark: SyncMark | null =
+      m && typeof m.owner === "string" && Number.isInteger(m.rev) && m.rev >= 0 && typeof m.at === "string" ? { owner: m.owner, rev: m.rev, at: m.at } : null;
+    // Kennung der Datenbank nur als Text oder null; sonst (ältere Marke) einmal von vorn.
+    if (mark && (typeof m?.db === "string" || m?.db === null)) mark.db = m.db;
     result[kind] = { at, pending: [...new Set(pending)], mark };
   }
   return result;
@@ -749,8 +764,10 @@ function compact(kind: DataKind, state: SyncedState, k: KindSync): KindSync {
 /**
  * Gleicht alle Arten mit dem Konto auf dem Server ab: lädt Geändertes und Gelöschtes hoch und holt,
  * was das Gerät noch nicht kennt. Ist das Konto neu für dieses Gerät (erste Anmeldung, anderes Konto), geht alles hoch
- * und alles kommt zurück. Liefert eine Funktion, die das Ergebnis in den dann aktuellen Zustand einarbeitet (in der
- * Zwischenzeit Geändertes bleibt erhalten und geht beim nächsten Mal hoch).
+ * und alles kommt zurück – ebenso, wenn der Server eine andere Datenbank hat als beim letzten Abgleich (umgezogen,
+ * andere Adresse; er sagt dann `reset`, ohne etwas zu übernehmen) oder eine Marke noch keine Kennung der Datenbank hat.
+ * Liefert eine Funktion, die das Ergebnis in den dann aktuellen Zustand einarbeitet (in der Zwischenzeit Geändertes
+ * bleibt erhalten und geht beim nächsten Mal hoch).
  */
 export async function syncData<S extends SyncedState>(
   state: S,
@@ -758,17 +775,28 @@ export async function syncData<S extends SyncedState>(
   call: (request: DataSyncRequest) => Promise<DataSyncResponse>,
   now = () => new Date(),
 ): Promise<(current: S) => S> {
-  const runs = DATA_KINDS.map((kind) => {
+  const begin = (kind: DataKind, fresh: boolean) => {
     const k = state.dataSync[kind];
-    const fresh = k.mark?.owner !== owner;
     const { records, skipped } = fresh ? uploadRecords(kind, state) : uploadRecords(kind, state, k.pending);
     return { kind, fresh, since: fresh ? 0 : k.mark!.rev, queue: records, skipped, sent: [] as RemoteRecord[], received: [] as RemoteRecord[], more: true, failed: false };
+  };
+  const known = (mark: SyncMark | null): mark is SyncMark & { db: string | null } => mark?.owner === owner && mark.db !== undefined;
+  // Alle Arten gehen in einer Anfrage, also gehören ihre Revisionen zu derselben Datenbank. Eine Art, die zuletzt mit
+  // einer anderen abgeglichen hat (oder noch ohne Kennung), fängt von vorn an.
+  const marks = DATA_KINDS.map((kind) => state.dataSync[kind].mark);
+  const first = marks.find(known);
+  /** Datenbank, zu der die Revisionen gehören (null: unbekannt bzw. ein Server ohne Kennung) – der Server prüft sie. */
+  let database = first ? first.db : null;
+  let runs = DATA_KINDS.map((kind, i) => {
+    const mark = marks[i] ?? null;
+    return begin(kind, !(first && known(mark) && mark.db === first.db));
   });
   let serverOwner = owner;
+  let reset = false;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const active = runs.filter((r) => !r.failed && (r.queue.length > 0 || r.more));
     if (active.length === 0) break;
-    const request: DataSyncRequest = { kinds: {} };
+    const request: DataSyncRequest = { ...(database ? { database } : {}), kinds: {} };
     const chunks = new Map<DataKind, RemoteRecord[]>();
     for (const run of active) {
       const chunk = takeChunk(run.queue);
@@ -776,6 +804,15 @@ export async function syncData<S extends SyncedState>(
       request.kinds[run.kind] = { since: run.since, changes: chunk };
     }
     const response = await call(request);
+    if (response?.reset === true) {
+      // Andere Datenbank: Der Server hat nichts übernommen – alle Arten von vorn (Fotos als Bild, nur einmal).
+      if (reset || typeof response.database !== "string" || !response.database) throw new SyncResetError();
+      reset = true;
+      database = response.database;
+      runs = DATA_KINDS.map((kind) => begin(kind, true));
+      continue;
+    }
+    database = typeof response?.database === "string" && response.database ? response.database : null;
     if (typeof response?.owner === "string" && response.owner) serverOwner = response.owner;
     for (const run of active) {
       const result = response?.kinds?.[run.kind];
@@ -805,7 +842,7 @@ export async function syncData<S extends SyncedState>(
         ...k,
         pending: k.pending.filter((id) => !done.has(id)),
         // Nicht alles geschafft (sehr viele Einträge): beim nächsten Mal mit dem Rest weitermachen.
-        mark: complete || !run.fresh ? { owner: serverOwner, rev: run.since, at } : k.mark,
+        mark: complete || !run.fresh ? { owner: serverOwner, rev: run.since, at, db: database } : k.mark,
       };
       next = { ...next, dataSync: { ...next.dataSync, [run.kind]: compact(run.kind, next, updated) } };
     }

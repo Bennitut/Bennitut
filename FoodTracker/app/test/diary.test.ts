@@ -13,6 +13,8 @@ import {
   removeEntry,
   saveDiary,
   syncDiary,
+  readSyncMark,
+  SyncResetError,
   type DiaryState,
   type DiarySyncRequest,
   type DiarySyncResponse,
@@ -170,7 +172,7 @@ describe("Tagebuch: Sicherung auf dem Server", () => {
     (owner: string) =>
     async (request: DiarySyncRequest): Promise<DiarySyncResponse> => {
       calls.push(request);
-      return { owner, ...(await (await server).sync(owner, request.since, request.changes)) };
+      return { owner, ...(await (await server).sync(owner, request.since, request.changes, request.database)) };
     };
   const run = async (state: DiaryState, owner: string) => (await syncDiary(state, owner, call(owner)))(state);
 
@@ -235,3 +237,90 @@ describe("Tagebuch: Sicherung auf dem Server", () => {
     assert.deepEqual(state.pending, ["offline"]);
   });
 });
+
+describe("Tagebuch: neuer Server, neue Datenbank (Abgleich-Marken mit Kennung)", () => {
+  /** Ein Server mit eigener, leerer Datenbank – wie über HTTP mit JSON hin und zurück. */
+  const newServer = async () => {
+    const store = await serverStore();
+    const calls: DiarySyncRequest[] = [];
+    const call =
+      (owner: string) =>
+      async (request: DiarySyncRequest): Promise<DiarySyncResponse> => {
+        calls.push(JSON.parse(JSON.stringify(request)) as DiarySyncRequest);
+        return JSON.parse(JSON.stringify({ owner, ...(await store.sync(owner, request.since, request.changes, request.database)) })) as DiarySyncResponse;
+      };
+    const run = async (state: DiaryState, owner: string) => (await syncDiary(state, owner, call(owner)))(state);
+    return { store, calls, run };
+  };
+
+  it("gleicht nach dem Umzug auf eine leere Datenbank von vorn ab – dort fehlt danach nichts", async () => {
+    const laptop = await newServer();
+    let phone = addEntry(addEntry(emptyDiary(), meal("u1", "2026-11-20")), meal("u2", "2026-11-21"));
+    phone = await run2(laptop, phone);
+    const laptopDb = phone.sync?.db;
+    assert.match(laptopDb ?? "", /^[0-9a-f-]{36}$/, "die Marke kennt die Datenbank");
+    // Schon abgeglichen; danach kommt ein neuer Eintrag dazu und einer wird gelöscht.
+    phone = removeEntry(addEntry(phone, meal("u3", "2026-11-22")), "u1");
+    assert.deepEqual([...phone.pending].sort(), ["u1", "u3"]);
+
+    // Der Server zieht um (z. B. Render mit Neon): neue, leere Datenbank, andere Kennung.
+    const cloud = await newServer();
+    phone = await run2(cloud, phone);
+    assert.equal(cloud.calls[0]?.database, laptopDb, "die App nennt die Datenbank ihrer Marke");
+    assert.deepEqual(cloud.calls[0]?.changes.map((c) => c.id).sort(), ["u1", "u3"], "zuerst nur das Neue …");
+    assert.equal(cloud.calls[1]?.since, 0, "… der Server sagt reset, dann von vorn");
+    assert.deepEqual(cloud.calls[1]?.changes.map((c) => c.id).sort(), ["u1", "u2", "u3"], "alles hoch, auch die Löschmarke");
+    assert.equal(await cloud.store.count("user:1"), 2);
+    assert.notEqual(phone.sync?.db, laptopDb);
+    assert.deepEqual(phone.pending, []);
+    // Ein neues Gerät bekommt vom neuen Server alles; der gelöschte Eintrag kommt nicht zurück.
+    const browser = await run2(cloud, emptyDiary());
+    assert.deepEqual(ids(browser), ["u2", "u3"]);
+    // Danach wieder nur Neues.
+    cloud.calls.length = 0;
+    phone = await run2(cloud, addEntry(phone, meal("u4", "2026-11-23")));
+    assert.deepEqual(cloud.calls.map((c) => c.changes.map((r) => r.id)), [["u4"]]);
+    assert.equal(cloud.calls[0]?.database, phone.sync?.db);
+  });
+
+  it("gleicht eine Marke ohne Kennung (ältere App-Fassung) einmal von vorn ab, danach nur Neues", async () => {
+    const server = await newServer();
+    let state = addEntry(addEntry(emptyDiary(), meal("a1", "2026-11-20")), meal("a2", "2026-11-21"));
+    state = await run2(server, state);
+    // Wie von einer älteren Fassung gespeichert: Besitzer und Revision, aber keine Kennung.
+    const { db: _db, ...old } = state.sync!;
+    state = readSyncMarkInto(state, old);
+    server.calls.length = 0;
+    state = await run2(server, addEntry(state, meal("a3", "2026-11-22")));
+    assert.deepEqual(server.calls.map((c) => [c.database ?? null, c.since, c.changes.length]), [[null, 0, 3]]);
+    assert.equal(await server.store.count("user:1"), 3);
+    server.calls.length = 0;
+    state = await run2(server, addEntry(state, meal("a4", "2026-11-23")));
+    assert.deepEqual(server.calls.map((c) => c.changes.map((r) => r.id)), [["a4"]]);
+  });
+
+  it("gleicht mit einem älteren Server ohne Kennung weiter nur Neues ab und gibt nach zweimal reset auf", async () => {
+    const store = await serverStore();
+    const requests: DiarySyncRequest[] = [];
+    // Älterer Server: kennt keine Kennung und antwortet ohne.
+    const old = async (request: DiarySyncRequest): Promise<DiarySyncResponse> => {
+      requests.push(request);
+      const { database: _db, ...result } = await store.sync("user:1", request.since, request.changes);
+      return { owner: "user:1", ...result };
+    };
+    const runOld = async (s: DiaryState) => (await syncDiary(s, "user:1", old))(s);
+    let state = await runOld(addEntry(emptyDiary(), meal("o1", "2026-11-20")));
+    assert.equal(state.sync?.db, null);
+    state = await runOld(addEntry(state, meal("o2", "2026-11-21")));
+    assert.deepEqual(requests.map((r) => [r.database ?? null, r.changes.map((c) => c.id)]), [[null, ["o1"]], [null, ["o2"]]]);
+    // Sagt der Server immer wieder reset, gibt die App auf (später noch einmal) und ändert nichts.
+    const before = state;
+    await assert.rejects(syncDiary(state, "user:1", async () => ({ owner: "user:1", rev: 0, changes: [], more: false, database: `db-${Math.random()}`, reset: true })), SyncResetError);
+    assert.equal(state, before);
+  });
+});
+
+/** Abgleich mit einem Server aus `newServer` für das Konto „user:1“. */
+const run2 = (server: { run: (state: DiaryState, owner: string) => Promise<DiaryState> }, state: DiaryState) => server.run(state, "user:1");
+/** Zustand mit einer Marke, wie sie aus dem Speicher käme (lib/diary.ts, readSyncMark). */
+const readSyncMarkInto = (state: DiaryState, raw: unknown): DiaryState => ({ ...state, sync: readSyncMark(raw) });
