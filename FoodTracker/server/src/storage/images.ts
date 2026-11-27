@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 // Bildspeicher (Vorrang 1, 9.2): Fotos aus der Galerie eines Rezepts und Fotos geteilter Rezepte liegen als Dateien
 // statt als data-URI in der Datenbank bzw. in JSON-Dateien. So bleibt die Datenbank klein (kostenlose Postgres-Angebote
 // haben wenig Platz), Listen wie „Aus der Community“ laden schnell (vorher bis zu 700 KB pro Rezept), und die App lädt
 // jedes Bild einzeln über GET /api/images/<Schlüssel> – mit Zwischenspeicher, weil sich ein Bild nie ändert. Die
-// Datenbank kennt nur den Schlüssel. Heute ein Ordner (data/photos/); für Cloud-Dienste, die Dateien beim Neustart
-// verlieren, kommt mit 9.3 ein Objektspeicher hinter dieselbe Schnittstelle.
+// Datenbank kennt nur den Schlüssel. Auf dem eigenen Rechner ein Ordner (data/photos/); für Cloud-Dienste, die Dateien
+// beim Neustart verlieren, ein Objektspeicher mit S3-Schnittstelle hinter derselben Schnittstelle (objectStorage.ts, 9.3).
 
 /** Bildformate, die der Server annimmt, mit der Dateiendung. */
 export const IMAGE_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
@@ -26,7 +26,8 @@ const KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg
 export const isImageKey = (key: string) => KEY.test(key);
 export const newImageKey = (type: ImageType) => `${randomUUID()}.${IMAGE_TYPES[type]}`;
 
-function typeOfKey(key: string): ImageType {
+/** Format eines Bildes aus der Endung seines Schlüssels (der Server legt sie beim Speichern fest). */
+export function imageTypeOfKey(key: string): ImageType {
   const ext = key.slice(key.lastIndexOf(".") + 1);
   return (Object.keys(IMAGE_TYPES) as ImageType[]).find((t) => IMAGE_TYPES[t] === ext) ?? "image/jpeg";
 }
@@ -72,12 +73,16 @@ export function decodeDataUri(uri: string): StoredImage | null {
 export const toDataUri = (image: StoredImage) => `data:${image.type};base64,${Buffer.from(image.bytes).toString("base64")}`;
 
 export interface ImageStore {
-  /** Für die Startmeldung, z. B. „Ordner data/photos“. */
+  /** Für die Startmeldung, z. B. „Ordner data/photos“ – nie mit Zugangsdaten. */
   readonly description: string;
   put(key: string, image: StoredImage): Promise<void>;
   get(key: string): Promise<StoredImage | undefined>;
   /** Löscht, falls vorhanden – kein Fehler, wenn es das Bild nicht (mehr) gibt. */
   delete(key: string): Promise<void>;
+  /** Alle gespeicherten Schlüssel, sortiert (zum Umziehen, `npm run photos:copy`); anderes im Ordner bzw. Bucket zählt nicht. */
+  list(): Promise<string[]>;
+  /** Beim Start: Lässt sich speichern, lesen und löschen? Wirft mit einer verständlichen Meldung, wenn nicht. */
+  check?(): Promise<void>;
 }
 
 function requireKey(key: string) {
@@ -105,7 +110,7 @@ export class DirectoryImageStore implements ImageStore {
   async get(key: string): Promise<StoredImage | undefined> {
     if (!isImageKey(key)) return undefined;
     try {
-      return { type: typeOfKey(key), bytes: new Uint8Array(await readFile(join(this.dir, key))) };
+      return { type: imageTypeOfKey(key), bytes: new Uint8Array(await readFile(join(this.dir, key))) };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
       throw e;
@@ -115,6 +120,25 @@ export class DirectoryImageStore implements ImageStore {
   async delete(key: string): Promise<void> {
     if (!isImageKey(key)) return;
     await rm(join(this.dir, key), { force: true });
+  }
+
+  async list(): Promise<string[]> {
+    try {
+      return (await readdir(this.dir)).filter(isImageKey).sort();
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw e;
+    }
+  }
+
+  /** Darf der Server in den Ordner schreiben? (z. B. ein Docker-Volume, das root gehört) */
+  async check(): Promise<void> {
+    await mkdir(this.dir, { recursive: true });
+    const probe = join(this.dir, `.probe-${randomUUID()}.tmp`);
+    await writeFile(probe, "FoodTracker");
+    // Schreiben hat geklappt, darum ging es. Unter Windows hält ein Virenscanner frische Dateien manchmal kurz fest –
+    // dann bleibt die kleine Probe eben liegen (list() übergeht sie).
+    await rm(probe, { force: true }).catch(() => undefined);
   }
 }
 
@@ -134,6 +158,10 @@ export class MemoryImageStore implements ImageStore {
 
   async delete(key: string): Promise<void> {
     this.images.delete(key);
+  }
+
+  async list(): Promise<string[]> {
+    return this.keys();
   }
 
   /** Gespeicherte Schlüssel, z. B. um in Tests zu prüfen, dass nichts übrig bleibt. */

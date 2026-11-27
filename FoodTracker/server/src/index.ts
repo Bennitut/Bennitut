@@ -8,9 +8,10 @@ import { mailerFromEnv } from "./mail/mailer.js";
 import { devLoginSetting, runtimeFromEnv } from "./runtime.js";
 import { lanAddresses, startupMessage } from "./startInfo.js";
 import { openDatabase, type Db } from "./storage/db.js";
-import { DirectoryImageStore } from "./storage/images.js";
+import type { ImageStore } from "./storage/images.js";
 import { importLegacyCommunity, importLegacyDiary, importLegacyFeedback, importLegacyOverrides, importLegacyUsers } from "./storage/legacy.js";
 import { migrate } from "./storage/migrations.js";
+import { imageStoreFromEnv, objectStorageHint } from "./storage/objectStorage.js";
 
 /** Kommagetrennte Liste aus einer Umgebungsvariable. */
 const list = (value: string | undefined) => (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -38,9 +39,22 @@ try {
   process.exit(1);
 }
 
-// Fotos (Galerie der Rezepte, Fotos geteilter Rezepte) als Dateien in diesem Ordner, in der Datenbank nur ihr Schlüssel.
-const photosDir = process.env.PHOTOS_DIR?.trim() || "data/photos";
-const images = new DirectoryImageStore(photosDir);
+// Fotos (Galerie der Rezepte, Fotos geteilter und eigener Rezepte) als Dateien, in der Datenbank nur ihr Schlüssel: im
+// Ordner PHOTOS_DIR oder – mit S3_* für Hoster ohne dauerhafte Dateien – in einem Objektspeicher (storage/objectStorage.ts).
+// Beim Start einmal speichern, lesen und löschen: Falsche Schlüssel fallen sofort auf, nicht erst beim ersten Foto.
+let images: ImageStore;
+try {
+  images = imageStoreFromEnv(process.env);
+  await images.check?.();
+} catch (e) {
+  console.error(`\nDer Speicher für Fotos ist nicht bereit: ${(e as Error).message}`);
+  const hint = objectStorageHint(e) ?? ((e as NodeJS.ErrnoException).code ? "Darf der Server in den Ordner für Fotos (PHOTOS_DIR, Standard data/photos) schreiben?" : null);
+  if (hint) console.error(hint);
+  console.error("");
+  await db.close();
+  process.exit(1);
+}
+const photosAt = images.description.replace(/^Ordner /, "");
 
 // Einmaliger Umzug aus den JSON-Dateien älterer Fassungen (storage/legacy.ts): Konten, Sicherung der
 // Ernährungshistorie, Community-Rezepte, Fotos mit Sternen und Meldungen, Admin-Änderungen an Katalogrezepten.
@@ -78,7 +92,7 @@ try {
   if (moved) {
     console.log(
       `Community-Rezepte aus ${communityFile} in die Datenbank übernommen: ${n(moved.recipes, "Rezept", "Rezepte")} mit ` +
-        `${n(moved.likes, "Favorit", "Favoriten")}, ${n(moved.images, "Foto", "Fotos")} jetzt als Datei in ${photosDir}${skipped(moved.skipped)}. Die alte Datei ist gelöscht.`,
+        `${n(moved.likes, "Favorit", "Favoriten")}, ${n(moved.images, "Foto", "Fotos")} jetzt als Datei in ${photosAt}${skipped(moved.skipped)}. Die alte Datei ist gelöscht.`,
     );
   }
 } catch (e) {
@@ -90,7 +104,7 @@ try {
   if (moved) {
     console.log(
       `Fotos, Sterne und Meldungen aus ${feedbackFile} in die Datenbank übernommen: ${n(moved.photos, "Foto", "Fotos")} (jetzt als Datei in ` +
-        `${photosDir}), ${n(moved.ratings, "Bewertung", "Bewertungen")}, ${n(moved.flags, "Meldung", "Meldungen")}${skipped(moved.skipped)}. Die alte Datei ist gelöscht.`,
+        `${photosAt}), ${n(moved.ratings, "Bewertung", "Bewertungen")}, ${n(moved.flags, "Meldung", "Meldungen")}${skipped(moved.skipped)}. Die alte Datei ist gelöscht.`,
     );
   }
 } catch (e) {

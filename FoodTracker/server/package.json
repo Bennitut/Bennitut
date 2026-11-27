@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "translate-ui": "tsx scripts/translate-ui.ts",
+    "photos:copy": "tsx --disable-warning=ExperimentalWarning scripts/copy-photos.ts",
     "check": "npm run typecheck && npm test",
     "docker:smoke": "bash scripts/docker-smoke.sh"
   },
