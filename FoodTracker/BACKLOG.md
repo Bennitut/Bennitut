@@ -663,7 +663,9 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Benjamin dort einrichtet (9.5). Dabei prüfen: Sieht das Rate-Limit hinter Render und Tailscale Funnel die echten
   Adressen (`TRUST_PROXY=cloudflare` bzw. `1` – steht kein „Hinweis: … TRUST_PROXY“ im Log, passt es)? Leiten Render
   und der Quick Tunnel http selbst auf https um (sonst macht es der Server)? Kommt der Host-Header beim Quick Tunnel
-  als `….trycloudflare.com` an (sonst lehnt der Server http mit 403 ab, statt umzuleiten)? Kommen KI-Antworten über den
+  als `….trycloudflare.com` an (sonst lehnt der Server http mit 403 ab, statt umzuleiten)? Kommt `X-Forwarded-Proto`
+  über den Tunnel als `https` an (laut Cloudflare-Doku die Art der Besucher:innen, laut einem Bericht in cloudflared-Issue
+  1245 auch über einen Tunnel; käme `http`, lehnte der Server alles außer Abfragen mit `https_required` ab)? Kommen KI-Antworten über den
   Tunnel unter 125 Sekunden? Stimmen die Namen der Felder bei Render und Neon noch? (27.11.2026)
 - **Objektspeicher mit echtem Anbieter ungeprüft:** Geprüft gegen den Nachbau in den Tests, gegen moto (prüft Signaturen
   wie AWS) und im Container – mit Neon, R2, Backblaze oder Supabase selbst erst, wenn Benjamin dort einen Bucket anlegt
