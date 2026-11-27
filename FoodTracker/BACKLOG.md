@@ -14,7 +14,7 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 12 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 16 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
@@ -26,8 +26,10 @@ Essgewohnheiten** zwischen den Geräten ab (9.2 Teil 4), seit 7 Uhr auch **eigen
 Favoriten und Rezepttexte** (Teil 5; die Fotos legt der Server in den Bildspeicher des Kontos, auf dem Gerät bleiben sie
 offline sichtbar), seit 11 Uhr auch **eigene Fotos der Galerie** („Nur ich“ und öffentliche, Teil 6), seit 12 Uhr die
 **Server-Adresse** (Teil 7: unter 👤 Profil → Server änderbar, fest mit `EXPO_PUBLIC_API_URL`, Abgleich-Marken an die
-Kennung der Datenbank gebunden) – damit ist 9.2 fertig. Als Nächstes 9.3 (Dockerfile und Health-Check, `CORS_ORIGINS`
-für die Web-Version). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+Kennung der Datenbank gebunden) – damit ist 9.2 fertig. Seit 16 Uhr gibt es das **Dockerfile** für den Server im
+Internet (9.3 Teil 1: Health-Check `/api/health/live`, Web-Version auf GitHub Pages per CORS voreingestellt, Dev-Login im
+Betrieb aus; `npm run docker:smoke`). Als Nächstes in 9.3 die Fotos in einem Objektspeicher (für Cloud-Dienste ohne
+dauerhafte Dateien), dann `docs/SERVER-HOSTING.md`. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -208,8 +210,19 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
 
 **9.3 Bereit fürs Internet (vorbereiten, nicht deployen)**
 
-- [ ] Dockerfile und Health-Check für den Server; `CORS_ORIGINS` für die Web-Version (`https://bennitut.github.io`)
-  und eigene Domains.
+- [x] Dockerfile und Health-Check für den Server; `CORS_ORIGINS` für die Web-Version (`https://bennitut.github.io`)
+  und eigene Domains. – erledigt 27.11.2026: `server/Dockerfile` mit Node.js 26 (LTS): TypeScript mit `npm run build`
+  nach `dist/` übersetzt, im Image nur `dist/`, die Pakete für den Betrieb und `package.json`; läuft als `node`,
+  beschreiben darf er nur `/app/data` (Volume für SQLite und Fotos); `.dockerignore` lässt nur `package*.json`,
+  `tsconfig*.json` und `src/` hinein (nie `.env` oder `data/`). Health-Check: neues Lebenszeichen `GET
+  /api/health/live` ohne Datenbank und KI (eine kostenlose Datenbank wie Neon darf schlafen, Ollama hinter einem Tunnel
+  bekommt keine Anfragen), `HEALTHCHECK` alle 30 s über `dist/healthcheck.js`. Im Image `NODE_ENV=production` – dann
+  wirkt `ALLOW_DEV_LOGIN` nicht (`src/runtime.ts`, die Startmeldung sagt es) – und `CORS_ORIGINS=https://bennitut.github.io`;
+  eigene Domains: die Variable setzen und die Pages-Adresse mit aufzählen. Startmeldung im Container mit Port statt
+  WLAN, ohne Firewall und Test am iPhone; neue Zeile „Browser (CORS)“ (auch auf dem Laptop), Ollama-Adresse ohne
+  Zugangsdaten. Ohne Docker: `npm run build`, `npm run start:prod`. README „Server im Internet (Docker)“. 13
+  Server-Tests (261); `npm run docker:smoke` baut das Image und prüft es als Container (healthy, nicht root, CORS,
+  Dev-Login aus, ein Konto bleibt nach dem Ersetzen des Containers angemeldet, rasches Ende auf SIGTERM) – grün.
 - [ ] Fotos auf Cloud-Diensten ohne dauerhafte Dateien (z. B. Render gratis): eine zweite Fassung von `ImageStore`
   (`storage/images.ts`) für einen Objektspeicher mit S3-Schnittstelle – aktuelle Gratis-Angebote per Websuche prüfen
   (wo eine Kreditkarte verlangt wird, ehrlich sagen); ohne neue native Pakete, Tests ohne echten Dienst. In
@@ -221,10 +234,15 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   braucht die KI dort die Claude-API (kostet API-Geld) oder eine Weiterleitung an Ollama auf dem Laptop (`OLLAMA_URL` auf
   die Tunnel-Adresse, mit geheimem Schlüssel) – als Option vorsehen. Klar abgrenzen, was Benjamin selbst tun muss.
 - [ ] Sicherheit: nur über HTTPS, Rate-Limits, Größenbegrenzung für Uploads, keine Geheimnisse im Repo, Logs ohne
-  Passwörter, Tokens oder E-Mail-Adressen; Datenschutz-Entwurf um Konten, Speicherung, Hosting-Anbieter und Reel-Import
-  ergänzen. B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand
+  Passwörter, Tokens oder E-Mail-Adressen (auch ohne `OLLAMA_URL` mit Schlüssel) und `TRUST_PROXY` ohne fälschbares
+  `CF-Connecting-IP` (beides unter „Ideen und Erkenntnisse“); Datenschutz-Entwurf um Konten, Speicherung,
+  Hosting-Anbieter und Reel-Import ergänzen. B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand
   (E-Mail und Passwort mit scrypt-Prüfwert, Code per Mail-Dienst, Sitzung im Schlüsselbund bzw. in localStorage,
   Übernahme der Gerätedaten beim Anmelden, Export und Löschen im Profil).
+
+- [ ] Abgleich über verschiedene Fassungen von App und Server (unter „Ideen und Erkenntnisse“: „Neuere App, älterer
+  Server“ – dort steht, dass es vor dem Server im Internet erledigt sein soll): Der Server übergeht unbekannte Arten,
+  die App merkt sich je Sitzung, welche Arten der Server kennt, und wartet bei den anderen.
 
 **9.4 Import von Instagram-Reels, TikTok und YouTube Shorts**
 
@@ -546,6 +564,22 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
+- **`CF-Connecting-IP` mit `TRUST_PROXY=1`:** `clientIp` (`http/rateLimit.ts`) traut zuerst diesem Header. Steht kein
+  Cloudflare vor dem Server (Cloudflare Tunnel setzt ihn selbst), kann jede:r ihn mitschicken und so das Rate-Limit pro
+  IP-Adresse umgehen; das pro E-Mail-Adresse bleibt. Für 9.3 „Sicherheit“: z. B. `TRUST_PROXY=cloudflare` (nur dieser
+  Header) getrennt von `TRUST_PROXY=1` (nur der letzte Eintrag in `X-Forwarded-For`). (27.11.2026)
+- **`OLLAMA_URL` in Warnungen:** Scheitert eine Anfrage an Ollama, schreibt der Server „Ollama unter <OLLAMA_URL> nicht
+  erreichbar“ ins Protokoll (`ai/ollama.ts`, `ai/provider.ts`). Steht in der Adresse ein Schlüssel (Weiterleitung an
+  Ollama auf dem Laptop, 9.3), landete er im Protokoll des Hosters. Die Startmeldung kürzt die Adresse schon
+  (`displayUrl` in `startInfo.ts`); in 9.3 „Sicherheit“ auch dort. (27.11.2026)
+- **ffmpeg im Docker-Image (für 9.4):** Der Import hochgeladener Videos braucht ffmpeg – dann im Dockerfile
+  `apt-get install --no-install-recommends ffmpeg` (das Image wird deutlich größer) und `npm run docker:smoke` um einen
+  Import mit Testvideo ergänzen. (27.11.2026)
+- **Docker in der Cloud-Sitzung:** Der Docker-Dienst läuft nicht von selbst (`nohup dockerd &` startet ihn). npm braucht
+  im Build den Proxy samt dessen Zertifikat: einmal ein lokales `node:26-slim` bauen, das das Zertifikat mitbringt
+  (`FROM node:26-slim`, Zertifikat kopieren, `NODE_EXTRA_CA_CERTS`), dann
+  `DOCKER_BUILD_FLAGS="--network host --build-arg HTTPS_PROXY=$HTTPS_PROXY" npm run docker:smoke`. Das Dockerfile
+  bleibt dafür unverändert. (27.11.2026)
 - **Anmeldung gilt je Server-Adresse:** Wer zwischen zwei Adressen desselben Servers wechselt (Laptop im WLAN und über
   Cloudflare Tunnel), wird abgemeldet und meldet sich neu an; ohne Konto gilt unter der eingetragenen Adresse eine
   eigene Geräte-ID (die Sicherung des Tagebuchs liegt dann zweimal auf dem Server). Bewusst so: Ein Server kann nicht
