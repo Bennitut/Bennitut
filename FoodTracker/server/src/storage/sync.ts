@@ -2,8 +2,8 @@ import { batches, type Db, type Queryable } from "./db.js";
 
 // Allgemeine Tabelle für den Abgleich zwischen App und Server (Vorrang 1, 9.2): pro Besitzer („user:<Konto-ID>“ bzw.
 // „device:<Geräte-ID>“) und Art („diary“ für die Ernährungshistorie, „settings“, „plan“, „pantry“, „recipes“,
-// „favorites“ und „texts“ für Einstellungen, Plan, Vorrat, eigene Rezepte, Favoriten und Rezepttexte eines Kontos –
-// sync/userData.ts) Datensätze mit Eintrags-ID, Revision,
+// „favorites“, „texts“ und „photos“ für Einstellungen, Plan, Vorrat, eigene Rezepte, Favoriten, Rezepttexte und eigene
+// Fotos der Galerie eines Kontos – sync/userData.ts) Datensätze mit Eintrags-ID, Revision,
 // Zeitpunkt der letzten Änderung und Inhalt – oder einer Löschmarke (Inhalt NULL), damit Gelöschtes von anderen
 // Geräten nicht zurückkommt. Die Revision zählt pro Besitzer und Art hoch
 // (sync_revisions); die App merkt sich, bis zu welcher sie alles kennt, und fragt beim nächsten Mal nur nach Neuerem.

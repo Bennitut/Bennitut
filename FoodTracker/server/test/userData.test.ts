@@ -419,6 +419,157 @@ describe("Abgleich eigener Rezepte, Favoriten und Rezepttexte (/api/sync)", () =
   });
 });
 
+// --------------------------------------------------------------------------------------------------------------
+// Eigene Fotos der Galerie (9.2 Teil 6)
+// --------------------------------------------------------------------------------------------------------------
+
+type StoredPhoto = { recipeId: string; createdAt: string; public: boolean; remoteId?: string | null; uri?: string };
+const photoData = (r: SyncRecord | undefined) => r?.data as StoredPhoto | undefined;
+const privatePhoto = (recipeId: string, uri: string | undefined, patch: Partial<StoredPhoto> = {}): StoredPhoto => ({
+  recipeId,
+  createdAt: T(0),
+  public: false,
+  ...(uri === undefined ? {} : { uri }),
+  ...patch,
+});
+
+describe("Abgleich eigener Fotos der Galerie (/api/sync)", () => {
+  const images = new MemoryImageStore();
+  const galleryDb = openSqlite(":memory:");
+  const galleryApp = createApp({ db: galleryDb, images, auth: { appleAudiences: [], googleAudiences: [], adminEmails: [], allowDevLogin: true }, ai: noAi });
+  const galleryStore = new SyncStore(galleryDb);
+  const login = async (name: string) =>
+    (await (await galleryApp.request("/api/auth/dev", { method: "POST", body: JSON.stringify({ name }), headers: headers() })).json()) as { token: string; user: { id: string } };
+  const send = (body: unknown, token: string) => galleryApp.request("/api/sync", { method: "POST", body: JSON.stringify(body), headers: headers(token) });
+  const syncAs = async (body: unknown, token: string) => {
+    const res = await send(body, token);
+    expect(res.status).toBe(200);
+    return (await res.json()) as UserDataSyncResponse;
+  };
+  const photos = (since: number, changes: unknown[] = []) => ({ kinds: { photos: { since, changes } } });
+  /** Öffentliches Foto in der Galerie, wie es die App mit „Öffentlich“ hochlädt (POST /api/recipes/:id/photos). */
+  const publish = async (token: string, recipeId: string, n: number) => {
+    const res = await galleryApp.request(`/api/recipes/${recipeId}/photos`, { method: "POST", body: JSON.stringify({ authorName: "", uri: jpeg(n) }), headers: headers(token) });
+    expect(res.status).toBe(201);
+    return (await res.json()) as { id: string; uri: string };
+  };
+
+  it("legt private Fotos in den Bildspeicher, bringt sie mit Pfad auf andere Geräte und löscht die Datei mit dem Foto", async () => {
+    const { token, user } = await login("Galerie privat");
+    const first = await syncAs(photos(0, [{ id: "foto1", updatedAt: T(1), data: privatePhoto("linsen_dal", jpeg(1)) }]), token);
+    // Die App bekommt die gespeicherte Fassung: Pfad statt data-URI.
+    const uri = photoData(first.kinds.photos?.changes[0])?.uri;
+    expect(uri).toMatch(/^\/api\/images\/[0-9a-f-]{36}\.jpg$/);
+    expect(first.kinds.photos?.changes[0]).toEqual({ id: "foto1", updatedAt: T(1), data: privatePhoto("linsen_dal", uri) });
+    expect(images.keys()).toEqual([imageKeyOf(uri!)]);
+    const rows = await galleryStore.records(USER_DATA.photos, `user:${user.id}`);
+    expect(JSON.stringify(rows)).not.toContain("base64");
+    expect(Buffer.from(await (await galleryApp.request(uri!)).arrayBuffer())).toEqual(jpegBytes(1));
+    // Nicht in der öffentlichen Galerie des Rezepts.
+    expect(await (await galleryApp.request("/api/recipes/linsen_dal/photos", { headers: headers(token) })).json()).toEqual([]);
+
+    // Zweites Gerät: bekommt den Pfad; schickt es ihn zurück (gleiches Foto), entsteht keine neue Datei.
+    const other = await syncAs(photos(0), token);
+    expect(other.kinds.photos?.changes).toEqual(first.kinds.photos?.changes);
+    const same = await syncAs(photos(other.kinds.photos!.rev, [{ id: "foto1", updatedAt: T(2), data: privatePhoto("linsen_dal", uri) }]), token);
+    expect(same.kinds.photos?.changes).toEqual([]);
+    expect(images.keys()).toEqual([imageKeyOf(uri!)]);
+
+    // Am zweiten Gerät gelöscht: Die Datei ist weg, das erste Gerät bekommt die Löschmarke.
+    await syncAs(photos(same.kinds.photos!.rev, [{ id: "foto1", updatedAt: T(3), data: null }]), token);
+    expect(images.keys()).toEqual([]);
+    expect((await syncAs(photos(first.kinds.photos!.rev), token)).kinds.photos?.changes).toEqual([{ id: "foto1", updatedAt: T(3), data: null }]);
+  });
+
+  it("trägt bei öffentlichen Fotos den Pfad aus der Galerie ein, ohne eigene Datei – auch nach „Öffentlich machen“", async () => {
+    const { token } = await login("Galerie öffentlich");
+    const shown = await publish(token, "shakshuka", 2);
+    const galleryKey = imageKeyOf(shown.uri)!;
+    expect(images.keys()).toContain(galleryKey);
+    const before = images.keys();
+    // Die App schickt nur die ID in der Galerie; der Server ergänzt den Pfad und schickt die Fassung zurück.
+    const synced = await syncAs(photos(0, [{ id: "foto2", updatedAt: T(1), data: { recipeId: "shakshuka", createdAt: T(0), public: true, remoteId: shown.id } }]), token);
+    expect(synced.kinds.photos?.changes).toEqual([{ id: "foto2", updatedAt: T(1), data: { recipeId: "shakshuka", createdAt: T(0), public: true, remoteId: shown.id, uri: shown.uri } }]);
+    expect(images.keys()).toEqual(before);
+
+    // Ein privates Foto wird öffentlich gemacht: Die eigene Datei ist danach weg, die der Galerie bleibt.
+    const priv = await syncAs(photos(synced.kinds.photos!.rev, [{ id: "foto3", updatedAt: T(1), data: privatePhoto("shakshuka", jpeg(3)) }]), token);
+    const privateKey = imageKeyOf(photoData(priv.kinds.photos?.changes[0])!.uri!);
+    expect(images.keys()).toContain(privateKey);
+    const later = await publish(token, "shakshuka", 3);
+    const made = await syncAs(photos(priv.kinds.photos!.rev, [{ id: "foto3", updatedAt: T(2), data: { ...privatePhoto("shakshuka", photoData(priv.kinds.photos?.changes[0])!.uri), public: true, remoteId: later.id } }]), token);
+    expect(photoData(made.kinds.photos?.changes[0])?.uri).toBe(later.uri);
+    expect(images.keys()).not.toContain(privateKey);
+    expect(images.keys()).toContain(imageKeyOf(later.uri));
+
+    // Ein anderes Gerät löscht die öffentlichen Fotos (die App löscht sie zuvor in der Galerie): Die Löschmarken
+    // lassen die Dateien der Galerie stehen – die gehören ihr.
+    await syncAs(photos(made.kinds.photos!.rev, [{ id: "foto2", updatedAt: T(5), data: null }, { id: "foto3", updatedAt: T(5), data: null }]), token);
+    expect(images.keys()).toContain(galleryKey);
+    expect(images.keys()).toContain(imageKeyOf(later.uri));
+  });
+
+  it("lässt den Pfad weg, wenn es das öffentliche Foto nicht (mehr) zu diesem Rezept gibt, und nimmt nie die Datei der Galerie als eigene", async () => {
+    const { token } = await login("Galerie fremd");
+    const shown = await publish(token, "shakshuka", 4);
+    const result = await syncAs(
+      photos(0, [
+        { id: "falsches_rezept", updatedAt: T(1), data: { recipeId: "linsen_dal", createdAt: T(0), public: true, remoteId: shown.id } },
+        { id: "unbekannt", updatedAt: T(1), data: { recipeId: "shakshuka", createdAt: T(0), public: true, remoteId: "gibt-es-nicht", uri: shown.uri } },
+        // Ein privates Foto mit dem Pfad der Galerie bekommt eine eigene Datei (wie eine Kopie).
+        { id: "kopie", updatedAt: T(1), data: privatePhoto("shakshuka", shown.uri) },
+      ]),
+      token,
+    );
+    const byId = new Map(result.kinds.photos!.changes.map((r) => [r.id, photoData(r)]));
+    expect(byId.get("falsches_rezept")?.uri).toBeUndefined();
+    expect(byId.get("unbekannt")?.uri).toBeUndefined();
+    const copy = byId.get("kopie")?.uri;
+    expect(imageKeyOf(copy!)).not.toBe(imageKeyOf(shown.uri));
+    // Die Kopie gelöscht: nur ihre Datei verschwindet, das Foto der Galerie bleibt abrufbar.
+    await syncAs(photos(result.kinds.photos!.rev, [{ id: "kopie", updatedAt: T(2), data: null }]), token);
+    expect(images.keys()).not.toContain(imageKeyOf(copy!));
+    expect((await galleryApp.request(shown.uri)).status).toBe(200);
+  });
+
+  it("lehnt Ungültiges bei eigenen Fotos ab", async () => {
+    const { token } = await login("Prüfung Fotos");
+    const status = async (data: unknown, id = "foto") => (await send(photos(0, [{ id, updatedAt: T(1), data }]), token)).status;
+    expect(await status({ recipeId: "shakshuka", createdAt: T(0), public: true })).toBe(400); // öffentlich ohne ID in der Galerie
+    expect(await status(privatePhoto("linsen dal", jpeg(1)))).toBe(400);
+    expect(await status(privatePhoto("shakshuka", jpeg(1)), "foto:1")).toBe(400);
+    expect(await status({ recipeId: "shakshuka", public: false })).toBe(400); // ohne Zeitpunkt
+    expect(await status(privatePhoto("shakshuka", `data:image/jpeg;base64,${"A".repeat(MAX_IMAGE_URI)}`))).toBe(400);
+    expect(await status(privatePhoto("shakshuka", jpeg(1), { note: "x".repeat(2000) } as Partial<StoredPhoto>))).toBe(400);
+    // Ohne Foto (z. B. eine Datei, die nur auf dem Gerät liegt) und mit Feldern einer neueren App geht es durch.
+    expect(await status(privatePhoto("shakshuka", undefined, { neu: 1 } as Partial<StoredPhoto>))).toBe(200);
+  });
+
+  it("gehört zu „Meine Daten exportieren“ (private als data-URI) und verschwindet mit dem Konto samt Dateien", async () => {
+    const { token, user } = await login("Export Fotos");
+    const shown = await publish(token, "shakshuka", 6);
+    await syncAs(
+      photos(0, [
+        { id: "privat", updatedAt: T(1), data: privatePhoto("linsen_dal", jpeg(5)) },
+        { id: "oeffentlich", updatedAt: T(1), data: { recipeId: "shakshuka", createdAt: T(0), public: true, remoteId: shown.id } },
+      ]),
+      token,
+    );
+    const exported = (await (await galleryApp.request("/api/auth/export", { headers: headers(token) })).json()) as Record<string, unknown>;
+    expect(exported.myPhotos).toEqual([
+      { id: "privat", ...privatePhoto("linsen_dal", jpeg(5)) },
+      { id: "oeffentlich", recipeId: "shakshuka", createdAt: T(0), public: true, remoteId: shown.id },
+    ]);
+    // Das öffentliche Foto selbst steht in der Galerie-Liste des Exports.
+    expect((exported.photos as { id: string; uri: string }[]).map((p) => [p.id, p.uri])).toEqual([[shown.id, jpeg(6)]]);
+
+    expect((await galleryApp.request("/api/auth/me", { method: "DELETE", body: "{}", headers: headers(token) })).status).toBe(204);
+    expect(await galleryStore.count(USER_DATA.photos, `user:${user.id}`)).toBe(0);
+    expect(images.keys().filter((k) => k === imageKeyOf(shown.uri))).toEqual([]);
+    for (const key of images.keys()) expect((await images.get(key))?.bytes[4]).not.toBe(5);
+  });
+});
+
 // Dieselben Regeln auf SQLite und Postgres (pg-mem, eine nachgebaute Postgres-Datenbank im Speicher).
 function pgMem(): Db {
   const { Pool } = newDb().adapters.createPg();
@@ -486,7 +637,7 @@ describe.each(BACKENDS)("Abgleich der Kontodaten mit %s", (_name, open) => {
     const gone = await syncUserData(synced, "user:1", request({ pantry: { since: 1, changes: [{ id: "reis@2026-11-27", updatedAt: EPOCH, data: null }] } }), images);
     expect(gone.kinds.pantry?.changes).toEqual([]);
     expect(await synced.count(USER_DATA.pantry, "user:1")).toBe(0);
-    expect(await exportUserData(synced, "user:1", images)).toEqual({ settings: null, plan: null, pantry: [], recipes: [], favorites: [], texts: { translated: {}, improved: {} } });
+    expect(await exportUserData(synced, "user:1", images)).toEqual({ settings: null, plan: null, pantry: [], recipes: [], favorites: [], texts: { translated: {}, improved: {} }, myPhotos: [] });
   });
 
   it("speichert Fotos eigener Rezepte als Dateien und räumt neue wieder weg, wenn das Speichern scheitert", async () => {
@@ -502,6 +653,39 @@ describe.each(BACKENDS)("Abgleich der Kontodaten mit %s", (_name, open) => {
       syncUserData(synced, "user:1", request({ recipes: { since: 0, changes: [{ id: "eigen_2", updatedAt: T(3), data: { recipe: ownRecipe("eigen_2", { media: { image: { uri: jpeg(2) } } }) } }] } }), photos),
     ).rejects.toBeInstanceOf(SyncFullError);
     expect(photos.keys()).toHaveLength(1);
+  });
+
+  it("speichert private Fotos der Galerie als Dateien, öffentliche mit dem Pfad der Galerie, und räumt nur eigene Dateien weg", async () => {
+    const synced = await ready();
+    const photos = new MemoryImageStore();
+    const galleryKey = "aaaaaaaa-1111-4222-8333-444455556666.jpg";
+    await photos.put(galleryKey, { type: "image/jpeg", bytes: new Uint8Array(jpegBytes(8)) });
+    const gallery = async (wanted: readonly string[]) => new Map(wanted.filter((id) => id === "g-1").map((id) => [id, { recipeId: "shakshuka", uri: `/api/images/${galleryKey}` }]));
+    const first = await syncUserData(
+      synced,
+      "user:1",
+      request({
+        photos: {
+          since: 0,
+          changes: [
+            { id: "p1", updatedAt: T(1), data: privatePhoto("shakshuka", jpeg(1)) },
+            { id: "p2", updatedAt: T(1), data: { recipeId: "shakshuka", createdAt: T(0), public: true, remoteId: "g-1" } },
+          ],
+        },
+      }),
+      photos,
+      gallery,
+    );
+    const byId = new Map(first.kinds.photos!.changes.map((r) => [r.id, photoData(r)]));
+    const own = byId.get("p1")?.uri;
+    expect(photos.keys()).toEqual([galleryKey, imageKeyOf(own!)].sort());
+    expect(byId.get("p2")?.uri).toBe(`/api/images/${galleryKey}`);
+    // Beide gelöscht: Die eigene Datei ist weg, die der Galerie bleibt.
+    await syncUserData(synced, "user:1", request({ photos: { since: 2, changes: [{ id: "p1", updatedAt: T(2), data: null }, { id: "p2", updatedAt: T(2), data: null }] } }), photos, gallery);
+    expect(photos.keys()).toEqual([galleryKey]);
+    // Ohne Nachschlagen in der Galerie bleibt ein öffentliches Foto ohne Pfad.
+    const blind = await syncUserData(synced, "user:2", request({ photos: { since: 0, changes: [{ id: "p3", updatedAt: T(1), data: { recipeId: "shakshuka", createdAt: T(0), public: true, remoteId: "g-1" } }] } }), photos);
+    expect(photoData(blind.kinds.photos?.changes[0])?.uri).toBeUndefined();
   });
 
   it("ändert bei vollem Konto nichts", async () => {

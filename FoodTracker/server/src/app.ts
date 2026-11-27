@@ -479,14 +479,14 @@ export function createApp({
   });
 
   // Abgleich von Einstellungen (Profil und Fragebogen), Plan mit Einkaufsliste, Vorrat, eigenen Rezepten (Fotos in den
-  // Bildspeicher), Favoriten und Rezepttexten zwischen den Geräten eines Kontos (sync/userData.ts, in der App
-  // lib/dataSync.ts) – nur mit Konto, ohne bleiben diese Daten auf dem Gerät.
+  // Bildspeicher), Favoriten, Rezepttexten und eigenen Fotos der Galerie zwischen den Geräten eines Kontos
+  // (sync/userData.ts, in der App lib/dataSync.ts) – nur mit Konto, ohne bleiben diese Daten auf dem Gerät.
   app.post("/api/sync", async (c) => {
     const user = await currentUser(c);
     if (!user) throw new AuthError(bearer(c) ? "invalid_token" : "unauthorized");
     const body = UserDataSyncBody.parse(await c.req.json());
     try {
-      return c.json(await syncUserData(synced, `user:${user.id}`, body, images));
+      return c.json(await syncUserData(synced, `user:${user.id}`, body, images, (ids) => feedback.galleryPhotos(ids)));
     } catch (e) {
       if (e instanceof SyncFullError) return c.json({ error: "sync_full" }, 413);
       throw e;

@@ -183,6 +183,19 @@ export class FeedbackStore {
     return this.removePhotosWhere("id = ?", [photoId]);
   }
 
+  /**
+   * Fotos nach ID: Rezept und Pfad im Bildspeicher – für eigene öffentliche Fotos im Abgleich eines Kontos
+   * (sync/userData.ts), damit dessen andere Geräte das Foto zeigen und löschen können. Unbekannte IDs fehlen.
+   */
+  async galleryPhotos(ids: readonly string[]): Promise<Map<string, { recipeId: string; uri: string }>> {
+    const found = new Map<string, { recipeId: string; uri: string }>();
+    for (const batch of batches([...new Set(ids)])) {
+      const rows = await this.db.all<PhotoRow>(`SELECT ${PHOTO_COLUMNS} FROM recipe_photos WHERE id IN (${placeholders(batch)})`, batch);
+      for (const r of rows) found.set(r.id, { recipeId: r.recipe_id, uri: imageUri(r.image_key) });
+    }
+    return found;
+  }
+
   /** Fotos je Konto bzw. Gerät – für Nutzerverzeichnis und Admin-Bereich. */
   async photoCountsByAuthor(): Promise<Map<string, number>> {
     const rows = await this.db.all<{ author: string; n: number | string }>("SELECT author, COUNT(*) AS n FROM recipe_photos GROUP BY author");

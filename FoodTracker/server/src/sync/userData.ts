@@ -3,7 +3,7 @@ import { batches, placeholders, type Queryable } from "../storage/db.js";
 import { decodeDataUri, imageKeyOf, imageUri, newImageKey, toDataUri, type ImageStore } from "../storage/images.js";
 import { SyncStore, type SyncKind, type SyncRecord, type SyncResult } from "../storage/sync.js";
 
-// Abgleich der Daten eines Kontos zwischen seinen Geräten (Vorrang 1, 9.2 Teil 4 und 5; Gegenstück in der App:
+// Abgleich der Daten eines Kontos zwischen seinen Geräten (Vorrang 1, 9.2 Teil 4 bis 6; Gegenstück in der App:
 // app/src/lib/dataSync.ts). Gespeichert in der allgemeinen Tabelle sync_records wie das Tagebuch – aber nur mit Konto.
 // Ohne Konto bleiben diese Daten auf dem Gerät: Eine Sicherung unter der Geräte-ID brächte nichts zurück (mit den Daten
 // des Geräts ist auch seine Geräte-ID weg), und Allergien und Körperdaten sind Gesundheitsangaben, die der Server dann
@@ -22,6 +22,11 @@ import { SyncStore, type SyncKind, type SyncRecord, type SyncResult } from "../s
 //  - „favorites“: je Favorit (ID des Rezepts) `{}` bzw. bei Community-Rezepten `{ recipe }` mit der gespeicherten Kopie.
 //  - „texts“: je Rezept und Sprache ein Text – „t:<Sprache>:<Rezept>“ von der KI übersetzt, „o:<Sprache>:<Rezept>“ mit
 //    der KI verbessert (ersetzt das Original).
+//  - „photos“: je eigenem Foto aus der Galerie eines Rezepts (ID des Fotos in der App) `{ recipeId, createdAt, public,
+//    remoteId?, uri? }`. Private („Nur ich“) wie die Fotos eigener Rezepte: Eine data-URI legt der Server in den
+//    Bildspeicher (eigene Datei je Eintrag) und speichert den Pfad. Öffentliche liegen schon in der Galerie
+//    (recipe_photos, `remoteId`): Der Server trägt deren Pfad ein, legt keine eigene Datei an und löscht die der Galerie
+//    nie – so sehen auch die anderen Geräte das Foto und können es löschen.
 // Der Server prüft nur die Form (IDs, Größe, ein paar Pflichtfelder), nicht den ganzen Inhalt: Die Daten sieht nur das
 // Konto selbst, und eine neuere App mit zusätzlichen Feldern soll mit einem älteren Server weiter abgleichen können.
 
@@ -35,7 +40,7 @@ export const IsoTime = z
 /** Höchstens die größte Revision, die Postgres speichern kann (INTEGER, storage/sync.ts). */
 const Rev = z.number().int().min(0).max(2_147_483_647).default(0);
 
-export const USER_DATA_KINDS = ["settings", "plan", "pantry", "recipes", "favorites", "texts"] as const;
+export const USER_DATA_KINDS = ["settings", "plan", "pantry", "recipes", "favorites", "texts", "photos"] as const;
 export type UserDataKindName = (typeof USER_DATA_KINDS)[number];
 
 interface UserDataKind extends SyncKind {
@@ -123,6 +128,26 @@ const Text = z
   })
   .passthrough();
 
+/** Eigenes Foto der Galerie ohne das Foto selbst höchstens so groß (Zeichen JSON); meist rund 150. */
+export const MAX_PHOTO_JSON = 2000;
+
+/** Eigenes Foto aus der Galerie eines Rezepts; öffentliche mit der ID in der Galerie (`remoteId`). */
+const OwnPhoto = z
+  .object({
+    recipeId: z.string().regex(RECIPE),
+    createdAt: z.string().max(40),
+    public: z.boolean(),
+    remoteId: z.string().min(1).max(100).nullable().optional(),
+    uri: z.string().max(MAX_IMAGE_URI).optional(),
+  })
+  .passthrough()
+  .refine((d) => !d.public || typeof d.remoteId === "string", "Öffentliches Foto ohne ID in der Galerie")
+  .refine((d) => {
+    const { uri: _uri, ...rest } = d;
+    return JSON.stringify(rest).length <= MAX_PHOTO_JSON;
+  }, "Eintrag zu groß");
+type OwnPhotoData = z.infer<typeof OwnPhoto>;
+
 /**
  * Nach Änderungen am Plan: Häkchen, die nicht zum aktuellen Plan des Kontos gehören, entfernen – ohne Löschmarke, die
  * Geräte verwerfen sie ohnehin, sobald sie den neuen Plan haben. So wächst die Tabelle nicht mit jedem Monat.
@@ -164,6 +189,8 @@ export const USER_DATA: Record<UserDataKindName, UserDataKind> = {
   favorites: { name: "favorites", pageSize: 500, maxRecords: 5000, serverWinsTies: true, maxJson: MAX_RECIPE_JSON, validId: (id) => RECIPE.test(id), schema: Favorite },
   // Fünf Sprachen, übersetzt und verbessert, für alle Katalogrezepte und viele eigene.
   texts: { name: "texts", pageSize: 1000, maxRecords: 20_000, serverWinsTies: true, maxJson: 100_000, validId: (id) => TEXT.test(id), schema: () => Text },
+  // Gespeichert ohne Foto (Pfad statt data-URI, rund 150 Zeichen); die Galerie erlaubt 5 öffentliche je Rezept.
+  photos: { name: "photos", pageSize: 1000, maxRecords: 2000, serverWinsTies: true, maxJson: MAX_PHOTO_JSON + MAX_IMAGE_URI, validId: (id) => RECIPE.test(id), schema: () => OwnPhoto },
 };
 
 const changeFor = (kind: UserDataKind) =>
@@ -197,6 +224,7 @@ export const UserDataSyncBody = z.object({
       recipes: kindBody(USER_DATA.recipes).optional(),
       favorites: kindBody(USER_DATA.favorites).optional(),
       texts: kindBody(USER_DATA.texts).optional(),
+      photos: kindBody(USER_DATA.photos).optional(),
     })
     .strict(),
 });
@@ -219,32 +247,56 @@ export function recipeImageKey(data: unknown): string | null {
 }
 
 /**
- * Foto eines eigenen Rezepts zum Speichern: Jeder Eintrag hat seine eigene Datei im Bildspeicher. Bleibt es beim Foto,
- * das der Eintrag schon hat (derselbe Pfad), ändert sich nichts. Eine data-URI vom Gerät und ein Foto, das einem
- * anderen Eintrag oder einem Community-Rezept gehört (Kopie eines geteilten Rezepts), bekommen eine eigene Datei – so
- * bleibt das Foto, auch wenn das Original verschwindet. Fotos im Netz (https, z. B. Katalog) bleiben verlinkt; alles
- * andere fällt weg (eine Datei auf dem Gerät, die der Server nicht lesen kann, ein unbekanntes Format). `created`
- * sammelt die neuen Dateien (zum Aufräumen, falls die Transaktion scheitert).
+ * Ein eigenes Foto zum Speichern: Jeder Eintrag hat seine eigene Datei im Bildspeicher. Bleibt es beim Foto, das der
+ * Eintrag schon hat (derselbe Pfad, `currentKey`), ändert sich nichts. Eine data-URI vom Gerät und ein Foto, das einem
+ * anderen Eintrag, einem Community-Rezept oder der Galerie gehört (z. B. Kopie eines geteilten Rezepts), bekommen eine
+ * eigene Datei – so bleibt das Foto, auch wenn das Original verschwindet. Fotos im Netz (https, z. B. Katalog) bleiben
+ * verlinkt. Liefert die Adresse, die gespeichert wird (unverändert dieselbe), bzw. null, wenn das Foto wegfällt (eine
+ * Datei auf dem Gerät, die der Server nicht lesen kann, ein unbekanntes Format). `created` sammelt die neuen Dateien
+ * (zum Aufräumen, falls die Transaktion scheitert).
  */
+async function storeImage(images: ImageStore, uri: string, currentKey: string | null, created: string[]): Promise<string | null> {
+  const key = imageKeyOf(uri);
+  if (key !== null && key === currentKey) return uri;
+  if (/^https:\/\//i.test(uri)) return uri;
+  const stored = key !== null ? await images.get(key) : decodeDataUri(uri);
+  if (!stored) return null;
+  const fresh = newImageKey(stored.type);
+  await images.put(fresh, stored);
+  created.push(fresh);
+  return imageUri(fresh);
+}
+
+/** Foto eines eigenen Rezepts zum Speichern (wie storeImage); ohne Änderung dasselbe Objekt. */
 async function storeOwnImage(images: ImageStore, change: SyncRecord, currentKey: string | null, created: string[]): Promise<SyncRecord> {
   const data = change.data as OwnRecipeData;
   const image = data.recipe.media?.image;
   if (!image) return change;
-  const key = imageKeyOf(image.uri);
-  if (key !== null && key === currentKey) return change;
-  if (/^https:\/\//i.test(image.uri)) return change;
-  const stored = key !== null ? await images.get(key) : decodeDataUri(image.uri);
-  const replaced = (next: RecipeImage | undefined): SyncRecord => ({ ...change, data: { ...data, recipe: withImage(data.recipe, next) } });
-  if (!stored) return replaced(undefined);
-  const fresh = newImageKey(stored.type);
-  await images.put(fresh, stored);
-  created.push(fresh);
-  return replaced({ ...image, uri: imageUri(fresh) });
+  const uri = await storeImage(images, image.uri, currentKey, created);
+  if (uri === image.uri) return change;
+  const next: RecipeImage | undefined = uri === null ? undefined : { ...image, uri };
+  return { ...change, data: { ...data, recipe: withImage(data.recipe, next) } };
 }
 
 /** Bilder erst nach der Transaktion löschen: Scheitert sie, bleibt alles, wie es war. */
 async function deleteImages(images: ImageStore, keys: readonly string[]) {
   for (const key of keys) await images.delete(key).catch(() => undefined);
+}
+
+/**
+ * Abgleich einer Art mit Fotos im Bildspeicher (`kind.prepare` legt sie ab): Scheitert das Speichern, kommen die neuen
+ * Dateien (`created`) wieder weg; danach die ersetzten und gelöschten (`obsolete`).
+ */
+async function syncWithImages(store: SyncStore, images: ImageStore, kind: SyncKind, owner: string, since: number, changes: readonly SyncRecord[], created: string[], obsolete: string[]) {
+  let result: SyncResult;
+  try {
+    result = await store.sync(kind, owner, since, changes);
+  } catch (e) {
+    await deleteImages(images, created);
+    throw e;
+  }
+  await deleteImages(images, obsolete);
+  return result;
 }
 
 /** Abgleich eigener Rezepte mit ihren Fotos: neue Fotos in den Bildspeicher, ersetzte und gelöschte danach weg. */
@@ -260,45 +312,104 @@ async function syncRecipes(store: SyncStore, images: ImageStore, owner: string, 
       return next;
     },
   };
-  let result: SyncResult;
-  try {
-    result = await store.sync(kind, owner, since, changes);
-  } catch (e) {
-    await deleteImages(images, created);
-    throw e;
-  }
-  await deleteImages(images, obsolete);
-  return result;
+  return syncWithImages(store, images, kind, owner, since, changes, created, obsolete);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+// Eigene Fotos der Galerie (9.2 Teil 6)
+// --------------------------------------------------------------------------------------------------------------
+
+/** Fotos der Galerie (recipe_photos) nach ID: zu welchem Rezept und unter welchem Pfad (community/feedback.ts). */
+export type GalleryLookup = (ids: readonly string[]) => Promise<Map<string, { recipeId: string; uri: string }>>;
+
+/**
+ * Schlüssel der Datei, die einem gespeicherten Foto-Eintrag gehört – nur bei privaten Fotos. Öffentliche zeigen auf die
+ * Datei der Galerie: Die gehört der Galerie und verschwindet mit dem Foto dort (DELETE /api/photos/:id, Admin).
+ */
+export function photoImageKey(data: unknown): string | null {
+  const photo = data as Partial<OwnPhotoData> | null | undefined;
+  if (!photo || photo.public === true || typeof photo.uri !== "string") return null;
+  return imageKeyOf(photo.uri);
+}
+
+/** Eintrag mit anderem (bzw. ohne, null) Foto; ohne Änderung dasselbe Objekt. */
+function withPhotoUri(change: SyncRecord, uri: string | null): SyncRecord {
+  const data = change.data as OwnPhotoData;
+  if ((uri ?? undefined) === data.uri) return change;
+  const { uri: _old, ...rest } = data;
+  return { ...change, data: uri === null ? rest : { ...rest, uri } };
+}
+
+/**
+ * Abgleich eigener Fotos der Galerie. Private wie Fotos eigener Rezepte: eine eigene Datei im Bildspeicher, ersetzte und
+ * gelöschte kommen danach weg. Bei öffentlichen trägt der Server den Pfad aus der Galerie ein, wenn es das Foto dort
+ * (noch) zum selben Rezept gibt, sonst steht der Eintrag ohne Foto da; die Datei der Galerie fasst er nicht an. Ohne
+ * `gallery` (z. B. in Tests) kennt er keine öffentlichen Fotos.
+ */
+async function syncPhotos(store: SyncStore, images: ImageStore, gallery: GalleryLookup | undefined, owner: string, since: number, changes: readonly SyncRecord[]) {
+  const remoteIds = changes.flatMap((c) => {
+    const data = c.data as OwnPhotoData | null;
+    return data?.public && data.remoteId ? [data.remoteId] : [];
+  });
+  // Vor der Transaktion nachsehen – darin nur deren `tx` benutzen (storage/db.ts).
+  const published = remoteIds.length > 0 && gallery ? await gallery(remoteIds) : new Map<string, { recipeId: string; uri: string }>();
+  const created: string[] = [];
+  const obsolete: string[] = [];
+  const kind: SyncKind = {
+    ...USER_DATA.photos,
+    prepare: async (change, current) => {
+      const old = current?.data ? photoImageKey(current.data) : null;
+      const data = change.data as OwnPhotoData | null;
+      let next = change;
+      if (data?.public) {
+        const photo = data.remoteId ? published.get(data.remoteId) : undefined;
+        next = withPhotoUri(change, photo?.recipeId === data.recipeId ? photo.uri : null);
+      } else if (data?.uri !== undefined) {
+        next = withPhotoUri(change, await storeImage(images, data.uri, old, created));
+      }
+      if (old !== null && old !== photoImageKey(next.data)) obsolete.push(old);
+      return next;
+    },
+  };
+  return syncWithImages(store, images, kind, owner, since, changes, created, obsolete);
 }
 
 /**
  * Gleicht jede genannte Art ab (je Art eine Transaktion, siehe SyncStore.sync). Wirft SyncFullError, wenn das Konto bei
  * einer Art zu viele Einträge hätte – die Arten davor sind dann schon gespeichert; die App schickt beim nächsten Mal
- * alles noch einmal, das schadet nicht. `images`: Bildspeicher für die Fotos eigener Rezepte.
+ * alles noch einmal, das schadet nicht. `images`: Bildspeicher für die Fotos eigener Rezepte und eigene Fotos der
+ * Galerie; `gallery`: findet öffentliche Fotos in der Galerie (FeedbackStore.galleryPhotos).
  */
-export async function syncUserData(store: SyncStore, owner: string, request: UserDataSyncRequest, images: ImageStore): Promise<UserDataSyncResponse> {
+export async function syncUserData(store: SyncStore, owner: string, request: UserDataSyncRequest, images: ImageStore, gallery?: GalleryLookup): Promise<UserDataSyncResponse> {
   const kinds: UserDataSyncResponse["kinds"] = {};
   for (const name of USER_DATA_KINDS) {
     const body = request.kinds[name];
     if (!body) continue;
-    kinds[name] = name === "recipes" ? await syncRecipes(store, images, owner, body.since, body.changes) : await store.sync(USER_DATA[name], owner, body.since, body.changes);
+    if (name === "recipes") kinds[name] = await syncRecipes(store, images, owner, body.since, body.changes);
+    else if (name === "photos") kinds[name] = await syncPhotos(store, images, gallery, owner, body.since, body.changes);
+    else kinds[name] = await store.sync(USER_DATA[name], owner, body.since, body.changes);
   }
   return { owner, kinds };
 }
 
-/** Beim Löschen des Kontos: alle abgeglichenen Daten (auch das Tagebuch) samt den Fotos eigener Rezepte. */
+/** Beim Löschen des Kontos: alle abgeglichenen Daten (auch das Tagebuch) samt den eigenen Dateien im Bildspeicher. */
 export async function removeUserData(store: SyncStore, owner: string, images: ImageStore): Promise<void> {
-  const keys = (await store.records(USER_DATA.recipes, owner)).map((r) => recipeImageKey(r.data)).filter((k): k is string => k !== null);
+  const keys = [
+    ...(await store.records(USER_DATA.recipes, owner)).map((r) => recipeImageKey(r.data)),
+    ...(await store.records(USER_DATA.photos, owner)).map((r) => photoImageKey(r.data)),
+  ].filter((k): k is string => k !== null);
   await store.remove(owner);
   await deleteImages(images, keys);
 }
 
 /**
  * Für „Meine Daten exportieren“: Einstellungen, Plan mit Häkchen, Vorrat, eigene Rezepte (Fotos als data-URI, damit
- * die Datei auch ohne Server vollständig ist), Favoriten und Rezepttexte, wie der Server sie zum Konto hat.
+ * die Datei auch ohne Server vollständig ist), Favoriten, Rezepttexte und eigene Fotos der Galerie (private als
+ * data-URI; öffentliche stehen mit dem Foto unter „photos“, `remoteId` ist dort die ID), wie der Server sie zum Konto
+ * hat.
  */
 export async function exportUserData(store: SyncStore, owner: string, images: ImageStore) {
-  const [settings, plan, pantry, recipes, favorites, texts] = await Promise.all(USER_DATA_KINDS.map((name) => store.records(USER_DATA[name], owner)));
+  const [settings, plan, pantry, recipes, favorites, texts, photos] = await Promise.all(USER_DATA_KINDS.map((name) => store.records(USER_DATA[name], owner)));
   const current = plan!.find((r) => r.id === "plan")?.data as Record<string, unknown> | undefined;
   // „c:2026-11-27:0:reis“ → „0:reis“ (Woche und Zutat), wie die App die Häkchen speichert.
   const marks = (type: string) => plan!.filter((r) => r.id.startsWith(`${type}:`)).map((r) => r.id.slice(13));
@@ -309,6 +420,13 @@ export async function exportUserData(store: SyncStore, owner: string, images: Im
     const image = key ? await images.get(key) : undefined;
     const recipe = key ? withImage(data.recipe, image ? { ...data.recipe.media!.image!, uri: toDataUri(image) } : undefined) : data.recipe;
     ownRecipes.push({ ...recipe, ...(data.sharedAs ? { sharedAs: data.sharedAs } : {}) });
+  }
+  const myPhotos = [];
+  for (const record of photos!) {
+    const { uri: _uri, ...data } = record.data as OwnPhotoData;
+    const key = photoImageKey(record.data);
+    const image = key ? await images.get(key) : undefined;
+    myPhotos.push({ id: record.id, ...data, ...(image ? { uri: toDataUri(image) } : {}) });
   }
   const textsOf = (type: "t" | "o") => {
     const result: Record<string, Record<string, unknown>> = {};
@@ -332,5 +450,6 @@ export async function exportUserData(store: SyncStore, owner: string, images: Im
       return saved ? { recipeId: r.id, recipe: saved } : { recipeId: r.id };
     }),
     texts: { translated: textsOf("t"), improved: textsOf("o") },
+    myPhotos,
   };
 }
