@@ -14,7 +14,7 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 11 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 12 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
@@ -24,9 +24,10 @@ Abgleich), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und Admin-Änd
 im Bildspeicher (`data/photos/`). Seit 27.11., 6 Uhr gleicht die App mit Konto auch **Plan mit Einkaufsliste, Vorrat und
 Essgewohnheiten** zwischen den Geräten ab (9.2 Teil 4), seit 7 Uhr auch **eigene und importierte Rezepte mit Fotos,
 Favoriten und Rezepttexte** (Teil 5; die Fotos legt der Server in den Bildspeicher des Kontos, auf dem Gerät bleiben sie
-offline sichtbar), seit 11 Uhr auch **eigene Fotos der Galerie** („Nur ich“ und öffentliche, Teil 6). Als Nächstes 9.2
-Teil 7: die Server-Adresse (`EXPO_PUBLIC_API_URL`, im Profil änderbar), damit ist 9.2 fertig; dann 9.3. Danach
-Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+offline sichtbar), seit 11 Uhr auch **eigene Fotos der Galerie** („Nur ich“ und öffentliche, Teil 6), seit 12 Uhr die
+**Server-Adresse** (Teil 7: unter 👤 Profil → Server änderbar, fest mit `EXPO_PUBLIC_API_URL`, Abgleich-Marken an die
+Kennung der Datenbank gebunden) – damit ist 9.2 fertig. Als Nächstes 9.3 (Dockerfile und Health-Check, `CORS_ORIGINS`
+für die Web-Version). Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -187,9 +188,23 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   das Foto liegt (Ideen). Export mit `myPhotos` (private als data-URI), „Konto löschen“ samt Dateien, Datenschutz B7,
   Abgleich-Zeile im Profil nennt die Fotos (fünf Sprachen). 7 Server-Tests (241, SQLite und pg-mem), 5 App-Tests
   (215, gegen den echten Abgleich), `npm run web:account` mit einem „Nur ich“-Foto im frischen Browser.
-- [ ] Server-Adresse (Teil 7): `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie
+- [x] Server-Adresse (Teil 7): `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie
   bisher der Laptop im WLAN. Dabei die Abgleich-Marken an die Datenbank binden (unter „Ideen und Erkenntnisse“: „Neuer Server,
-  alte Abgleich-Marken“).
+  alte Abgleich-Marken“). – erledigt 27.11.2026: Server: zufällige Kennung der Datenbank (`storage/identity.ts`, in
+  `storage_meta`), `/api/diary/sync` und `/api/sync` nennen sie; nennt die App eine andere, übernimmt der Server nichts
+  und sagt `reset`. App: Marken mit Kennung (`db`), bei `reset` alles von vorn (eigene Fotos als Bild), Marken einer
+  älteren Fassung einmal von vorn, ein älterer Server ohne Kennung bekommt weiter nur Neues. Dazu bei gleichem Zeitpunkt
+  die Fassung mit dem Foto selbst, wenn die gespeicherte keins hat (`incomingWinsTie`, Rezepte und private Fotos der
+  Galerie) – sonst verlöre ein Umzug Fotos, wenn zuerst ein Gerät abgleicht, das sie nur als Pfad kennt. Adresse
+  (`lib/serverAddress.ts`): im Profil eingetragen → `EXPO_PUBLIC_API_URL` (auch `app/.env.local`, `off` = ohne Server) →
+  der Rechner mit Expo → in der exportierten Web-Version keiner; Pages-Workflow mit der Repository-Variable
+  `FOODTRACKER_API_URL`. Neuer Bildschirm 👤 Profil → 🖥️ Server (fünf Sprachen): Adresse prüfen (`GET /api/health` ohne
+  Geräte-ID und ohne Anmeldung) und verwenden, „Trotzdem verwenden“, „Zurück zur Standard-Adresse“; ohne `http://`
+  http im eigenen Netz, sonst https; aus einer https-Seite kein Server ohne https. Beim Wechsel abmelden (auch beim
+  bisherigen Server; Anmeldungen gelten nur für den Server, bei dem sie entstanden), eigene Geräte-ID je Adresse
+  (kryptografisch zufällig, `lib/deviceId.ts`), Anfragen erst, wenn Adresse und Geräte-ID geladen sind. Datenschutz
+  (Abschnitt 2 und B1). 7 Server-Tests (248), 17 App-Tests (232); `npm run web:account` mit zweitem Test-Server:
+  Wechsel, Umzug auf eine leere Datenbank, zurück.
 
 **9.3 Bereit fürs Internet (vorbereiten, nicht deployen)**
 
@@ -531,6 +546,28 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
+- **Anmeldung gilt je Server-Adresse:** Wer zwischen zwei Adressen desselben Servers wechselt (Laptop im WLAN und über
+  Cloudflare Tunnel), wird abgemeldet und meldet sich neu an; ohne Konto gilt unter der eingetragenen Adresse eine
+  eigene Geräte-ID (die Sicherung des Tagebuchs liegt dann zweimal auf dem Server). Bewusst so: Ein Server kann nicht
+  beweisen, dass er derselbe ist (die Kennung der Datenbank kann jeder abfragen), und Token bzw. Geräte-ID sollen nie an
+  einen fremden gehen. Falls es stört: Sitzungen je Adresse merken, statt abzumelden. (27.11.2026)
+- **Was nur der alte Server kennt:** Nach einem Wechsel des Servers zeigen geteilte Rezepte (Community-ID), öffentliche
+  Fotos der Galerie und Sterne noch auf den alten; mit Konto kommen eigene Rezepte und Fotos beim Abgleich mit,
+  Community, Galerie und Sterne nicht (die liegen in den Tabellen des alten Servers). Beim Umzug deshalb Datenbank und
+  `data/photos/` mitnehmen – für `SERVER-HOSTING.md` (9.3). (27.11.2026)
+- **Ältere Sicherung einspielen:** Behält die Kennung der Datenbank, die Revisionen gehen aber zurück – Geräten, die
+  schon weiter waren, fehlte dann ein Teil. Deshalb nach dem Einspielen die Kennung löschen (`DELETE FROM storage_meta
+  WHERE key = 'database_id'`, steht im README unter „Datenbank“); in `SERVER-HOSTING.md` aufnehmen (9.3). (27.11.2026)
+- **„Bald verfügbar“ kennt die Server-Adresse nicht:** In der Web-Version ohne Server sagen die Hinweise „kommt bald“,
+  obwohl man jetzt unter 👤 Profil → Server einen eintragen kann. Für Tester passt das (sie bekommen eine Web-Version mit
+  fester Adresse); falls nötig, im Hinweis auf Profil → Server verweisen. (27.11.2026)
+- **Server-Seite in Expo Go ungeprüft:** Tastatur für Adressen, „Prüfen und verwenden“ und der Wechsel sind im Browser
+  geprüft (`npm run web:account` mit zweitem Test-Server), die Bundles für iOS und Android bauen – auf iPhone und Android
+  selbst nicht. Benjamin im PR gebeten. (27.11.2026)
+- **Pages-Version mit Server:** Setzt Benjamin die Repository-Variable `FOODTRACKER_API_URL`, baut der Pages-Workflow
+  mit Server – dann verlangt `npm run web:pages` auch Teil B der Datenschutzerklärung ohne Platzhalter und bricht sonst
+  ab (gewollt). Vorher Teil B ausfüllen und `CORS_ORIGINS=https://bennitut.github.io` am Server setzen (9.3).
+  (27.11.2026)
 - **Neuere App, älterer Server:** Kennt der Server eine Art des Abgleichs nicht (z. B. `photos` mit einem noch laufenden
   älteren Server-Fenster), lehnt er die ganze Anfrage mit 400 ab (`UserDataSyncBody` ist `strict`) – dann gleicht gar
   nichts ab, die App versucht es jede Minute. Nur den Server nachsichtig zu machen, reicht nicht: Die App zählt eine Art
@@ -556,11 +593,14 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   und geht so auch in den Abgleich. Beim Speichern des Imports wie ein Foto verkleinern (`expo-image-manipulator`, schon
   in der App) – spart Speicher auf dem Gerät und im Bildspeicher. GIF-Vorschaubilder nimmt der Bildspeicher nicht an
   (sie bleiben nur auf dem Gerät). (27.11.2026)
-- **Server-Umzug auf eine leere Datenbank und Fotos eigener Rezepte:** Gleicht nach einem Umzug ohne Datenbank (oder
+- ✅ **Server-Umzug auf eine leere Datenbank und Fotos eigener Rezepte:** Gleicht nach einem Umzug ohne Datenbank (oder
   mit „Neuer Server, alte Abgleich-Marken“ gelöst) zuerst ein Gerät ab, das ein Rezept nur mit Pfad kennt, speichert
   der neue Server es ohne Foto (der Pfad zeigt ins Leere); das Gerät mit dem Foto hat dieselbe Fassung und schickt es
   nicht noch einmal. Beim Umzug Datenbank und `data/photos/` mitnehmen (steht für `SERVER-HOSTING.md` an); sonst
-  könnte der Server bei gleichem Zeitpunkt eine Fassung mit Foto der ohne vorziehen. (27.11.2026)
+  könnte der Server bei gleichem Zeitpunkt eine Fassung mit Foto der ohne vorziehen. (27.11.2026) Erledigt 27.11.2026 mit
+  9.2 Teil 7: Bei gleichem Zeitpunkt nimmt der Server die Fassung mit dem Foto selbst, wenn die gespeicherte keins hat
+  (`incomingWinsTie` in `storage/sync.ts`, für eigene Rezepte und private Fotos der Galerie, nie gegen eine
+  Löschmarke); ein App-Test spielt den Umzug mit dem Gerät nur mit Pfad zuerst durch.
 - **Bilddateien werden in der Transaktion geschrieben:** Beim Abgleich eigener Rezepte legt `prepare` das Foto
   innerhalb der Transaktion in den Bildspeicher (bei SQLite warten andere Schreibende so lange). Mit dem Ordner
   `data/photos/` sind das Millisekunden; mit einem Objektspeicher (9.3, Anfrage übers Netz) die Fotos vorher außerhalb
@@ -742,14 +782,15 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   lösen: Fotos eigener Rezepte ebenfalls in den Bildspeicher, dem Konto zugeordnet. (27.11.2026) Erledigt 27.11.2026 mit
   9.2 Teil 5: Mit Konto bekommt die Kopie beim Abgleich eine eigene Datei im Bildspeicher des Kontos, die bleibt, wenn
   das Original verschwindet. Ohne Konto bleibt es beim Pfad des Originals (ohne Server Platzhalter).
-- **Neuer Server, alte Abgleich-Marken:** Die App merkt sich beim Tagebuch (seit 9.2 Teil 4 auch bei Plan, Vorrat und
+- ✅ **Neuer Server, alte Abgleich-Marken:** Die App merkt sich beim Tagebuch (seit 9.2 Teil 4 auch bei Plan, Vorrat und
   Einstellungen, `lib/dataSync.ts`) nur Besitzer und Revision, nicht, welcher Server bzw. welche Datenbank. Zieht der Server auf eine neue, leere Datenbank um (z. B. vom Laptop zu Render mit Neon)
   oder bekommt die App eine andere Server-Adresse, schicken Geräte, die schon abgeglichen hatten, nur noch ihre neuen
   Änderungen – die neue Datenbank hätte nur einen Teil der Historie, und ein neues Gerät bekäme nicht alles (auf den
   Geräten selbst bleibt alles). Lösung mit 9.2 „Server-Adresse“: Der Server nennt beim Abgleich eine zufällige Kennung
   seiner Datenbank (einmal in `storage_meta` angelegt), die App merkt sie sich mit der Marke und gleicht bei einer anderen
   Kennung von vorn ab (alles hoch, alles zurück). Der Umzug aus `data/diary/` behält die Revisionen und ist davon nicht
-  betroffen. (27.11.2026)
+  betroffen. (27.11.2026) Erledigt 27.11.2026 mit 9.2 Teil 7: Kennung in `storage_meta`, die App schickt sie mit, bei
+  einer anderen sagt der Server `reset` (ohne etwas zu übernehmen) und die App gleicht von vorn ab.
 - **`node:sqlite` gilt in Node 22 als experimentell:** `npm start` blendet die Warnung „SQLite is an experimental
   feature“ aus (`--disable-warning=ExperimentalWarning`), die Tests zeigen sie. Die genutzte Schnittstelle
   (`DatabaseSync`, `prepare`, `exec`) gibt es unverändert seit Node 22.13; ändert eine künftige Node-Version etwas,
@@ -771,10 +812,13 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   wenn das jemand anderes war (Familien-Tablet). Das Tagebuch auf dem Gerät ging schon bisher beim ersten Abgleich ins
   angemeldete Konto. Bei einer Ernährungs-App auf dem eigenen Handy selten; falls nötig, vor der Übernahme fragen („Was
   dieses Gerät ohne Konto gespeichert hat, in dein Konto übernehmen?“). (26.11.2026)
-- **Geräte-ID nicht kryptografisch zufällig:** `newId()` (Zeitstempel plus sechs Zeichen aus `Math.random`, zweimal) ist
+- ✅ **Geräte-ID nicht kryptografisch zufällig:** `newId()` (Zeitstempel plus sechs Zeichen aus `Math.random`, zweimal) ist
   schwer zu erraten, aber nicht kryptografisch zufällig. Wer eine fremde Geräte-ID kennt, kann deren Daten verwalten und
   seit der Übernahme auch ins eigene Konto holen; der Server schickt Geräte-IDs nie an andere. Für neue Installationen
   `randomUUID()` aus `expo-crypto` nehmen (schon eine Abhängigkeit; vorher die Doku für SDK 58 lesen). (26.11.2026)
+  Erledigt 27.11.2026 mit 9.2 Teil 7: neue Installationen und die Geräte-IDs je Server-Adresse kommen aus
+  `getRandomBytes` von expo-crypto (`lib/deviceId.ts`; im Browser `crypto.getRandomValues`, das es anders als
+  `randomUUID` auch ohne https gibt). Bestehende Installationen behalten ihre ID.
 - **Anmeldung in Expo Go auf dem Gerät ungeprüft:** `expo-secure-store` ist in Expo Go enthalten, die Bundles für iOS
   und Android bauen, und im Browser ist alles getestet – auf iPhone und Android aber nicht. Benjamin im PR gebeten:
   anmelden, Expo Go ganz schließen, wieder öffnen → noch angemeldet. (26.11.2026)
