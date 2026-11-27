@@ -129,14 +129,23 @@ export interface RecipePhoto {
   mine: boolean;
 }
 
-/** Eigenes Foto; private bleiben nur auf dem Gerät, öffentliche landen zusätzlich in der Galerie. */
+/**
+ * Eigenes Foto aus der Galerie eines Rezepts; öffentliche landen zusätzlich in der Galerie (`remoteId`). Ohne Konto
+ * bleiben alle auf dem Gerät, mit Konto gleicht lib/dataSync.ts sie zwischen den Geräten ab.
+ */
 export interface MyPhoto {
   id: string;
   recipeId: string;
+  /**
+   * Das Foto: auf dem Gerät, wo es aufgenommen wurde, eine data-URI; auf den anderen Geräten des Kontos der Pfad im
+   * Bildspeicher des Servers („/api/images/…“, angezeigt über lib/serverImages.ts).
+   */
   uri: string;
   public: boolean;
   remoteId: string | null;
   createdAt: string;
+  /** Pfad des Fotos im Bildspeicher des Servers, sobald es dort liegt (nur neben einer data-URI, lib/dataSync.ts). */
+  server?: string;
 }
 
 export const FLAG_REASONS = ["text", "amounts", "image", "other"] as const;

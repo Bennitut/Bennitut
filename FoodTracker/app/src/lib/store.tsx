@@ -13,7 +13,7 @@ import { importDiaryJson, type ImportResult } from "./history";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import { withStoredTexts } from "./recipeText";
 import { loadSession, sessionWriter, type Session } from "./session";
-import { resolveImage } from "./serverImages";
+import { resolveImage, resolveImageUri } from "./serverImages";
 import { sessionStore } from "./sessionStore";
 import { checkedToBook, deliveryToBook } from "./shopping";
 import type {
@@ -68,7 +68,7 @@ interface PersistedState {
   textOverrides: Record<string, Record<string, RecipeText>>;
   /** Rezepte, die von diesem Gerät gemeldet wurden. */
   flaggedIds: string[];
-  /** Eigene Rezeptfotos (privat oder zusätzlich öffentlich in der Galerie). */
+  /** Eigene Rezeptfotos (privat oder zusätzlich öffentlich in der Galerie), mit Konto auf allen Geräten (lib/dataSync.ts). */
   myPhotos: MyPhoto[];
   /** Zuletzt geladene Bewertungen aller Rezepte (für Planung und Anzeige, auch offline). */
   ratings: Record<string, RatingSummary>;
@@ -83,8 +83,8 @@ interface PersistedState {
   aiConsent: AiConsent | null;
   settings: Settings;
   /**
-   * Abgleich von Einstellungen, Plan mit Einkaufsliste, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten mit dem
-   * Konto (lib/dataSync.ts): Zeitpunkt jeder Änderung, was noch hoch muss, letzter Abgleich. Steht hier, damit er immer
+   * Abgleich von Einstellungen, Plan mit Einkaufsliste, Vorrat, eigenen Rezepten, Favoriten, Rezepttexten und eigenen
+   * Fotos mit dem Konto (lib/dataSync.ts): Zeitpunkt jeder Änderung, was noch hoch muss, letzter Abgleich. Steht hier, damit er immer
    * zusammen mit diesen Daten gespeichert wird.
    */
   dataSync: DataSync;
@@ -223,8 +223,8 @@ export interface DiarySyncStatus {
 }
 
 /**
- * Abgleich von Einstellungen, Plan, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten mit dem Konto: aus (kein
- * Server), nur auf dem Gerät (ohne Konto), gleich, läuft, erledigt oder Server nicht erreichbar.
+ * Abgleich von Einstellungen, Plan, Vorrat, eigenen Rezepten, Favoriten, Rezepttexten und eigenen Fotos mit dem Konto:
+ * aus (kein Server), nur auf dem Gerät (ohne Konto), gleich, läuft, erledigt oder Server nicht erreichbar.
  */
 export interface DataSyncStatus {
   state: "off" | "local" | "waiting" | "syncing" | "synced" | "offline";
@@ -244,7 +244,7 @@ interface Store extends PersistedState {
   /** Übernimmt eine Sicherung (JSON) ins Tagebuch, ohne Doppeltes. */
   importDiary: (text: string) => Omit<Extract<ImportResult, { ok: true }>, "state"> | Extract<ImportResult, { ok: false }>;
   diarySync: DiarySyncStatus;
-  /** Abgleich von Einstellungen, Plan, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten mit dem Konto. */
+  /** Abgleich von Einstellungen, Plan, Vorrat, eigenen Rezepten, Favoriten, Rezepttexten und eigenen Fotos mit dem Konto. */
   dataSyncStatus: DataSyncStatus;
   /** Jetzt mit dem Server abgleichen – Tagebuch und alle Daten des Kontos (z. B. beim Öffnen des Profils). */
   refreshSync: () => void;
@@ -480,9 +480,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [ready, owner, pendingCount, syncedOwner, syncRequest]);
 
-  // Abgleich von Einstellungen, Plan mit Einkaufsliste, Vorrat, eigenen Rezepten, Favoriten und Rezepttexten – nur mit
-  // Konto (lib/dataSync.ts): beim Start bzw. nach der Anmeldung einmal, danach kurz nach jeder Änderung; ohne Verbindung
-  // in einer Minute noch einmal. Ein anderes Konto als beim letzten Mal bekommt alles vom Gerät und schickt alles zurück.
+  // Abgleich von Einstellungen, Plan mit Einkaufsliste, Vorrat, eigenen Rezepten, Favoriten, Rezepttexten und eigenen
+  // Fotos – nur mit Konto (lib/dataSync.ts): beim Start bzw. nach der Anmeldung einmal, danach kurz nach jeder Änderung;
+  // ohne Verbindung in einer Minute noch einmal. Ein anderes Konto als beim letzten Mal bekommt alles vom Gerät und schickt alles zurück.
   const signedIn = session !== null;
   const dataPending = pendingChanges(state.dataSync);
   const dataSyncedFor = syncedWith(state.dataSync, owner);
@@ -807,8 +807,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setTopPhotos(top);
       },
       imageFor: (recipe) => {
-        const own = state.myPhotos.find((p) => p.recipeId === recipe.id);
-        if (own) return { uri: own.uri };
+        // Eigene Fotos von anderen Geräten des Kontos kommen als Pfad im Bildspeicher (lib/dataSync.ts) – ohne Server
+        // nicht zu sehen, dann gilt das nächste.
+        for (const own of state.myPhotos) {
+          const uri = own.recipeId === recipe.id ? resolveImageUri(own.uri, BASE_URL) : undefined;
+          if (uri) return { uri };
+        }
         const top = topPhotos[recipe.id];
         if (top) return { uri: top.uri, credit: top.authorName || undefined };
         // Fotos geteilter Rezepte liegen im Bildspeicher des Servers (Pfad statt data-URI, lib/serverImages.ts).

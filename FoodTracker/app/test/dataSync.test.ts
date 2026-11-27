@@ -13,6 +13,7 @@ import {
   emptyDataSync,
   parseTextId,
   readDataSync,
+  readPhoto,
   readRecipe,
   readSettings,
   recordsOf,
@@ -25,11 +26,11 @@ import {
   type SyncedState,
 } from "../src/lib/dataSync";
 import type { StockItem } from "../src/lib/pantry";
-import type { MonthPlan, Recipe, ShoppingItem } from "../src/lib/types";
+import type { MonthPlan, MyPhoto, Recipe, ShoppingItem } from "../src/lib/types";
 import { meal, recipe, settings } from "./fixtures";
 
 // Abgleich von Einstellungen, Plan mit Einkaufsliste und Vorrat (Vorrang 1, 9.2 Teil 4), eigenen Rezepten mit Fotos,
-// Favoriten und Rezepttexten (Teil 5) mit dem Konto.
+// Favoriten und Rezepttexten (Teil 5) und eigenen Fotos der Galerie (Teil 6) mit dem Konto.
 
 const shopping = (ingredientId: string): ShoppingItem => ({
   ingredientId,
@@ -79,6 +80,7 @@ class Device {
       savedRecipes: [],
       translations: {},
       textOverrides: {},
+      myPhotos: [],
       ...data,
     };
     // Daten von vor dem Abgleich tragen den Zeitpunkt 0; ein neues Gerät hat noch nichts.
@@ -93,12 +95,17 @@ class Device {
   }
 }
 
-/** Derselbe Abgleich wie im Server (POST /api/sync, Datenbank SQLite im Speicher) – mit derselben Prüfung der Anfrage. */
+/**
+ * Derselbe Abgleich wie im Server (POST /api/sync, Datenbank SQLite im Speicher) – mit derselben Prüfung der Anfrage.
+ * `gallery`: öffentliche Fotos der Galerie (ID → Rezept und Pfad), wie sie der Server in recipe_photos findet.
+ */
 async function server() {
   const db = openSqlite(":memory:");
   await migrate(db);
   const store = new SyncStore(db);
   const images = new MemoryImageStore();
+  const gallery = new Map<string, { recipeId: string; uri: string }>();
+  const lookup = async (ids: readonly string[]) => new Map(ids.flatMap((id) => (gallery.has(id) ? [[id, gallery.get(id)!] as const] : [])));
   const requests: DataSyncRequest[] = [];
   const call =
     (owner: string) =>
@@ -106,12 +113,12 @@ async function server() {
       requests.push(request);
       // Wie über HTTP: JSON hin und zurück, und der Server prüft die Anfrage (400 bei allem, was er nicht annimmt).
       const body = UserDataSyncBody.parse(JSON.parse(JSON.stringify(request)));
-      return JSON.parse(JSON.stringify(await syncUserData(store, owner, body, images))) as DataSyncResponse;
+      return JSON.parse(JSON.stringify(await syncUserData(store, owner, body, images, lookup))) as DataSyncResponse;
     };
   const run = async (device: Device, owner = "user:1") => {
     device.state = (await syncData(device.state, owner, call(owner)))(device.state);
   };
-  return { store, images, requests, call, run };
+  return { store, images, gallery, requests, call, run };
 }
 
 const data = (d: Device) => {
@@ -146,6 +153,7 @@ describe("Abgleich: Einträge aus dem Zustand", () => {
       savedRecipes: [],
       translations: {},
       textOverrides: {},
+      myPhotos: [],
     };
     assert.deepEqual([...recordsOf("settings", d).keys()], ["settings"]);
     const plan = recordsOf("plan", d);
@@ -167,6 +175,7 @@ describe("Abgleich: Einträge aus dem Zustand", () => {
       recipes: ["eigen_lr8x2k9abc12", "import_mf3k2", "community_3f9c2a10-1111-4222-8333-444455556666", "linsen dal", "eigen:1", "x".repeat(101), ""],
       favorites: ["linsen_dal", "community_3f9c2a10-1111-4222-8333-444455556666", "eigen_ä", "a/b"],
       texts: ["t:en:linsen_dal", "o:de:eigen_lr8x2k9abc12", "t:de-AT:linsen_dal", "x:en:linsen_dal", "t:english:linsen_dal", "t:en:", "t:EN:linsen_dal", "o:de:eigen:1"],
+      photos: ["mi8x2k3fa1b2c3", "lr8x2k9abc12", "p_1", "p:1", "foto 1", "x".repeat(101), ""],
     };
     for (const kind of DATA_KINDS) {
       for (const id of samples[kind]) assert.equal(SYNC_IDS[kind].test(id), USER_DATA[kind].validId(id), `${kind}: ${id}`);
@@ -632,6 +641,148 @@ describe("Abgleich eigener Rezepte: was vom Server kommt", () => {
     ]);
     assert.deepEqual(texts.translations, { linsen_dal: { fr: { name: "Dal aux lentilles", steps: ["Cuire"] } } });
     assert.deepEqual(texts.textOverrides, {});
+  });
+});
+
+// --------------------------------------------------------------------------------------------------------------
+// Eigene Fotos der Galerie (9.2 Teil 6)
+// --------------------------------------------------------------------------------------------------------------
+
+const TAKEN = "2026-11-27T08:00:00.000Z";
+const shot = (id: string, uri: string, patch: Partial<MyPhoto> = {}): MyPhoto => ({ id, recipeId: "shakshuka", uri, public: false, remoteId: null, createdAt: TAKEN, ...patch });
+const SERVER_PATH = "/api/images/aaaaaaaa-1111-4222-8333-444455556666.jpg";
+const GALLERY_PATH = "/api/images/bbbbbbbb-1111-4222-8333-444455556666.jpg";
+const GALLERY_PATH_2 = "/api/images/cccccccc-1111-4222-8333-444455556666.jpg";
+const photoOf = (d: Device, id: string) => d.state.myPhotos.find((p) => p.id === id);
+
+describe("Abgleich eigener Fotos der Galerie: Einträge", () => {
+  it("leitet private Fotos mit Foto bzw. Pfad ab, öffentliche nur mit der ID in der Galerie", () => {
+    const d = new Device({
+      myPhotos: [
+        shot("p_neu", jpeg(1)),
+        shot("p_bekannt", jpeg(2), { server: SERVER_PATH }),
+        shot("p_anderes_geraet", SERVER_PATH),
+        shot("p_datei", "file:///var/mobile/foto.jpg"),
+        shot("p_oeffentlich", jpeg(3), { public: true, remoteId: "g-1", server: GALLERY_PATH }),
+      ],
+    }).state;
+    const base = { recipeId: "shakshuka", createdAt: TAKEN, public: false };
+    assert.deepEqual(Object.fromEntries(recordsOf("photos", d)), {
+      p_neu: { ...base, uri: jpeg(1) },
+      p_bekannt: { ...base, uri: SERVER_PATH },
+      p_anderes_geraet: { ...base, uri: SERVER_PATH },
+      p_datei: base,
+      p_oeffentlich: { ...base, public: true, remoteId: "g-1" },
+    });
+    // Erster Abgleich mit einem Konto: das Foto selbst (der Server kennt den Pfad vielleicht nicht).
+    assert.deepEqual(recordsOf("photos", d, true).get("p_bekannt"), { ...base, uri: jpeg(2) });
+  });
+
+  it("merkt nur das geänderte Foto und schickt nichts, was der Server ablehnen würde", () => {
+    const d = new Device({ myPhotos: [shot("p_a", jpeg(1, 50_000)), shot("p_b", jpeg(2, 50_000))] });
+    d.change((s) => ({ myPhotos: [...s.myPhotos] }), 1000);
+    assert.deepEqual(d.pending(), [], "dieselben Fotos in einer neuen Liste");
+    d.change((s) => ({ myPhotos: s.myPhotos.map((p) => (p.id === "p_b" ? { ...p, public: true, remoteId: "g-9" } : p)) }), 1001);
+    assert.deepEqual(d.pending(), ["p_b"]);
+    d.change((s) => ({ myPhotos: s.myPhotos.filter((p) => p.id !== "p_a") }), 1002);
+    assert.deepEqual(d.pending(), ["p_a", "p_b"]);
+    assert.equal(d.state.dataSync.photos.at.p_a, 1002, "gelöschtes Foto wird zur Löschmarke");
+
+    const bad = new Device({
+      myPhotos: [shot("p_gut", jpeg(1)), shot("p_ohne_id", jpeg(2), { public: true }), shot("p:ungueltig", jpeg(3)), shot("p_riesig", jpeg(4, 1_600_000)), shot("p_rezept", jpeg(5), { recipeId: "linsen dal" })],
+    }).state;
+    const upload = uploadRecords("photos", bad);
+    assert.deepEqual(upload.skipped.sort(), ["p:ungueltig", "p_ohne_id", "p_rezept"]);
+    // Ein zu großes Foto bleibt auf dem Gerät, der Eintrag geht ohne.
+    assert.deepEqual(upload.records.find((r) => r.id === "p_riesig")?.data, { recipeId: "shakshuka", createdAt: TAKEN, public: false });
+  });
+
+  it("prüft Fotos von anderen Geräten und zeigt nur, was ein Foto hat", () => {
+    const at = (n: number) => new Date(n).toISOString();
+    assert.deepEqual(readPhoto("p1", { recipeId: "shakshuka", createdAt: TAKEN, public: false, uri: SERVER_PATH, neu: 1 }), {
+      id: "p1",
+      recipeId: "shakshuka",
+      createdAt: TAKEN,
+      public: false,
+      remoteId: null,
+      uri: SERVER_PATH,
+    });
+    assert.equal(readPhoto("p1", { recipeId: "shakshuka", createdAt: TAKEN, public: true }), null, "öffentlich ohne ID in der Galerie");
+    assert.equal(readPhoto("p1", { recipeId: "linsen dal", createdAt: TAKEN, public: false }), null);
+    assert.equal(readPhoto("p1", { recipeId: "shakshuka", createdAt: TAKEN, public: "ja" }), null);
+    assert.equal(readPhoto("p1", { recipeId: "shakshuka", public: false }), null);
+    assert.equal(readPhoto("p1", { recipeId: "shakshuka", createdAt: TAKEN, public: false, uri: 3 }), null);
+    assert.equal(readPhoto("p1", [1]), null);
+    // Ohne Foto vom Server (z. B. öffentlich, aber nicht mehr in der Galerie): ein neues kommt nicht an, ein bekanntes
+    // behält sein Foto und übernimmt den Rest.
+    const s = new Device({ myPhotos: [shot("p_da", SERVER_PATH)] }).state;
+    const next = applyRemote(s, "photos", [
+      { id: "p_neu", updatedAt: at(1), data: { recipeId: "shakshuka", createdAt: TAKEN, public: true, remoteId: "g-1" } },
+      { id: "p_da", updatedAt: at(1), data: { recipeId: "shakshuka", createdAt: TAKEN, public: true, remoteId: "g-2" } },
+    ]);
+    assert.deepEqual(next.myPhotos, [shot("p_da", SERVER_PATH, { public: true, remoteId: "g-2" })]);
+    assert.deepEqual(applyRemote(next, "photos", [{ id: "p_da", updatedAt: at(2), data: null }]).myPhotos, []);
+  });
+});
+
+describe("Abgleich eigener Fotos der Galerie mit dem Konto", () => {
+  it("bringt private und öffentliche Fotos auf ein neues Gerät – auf dem Handy bleiben sie offline sichtbar, löschen geht überall", async () => {
+    const { run, images, gallery, requests } = await server();
+    gallery.set("g-1", { recipeId: "shakshuka", uri: GALLERY_PATH });
+    // Handy mit Fotos von vor dem Abgleich (Zeitpunkt 0), dann angemeldet.
+    const phone = new Device({ settings: settings(), myPhotos: [shot("p_privat", jpeg(1)), shot("p_oeffentlich", jpeg(2), { public: true, remoteId: "g-1" })] }, true);
+    await run(phone);
+    assert.deepEqual(phone.pending(), []);
+    // Das private Foto liegt als Datei im Bildspeicher, das Handy behält seine data-URI und merkt sich den Pfad.
+    const mine = photoOf(phone, "p_privat");
+    assert.equal(mine?.uri, jpeg(1));
+    assert.match(mine?.server ?? "", /^\/api\/images\/[0-9a-f-]{36}\.jpg$/);
+    assert.deepEqual(images.keys(), [imageKeyOf(mine!.server!)]);
+    // Vom öffentlichen geht nur die ID in der Galerie hoch; der Pfad kommt vom Server.
+    const sent = requests[0]?.kinds.photos?.changes.find((r) => r.id === "p_oeffentlich")?.data as { uri?: string } | undefined;
+    assert.equal(sent?.uri, undefined);
+    assert.deepEqual([photoOf(phone, "p_oeffentlich")?.uri, photoOf(phone, "p_oeffentlich")?.server], [jpeg(2), GALLERY_PATH]);
+
+    // Neuer Browser: bekommt beide Fotos als Pfad.
+    const browser = new Device();
+    await run(browser);
+    assert.deepEqual(photoOf(browser, "p_privat"), shot("p_privat", mine!.server!));
+    assert.deepEqual(photoOf(browser, "p_oeffentlich"), shot("p_oeffentlich", GALLERY_PATH, { public: true, remoteId: "g-1" }));
+    assert.deepEqual(browser.pending(), []);
+
+    // Am Handy das private Foto öffentlich gemacht (die App lädt es dafür in die Galerie): Die eigene Datei ist weg, der
+    // Browser zeigt es aus der Galerie, das Handy weiter seine data-URI.
+    gallery.set("g-2", { recipeId: "shakshuka", uri: GALLERY_PATH_2 });
+    phone.change((s) => ({ myPhotos: s.myPhotos.map((p) => (p.id === "p_privat" ? { ...p, public: true, remoteId: "g-2" } : p)) }));
+    await run(phone);
+    assert.deepEqual(images.keys(), []);
+    assert.deepEqual([photoOf(phone, "p_privat")?.uri, photoOf(phone, "p_privat")?.server], [jpeg(1), GALLERY_PATH_2]);
+    await run(browser);
+    assert.deepEqual(photoOf(browser, "p_privat"), shot("p_privat", GALLERY_PATH_2, { public: true, remoteId: "g-2" }));
+
+    // Im Browser ein öffentliches Foto gelöscht: Am Handy ist es danach auch weg.
+    browser.change((s) => ({ myPhotos: s.myPhotos.filter((p) => p.id !== "p_oeffentlich") }));
+    await run(browser);
+    await run(phone);
+    assert.deepEqual(phone.state.myPhotos.map((p) => p.id), ["p_privat"]);
+    assert.deepEqual(phone.pending(), []);
+  });
+
+  it("behält beim erneuten ersten Abgleich die Fotos des Geräts und legt keine zweite Datei an", async () => {
+    const { run, images } = await server();
+    const d = new Device({ settings: settings(), myPhotos: [shot("p_a", jpeg(1))] }, true);
+    await run(d, "user:1");
+    const known = photoOf(d, "p_a");
+    // Abgemeldet und wieder angemeldet: Das Gerät schickt noch einmal alles (mit dem Foto selbst) …
+    d.state = { ...d.state, dataSync: { ...d.state.dataSync, photos: { ...d.state.dataSync.photos, mark: null } } };
+    await run(d, "user:1");
+    // … der Server kennt diese Fassung schon: keine neue Datei, das Gerät behält Foto und Pfad.
+    assert.deepEqual(images.keys(), [imageKeyOf(known!.server!)]);
+    assert.deepEqual(photoOf(d, "p_a"), known);
+    // Ein anderes Konto bekommt eine eigene Datei.
+    await run(d, "user:2");
+    assert.equal(images.keys().length, 2);
+    assert.equal(photoOf(d, "p_a")?.uri, jpeg(1));
   });
 });
 

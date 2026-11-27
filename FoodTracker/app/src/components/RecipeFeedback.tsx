@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { api, HAS_SERVER } from "../lib/api";
+import { api, HAS_SERVER, imageUrl } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { newId } from "../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../lib/photos";
@@ -58,15 +58,20 @@ export function RatingCard({ recipe }: { recipe: Recipe }) {
 
 interface GalleryItem {
   key: string;
-  uri: string;
+  /** Zum Anzeigen; fehlt bei einem eigenen Foto von einem anderen Gerät, solange der Server nicht erreichbar ist. */
+  uri: string | undefined;
   label: string;
   avg: number;
   count: number;
   myRating: number | null;
   /** Öffentliches Foto zum Bewerten (nicht das eigene). */
   rateId: string | null;
-  own: { localId: string; public: boolean; remoteId: string | null } | null;
+  /** Eigenes Foto; `uri` wie gespeichert (data-URI bzw. auf anderen Geräten des Kontos der Pfad im Bildspeicher). */
+  own: { localId: string; public: boolean; remoteId: string | null; uri: string } | null;
 }
+
+/** Ob das Foto auf diesem Gerät liegt (data-URI) – nur dann lässt es sich von hier aus öffentlich machen. */
+const onDevice = (uri: string) => /^data:image\//i.test(uri);
 
 export function PhotoGallery({ recipe }: { recipe: Recipe }) {
   const { myPhotos, addMyPhoto, updateMyPhoto, removeMyPhoto, settings, ready } = useStore();
@@ -90,13 +95,14 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
       const r = remote.find((x) => x.id === p.remoteId);
       return {
         key: p.id,
-        uri: p.uri,
+        // Mit Konto kommen eigene Fotos anderer Geräte als Pfad im Bildspeicher (lib/dataSync.ts).
+        uri: imageUrl(p.uri) ?? r?.uri,
         label: t("feedback.you"),
         avg: r?.avg ?? 0,
         count: r?.count ?? 0,
         myRating: null,
         rateId: null,
-        own: { localId: p.id, public: p.public, remoteId: p.remoteId },
+        own: { localId: p.id, public: p.public, remoteId: p.remoteId, uri: p.uri },
       };
     }),
     ...remote
@@ -174,7 +180,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
   const share = async (item: GalleryItem) => {
     if (!item.own) return;
     try {
-      const remoteId = await publish(item.uri);
+      const remoteId = await publish(item.own.uri);
       updateMyPhoto(item.own.localId, { public: true, remoteId });
     } catch (e) {
       setError(i18n.error(e));
@@ -189,7 +195,13 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
           {items.map((item) => (
             <View key={item.key} style={{ width: 200, gap: 4 }}>
-              <Image source={{ uri: item.uri }} style={{ width: 200, height: 112, borderRadius: 12 }} />
+              {item.uri ? (
+                <Image source={{ uri: item.uri }} style={{ width: 200, height: 112, borderRadius: 12 }} />
+              ) : (
+                <View style={{ width: 200, height: 112, borderRadius: 12, backgroundColor: colors.border, alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: 28 }}>🖼️</Text>
+                </View>
+              )}
               <View style={styles.row}>
                 <Text style={[styles.muted, { flex: 1 }]} numberOfLines={1}>
                   {item.label}
@@ -203,7 +215,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
               ) : null}
               {item.own ? (
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                  {!item.own.public && HAS_SERVER ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
+                  {!item.own.public && HAS_SERVER && onDevice(item.own.uri) ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
                   <Chip label={t("feedback.deletePhoto")} onPress={() => remove(item)} />
                 </View>
               ) : null}

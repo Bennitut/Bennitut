@@ -1,7 +1,7 @@
-// Abgleich der Daten eines Kontos zwischen seinen Geräten (Vorrang 1, 9.2 Teil 4 und 5; Gegenstück im Server:
+// Abgleich der Daten eines Kontos zwischen seinen Geräten (Vorrang 1, 9.2 Teil 4 bis 6; Gegenstück im Server:
 // server/src/sync/userData.ts): Profil und Fragebogen, Plan mit Einkaufsliste, Vorrat, eigene und importierte Rezepte
-// (mit Fotos), Favoriten (samt gespeicherten Community-Rezepten) und von der KI übersetzte bzw. verbesserte Texte. Ohne
-// native Module, damit alles in test/ läuft.
+// (mit Fotos), Favoriten (samt gespeicherten Community-Rezepten), von der KI übersetzte bzw. verbesserte Texte und eigene
+// Fotos aus der Galerie der Rezepte. Ohne native Module, damit alles in test/ läuft.
 //
 // Grundsätze:
 // - Nur mit Konto. Ohne Konto bleiben diese Daten auf dem Gerät (das Tagebuch sichert lib/diary.ts weiter pro Gerät).
@@ -16,13 +16,14 @@
 // - Fotos eigener Rezepte gehören nicht in die Datenbank: Die App schickt ein eigenes Foto einmal als data-URI, der
 //   Server legt es in den Bildspeicher des Kontos und schickt den Pfad zurück. Auf dem Gerät bleibt die data-URI (offline
 //   sichtbar), daneben der Pfad (`server`) – den schickt die App künftig statt des Fotos. Andere Geräte zeigen das Foto
-//   über den Pfad vom Server.
+//   über den Pfad vom Server. Genauso private eigene Fotos der Galerie („Nur ich“); öffentliche liegen schon in der
+//   Galerie – von ihnen geht nur die ID dort (`remoteId`) hoch, den Pfad trägt der Server ein.
 import { REGIONS, isUILanguage } from "../i18n";
 import type { StockItem } from "./pantry";
 import { SERVER_IMAGE_PATH } from "./serverImages";
-import type { MonthPlan, Recipe, RecipeText, Settings } from "./types";
+import type { MonthPlan, MyPhoto, Recipe, RecipeText, Settings } from "./types";
 
-export const DATA_KINDS = ["settings", "plan", "pantry", "recipes", "favorites", "texts"] as const;
+export const DATA_KINDS = ["settings", "plan", "pantry", "recipes", "favorites", "texts", "photos"] as const;
 export type DataKind = (typeof DATA_KINDS)[number];
 
 /** Was abgeglichen wird – ein Ausschnitt des Zustands der App (store.tsx). */
@@ -46,6 +47,8 @@ export interface SyncedData {
   translations: Record<string, Record<string, RecipeText>>;
   /** Mit der KI verbesserte Rezepttexte: Rezept-ID → Sprache → Text. */
   textOverrides: Record<string, Record<string, RecipeText>>;
+  /** Eigene Fotos aus der Galerie der Rezepte (privat oder zusätzlich öffentlich). */
+  myPhotos: MyPhoto[];
 }
 
 /** Letzter erfolgreicher Abgleich einer Art: für welches Konto, bis zu welcher Revision des Servers und wann. */
@@ -100,13 +103,17 @@ export const SYNC_IDS: Record<DataKind, RegExp> = {
   recipes: new RegExp(`^${RECIPE_ID}$`),
   favorites: new RegExp(`^${RECIPE_ID}$`),
   texts: TEXT_ID,
+  photos: new RegExp(`^${RECIPE_ID}$`),
 };
 /**
- * Höchstens so viele Zeichen JSON pro Eintrag (wie im Server; bei eigenen Rezepten ohne das Foto); Größeres bleibt auf
- * dem Gerät.
+ * Höchstens so viele Zeichen JSON pro Eintrag (wie im Server; bei eigenen Rezepten und Fotos ohne das Foto); Größeres
+ * bleibt auf dem Gerät.
  */
-export const MAX_JSON: Record<DataKind, number> = { settings: 20_000, plan: 1_000_000, pantry: 500, recipes: 100_000, favorites: 100_000, texts: 100_000 };
-/** Foto eines eigenen Rezepts als data-URI höchstens so lang (wie im Server, rund 1,5 MB); größere bleiben auf dem Gerät. */
+export const MAX_JSON: Record<DataKind, number> = { settings: 20_000, plan: 1_000_000, pantry: 500, recipes: 100_000, favorites: 100_000, texts: 100_000, photos: 2000 };
+/**
+ * Foto eines eigenen Rezepts bzw. eigenes Foto der Galerie als data-URI höchstens so lang (wie im Server, rund 1,5 MB);
+ * größere bleiben auf dem Gerät.
+ */
 export const MAX_IMAGE_URI = 2_000_000;
 const MAX_AMOUNT = 1_000_000;
 
@@ -182,6 +189,18 @@ function ownRecipeRecord(recipe: Recipe, sharedAs: string | undefined, fresh: bo
   return sharedAs ? { recipe: r, sharedAs } : { recipe: r };
 }
 
+/**
+ * Der Eintrag eines eigenen Fotos der Galerie: Rezept, Zeitpunkt der Aufnahme und ob es öffentlich ist. Öffentliche nur
+ * mit der ID in der Galerie (das Foto liegt dort schon, den Pfad trägt der Server ein), private mit dem Foto wie in
+ * uploadImage. Nur einfache Werte, damit trackChanges auch große Fotos nicht als JSON vergleichen muss.
+ */
+function photoRecord(photo: MyPhoto, fresh: boolean): Record<string, unknown> {
+  const base = { recipeId: photo.recipeId, createdAt: photo.createdAt, public: photo.public };
+  if (photo.public) return { ...base, remoteId: photo.remoteId };
+  const image = uploadImage(photo.server === undefined ? { uri: photo.uri } : { uri: photo.uri, server: photo.server }, fresh);
+  return image ? { ...base, uri: image.uri } : base;
+}
+
 /** Texte im Zustand und ihr Kürzel in der ID: übersetzt („t:en:linsen_dal“) und verbessert („o:de:eigen_…“). */
 const TEXTS = [
   ["t", "translations"],
@@ -223,6 +242,8 @@ export function recordsOf(kind: DataKind, data: SyncedData, fresh = false): Map<
       const copy = saved.get(id);
       records.set(id, copy ? { recipe: shareableRecipe(copy) } : {});
     }
+  } else if (kind === "photos") {
+    for (const photo of data.myPhotos) records.set(photo.id, photoRecord(photo, fresh));
   } else {
     for (const [prefix, field] of TEXTS) {
       for (const [recipeId, byLanguage] of Object.entries(data[field])) {
@@ -246,6 +267,7 @@ function touches(kind: DataKind, a: SyncedData, b: SyncedData): boolean {
   if (kind === "recipes") return a.myRecipes !== b.myRecipes || a.shared !== b.shared;
   if (kind === "favorites") return a.favoriteIds !== b.favoriteIds || a.savedRecipes !== b.savedRecipes;
   if (kind === "texts") return a.translations !== b.translations || a.textOverrides !== b.textOverrides;
+  if (kind === "photos") return a.myPhotos !== b.myPhotos;
   return a.plan !== b.plan || a.planRecipes !== b.planRecipes || a.eatenMeals !== b.eatenMeals || a.shoppingChecked !== b.shoppingChecked || a.shoppingBooked !== b.shoppingBooked;
 }
 
@@ -415,7 +437,7 @@ export function applyRemote<S extends SyncedState>(state: S, kind: DataKind, rec
     changed = true;
   }
   if (!changed) return state;
-  const { settings, plan, planRecipes, eatenMeals, shoppingChecked, shoppingBooked, pantry, myRecipes, shared, favoriteIds, savedRecipes, translations, textOverrides } = data;
+  const { settings, plan, planRecipes, eatenMeals, shoppingChecked, shoppingBooked, pantry, myRecipes, shared, favoriteIds, savedRecipes, translations, textOverrides, myPhotos } = data;
   return {
     ...state,
     settings,
@@ -431,6 +453,7 @@ export function applyRemote<S extends SyncedState>(state: S, kind: DataKind, rec
     savedRecipes,
     translations,
     textOverrides,
+    myPhotos,
     dataSync: { ...state.dataSync, [kind]: { ...state.dataSync[kind], at: k.at, pending: [...k.pending] } },
   };
 }
@@ -512,6 +535,45 @@ function applyFavorite(data: SyncedData, record: RemoteRecord, sameVersion: bool
   return { ...data, favoriteIds, savedRecipes };
 }
 
+/**
+ * Eigenes Foto der Galerie von einem anderen Gerät, Feld für Feld geprüft (null, wenn es nicht passt); `uri` fehlt, wenn
+ * der Server das Foto nicht hat (z. B. ein öffentliches, das es in der Galerie nicht mehr gibt). Felder einer neueren
+ * App fallen weg.
+ */
+export function readPhoto(id: string, raw: unknown): (Omit<MyPhoto, "uri"> & { uri?: string }) | null {
+  if (!isObject(raw)) return null;
+  const { recipeId, createdAt, uri, remoteId } = raw;
+  if (typeof recipeId !== "string" || !SYNC_IDS.recipes.test(recipeId) || typeof createdAt !== "string" || typeof raw.public !== "boolean") return null;
+  if ((uri !== undefined && typeof uri !== "string") || (remoteId !== undefined && remoteId !== null && typeof remoteId !== "string")) return null;
+  if (raw.public && typeof remoteId !== "string") return null;
+  return { id, recipeId, createdAt, public: raw.public, remoteId: typeof remoteId === "string" ? remoteId : null, ...(typeof uri === "string" ? { uri } : {}) };
+}
+
+/**
+ * Wie mergeImage bei eigenen Rezepten: Das Foto des Geräts bleibt bei derselben Fassung (der Server hat es in den
+ * Bildspeicher gelegt bzw. den Pfad der Galerie eingetragen) oder demselben Pfad, den das Gerät schon kennt; daneben
+ * merkt sich die App den Pfad. Sonst gilt das Foto vom Server – fehlt es dort, bleibt das bisherige des Geräts. Ganz ohne
+ * Foto: null (nichts zu zeigen).
+ */
+function mergePhoto(received: NonNullable<ReturnType<typeof readPhoto>>, local: MyPhoto | undefined, sameVersion: boolean): MyPhoto | null {
+  const path = received.uri?.startsWith(SERVER_IMAGE_PATH) ? received.uri : undefined;
+  if (local && LOCAL_IMAGE.test(local.uri) && (sameVersion || (path !== undefined && path === local.server))) {
+    return { ...received, uri: local.uri, ...(path ? { server: path } : {}) };
+  }
+  const uri = received.uri ?? local?.uri;
+  return uri === undefined ? null : { ...received, uri };
+}
+
+/** Eigenes Foto der Galerie vom Server: neu, geändert (z. B. öffentlich gemacht) oder gelöscht. */
+function applyPhoto(data: SyncedData, record: RemoteRecord, sameVersion: boolean): SyncedData | null {
+  const local = data.myPhotos.find((p) => p.id === record.id);
+  if (record.data === null) return local ? { ...data, myPhotos: data.myPhotos.filter((p) => p.id !== record.id) } : data;
+  const received = readPhoto(record.id, record.data);
+  const photo = received ? mergePhoto(received, local, sameVersion) : null;
+  if (!photo) return null;
+  return { ...data, myPhotos: local ? data.myPhotos.map((p) => (p.id === record.id ? photo : p)) : [photo, ...data.myPhotos] };
+}
+
 /** Text vom Server (übersetzt oder verbessert), Feld für Feld geprüft; null, wenn er nicht passt. */
 function readText(raw: unknown): RecipeText | null {
   if (!isObject(raw) || typeof raw.name !== "string") return null;
@@ -548,6 +610,7 @@ function applyRecord(kind: DataKind, data: SyncedData, record: RemoteRecord, k: 
   if (kind === "recipes") return applyOwnRecipe(data, record, sameVersion);
   if (kind === "favorites") return applyFavorite(data, record, sameVersion);
   if (kind === "texts") return applyText(data, record);
+  if (kind === "photos") return applyPhoto(data, record, sameVersion);
   if (kind === "settings") {
     // Einstellungen werden nie gelöscht – eine Löschmarke ändert nichts.
     return record.id === "settings" && isObject(record.data) ? { ...data, settings: readSettings(record.data, data.settings) } : null;
@@ -603,10 +666,21 @@ function textAcceptable(raw: unknown): boolean {
   return list(raw.steps, 200, 5000) && list(raw.otherIngredients, 300, 500);
 }
 
+/** Ob der Server ein eigenes Foto der Galerie annimmt (wie in server/src/sync/userData.ts). */
+function photoAcceptable(raw: unknown): boolean {
+  if (!isObject(raw) || typeof raw.recipeId !== "string" || !SYNC_IDS.recipes.test(raw.recipeId) || typeof raw.public !== "boolean") return false;
+  if (typeof raw.createdAt !== "string" || raw.createdAt.length > 40) return false;
+  if (raw.public && !(typeof raw.remoteId === "string" && raw.remoteId.length >= 1 && raw.remoteId.length <= 100)) return false;
+  if (raw.uri !== undefined && !(typeof raw.uri === "string" && raw.uri.length <= MAX_IMAGE_URI)) return false;
+  const { uri: _uri, ...rest } = raw;
+  return JSON.stringify(rest).length <= MAX_JSON.photos;
+}
+
 /** Ob der Server einen Eintrag annimmt (ID, Form, Größe) – sonst bleibt er auf dem Gerät, statt den Abgleich scheitern zu lassen. */
 function acceptable(kind: DataKind, id: string, data: unknown): boolean {
   if (!SYNC_IDS[kind].test(id)) return false;
   if (data === null) return true;
+  if (kind === "photos") return photoAcceptable(data);
   if (kind === "pantry" && (!isObject(data) || !isNumber(data.amount) || data.amount > MAX_AMOUNT)) return false;
   if (kind === "recipes") return isObject(data) && recipeAcceptable(data.recipe, id) && (data.sharedAs === undefined || (typeof data.sharedAs === "string" && data.sharedAs.length >= 1 && data.sharedAs.length <= 100));
   if (kind === "favorites" && (!isObject(data) || (data.recipe !== undefined && !recipeAcceptable(data.recipe, id)))) return false;
