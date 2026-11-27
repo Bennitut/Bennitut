@@ -229,6 +229,12 @@ function partB(): LegalSection[] {
         "Der Server läuft bei [[ANGABE: Hoster, Sitz, Standort der Server]]. [[ANGABE: Vertrag zur Auftragsverarbeitung " +
           "(Art. 28 DSGVO) mit dem Hoster]]. Er protokolliert [[ANGABE: welche Daten, z. B. IP-Adresse, Zeitpunkt, " +
           "aufgerufene Adresse, Fehlermeldungen]] und löscht die Protokolle nach [[ANGABE: Frist]].",
+        "Gegen Missbrauch – etwa das Durchprobieren von Passwörtern oder massenhafte KI-Anfragen – zählt der Server " +
+          "Anfragen je IP-Adresse (bei Anfragen über Cloudflare die Adresse, die Cloudflare meldet) und je Konto. Diese " +
+          "Zähler liegen nur im Arbeitsspeicher, nicht in der Datenbank, und verschwinden nach höchstens etwa einer Stunde " +
+          "bzw. beim Neustart. In sein eigenes Protokoll schreibt der Server keine IP-Adressen, E-Mail-Adressen, " +
+          "Passwörter oder Tokens. Rechtsgrundlage ist mein berechtigtes Interesse an einem sicheren Betrieb (Art. 6 " +
+          "Abs. 1 lit. f DSGVO).",
         "Fotos (Galerie der Rezepte, geteilte und eigene Rezepte) speichert der Server [[ANGABE: auf dem Server selbst " +
           "oder bei einem Objektspeicher-Anbieter – Name, Sitz, Standort der Server, Vertrag zur Auftragsverarbeitung]].",
         "Mit jeder Anfrage schickt FoodTracker die zufällige Geräte-Kennung aus Abschnitt 2. Sie enthält keinen Namen und " +

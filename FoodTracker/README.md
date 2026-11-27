@@ -176,8 +176,8 @@ docker run -d --name foodtracker -p 3000:3000 -v foodtracker-data:/app/data food
   `CORS_ORIGINS=https://bennitut.github.io,https://example.org,https://www.example.org`. Die Startmeldung zeigt unter
   „Browser (CORS)“, was gilt; `localhost` und Adressen im eigenen Netz sind immer erlaubt.
 - **Betrieb:** Das Image setzt `NODE_ENV=production` – `ALLOW_DEV_LOGIN` wirkt dann nicht (sonst könnte sich jede:r
-  unter jedem Namen anmelden; die Startmeldung sagt es). Hinter dem HTTPS-Proxy des Hosters `TRUST_PROXY=1` setzen,
-  damit das Rate-Limit die echten Adressen sieht. KI: `ANTHROPIC_API_KEY` (kostet API-Guthaben) oder `OLLAMA_URL` und
+  unter jedem Namen anmelden; die Startmeldung sagt es). Hinter dem HTTPS-Proxy des Hosters `TRUST_PROXY` setzen,
+  damit die Rate-Limits die echten Adressen sehen – bei Render `TRUST_PROXY=cloudflare` (siehe „Sicherheit“ unten). KI: `ANTHROPIC_API_KEY` (kostet API-Guthaben) oder `OLLAMA_URL` und
   `OLLAMA_API_KEY` auf die Weiterleitung zu Ollama auf einem Rechner mit Grafikkarte (`npm run ollama:relay`,
   „KI vom Laptop“ unten); den Schlüssel schickt der Server nur über https (im eigenen Netz auch http), sonst startet er
   nicht.
@@ -187,6 +187,46 @@ docker run -d --name foodtracker -p 3000:3000 -v foodtracker-data:/app/data food
   denselben Pfad als Health-Check eintragen. `/api/health` sagt zusätzlich, welche KI nutzbar ist (Profilzeile der App).
 - **Ohne Docker** (Hoster mit Node.js): `npm ci --include=dev && npm run build`, gestartet mit `npm run start:prod`
   (Node mit `dist/index.js`, ohne `tsx`); `NODE_ENV=production` dann selbst setzen.
+
+### Sicherheit im Internet
+
+Was der Server selbst tut, damit er gefahrlos im Internet stehen kann (Vorrang 1, 9.3; `src/http/security.ts`,
+`src/http/rateLimit.ts`, `src/http/proxy.ts`, `src/log.ts`):
+
+- **Nur über https:** Kommt eine Anfrage laut Proxy unverschlüsselt aus dem Internet (`X-Forwarded-Proto` bzw.
+  `CF-Visitor` „http“), leitet der Server GET auf https um und lehnt alles andere mit `403 https_required` ab; über https
+  schickt er HSTS mit (der Browser fragt die Adresse danach ein Jahr lang nur über https). Im eigenen Netz ohne Proxy
+  bleibt http, wie es ist. Die App nimmt unter 👤 Profil → Server keine Adresse mit `http://` ins Internet an (Passwort
+  und Daten gingen sonst unverschlüsselt) – nur Rechner im eigenen Netz.
+- **Header jeder Antwort:** `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`
+  und `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` – der Server liefert nur JSON und Fotos.
+- **Rate-Limits** (im Speicher, je IP-Adresse; IPv6 je /64-Netz): alle Anfragen bis 600 auf einmal, auf Dauer 2 pro
+  Sekunde (außer `/api/health/live`); KI-Anfragen (Foto, Kassenbon, Import, Übersetzen, „Text verbessern“, Plan)
+  höchstens `AI_REQUESTS_PER_HOUR` pro Stunde je Adresse **und** je Konto (Standard 40, `0` = ohne Grenze); Fotos,
+  geteilte Rezepte und Meldungen 60 pro Stunde; die Sicherung des Tagebuchs ohne Konto 20 000 Einträge pro Stunde (eine
+  Geräte-ID kann sich jede:r ausdenken). Dazu wie bisher Anmelden, Registrieren und „Passwort vergessen?“. Darüber
+  antwortet der Server mit `429` und `Retry-After`; die App nennt die Wartezeit.
+- **Größengrenzen je Schnittstelle** statt 30 MB für alles: Abgleich mit dem Konto 32 MB, Rezept-Import 24 MB, Foto
+  bzw. Kassenbon 12 MB, Plan 8 MB, Sicherung des Tagebuchs 4 MB, geteiltes Rezept 2 MB, Foto der Galerie 1 MB, alles
+  andere 512 KB; darüber `413 payload_too_large`.
+- **Protokoll ohne Geheimnisse:** Unerwartete Fehler stehen ohne E-Mail-Adressen, Tokens, Passwörter, Schlüssel und
+  Zugangsdaten in Adressen im Protokoll, nur mit dem Muster der Route (ohne Suchbegriffe). Kaputtes JSON ist ein
+  `400 invalid_request` und landet gar nicht im Protokoll (die Meldung von `JSON.parse` enthält den Anfang des Textes).
+- **`TRUST_PROXY`** – welchem Header der Server die Adresse für die Rate-Limits entnimmt:
+
+  | Wert | Header | Wofür |
+  |---|---|---|
+  | (leer) | keiner, die Adresse der Verbindung | Laptop im WLAN, ohne Proxy |
+  | `cloudflare` | nur `CF-Connecting-IP` (Cloudflare setzt ihn selbst und ersetzt, was mitkam) | Cloudflare Tunnel (Weg a), Render (läuft laut Berichten hinter Cloudflare) |
+  | `1` … `10` | der n-te Eintrag von hinten in `X-Forwarded-For` | ein anderer Proxy davor (nginx, Caddy …; Tailscale Funnel vermutlich `1` – nicht dokumentiert, ungeprüft) |
+
+  Anderes lässt den Server nicht starten. Passt der Wert nicht zum Weg der Anfragen (Anfragen über Cloudflare ohne
+  `TRUST_PROXY`, `cloudflare` ohne Cloudflare davor, Cloudflare meldet eine andere Adresse als `X-Forwarded-For`), sagt
+  der Server es einmal im Fenster bzw. Protokoll – ohne Adressen zu nennen. Die Startmeldung zeigt unter „Rate-Limit“,
+  was gilt.
+- **Keine Geheimnisse im Repository:** `.env`, `.env.*` (außer `.env.example`), Datenbanken und `server/data/` stehen
+  in `.gitignore`; der Test `test/repoSecrets.test.ts` prüft alle eingecheckten Dateien auf Schlüssel, Passwörter in
+  Adressen, private Schlüssel und solche Dateien.
 
 ### Fotos im Objektspeicher
 
@@ -347,7 +387,8 @@ anderen an, Fotos ohne Bild vom Server werden nicht gezeigt) sowie die Kennung d
 leere Datenbank: von vorn, danach fehlt dort nichts – auch die Fotos eigener Rezepte nicht; Marken einer älteren Fassung
 einmal von vorn; ein älterer Server ohne Kennung bekommt weiter nur Neues) und die Server-Adresse (Standard aus
 `EXPO_PUBLIC_API_URL` bzw. dem Rechner mit Expo, „off“, Eingaben prüfen und vereinheitlichen, kein http aus einer
-https-Seite, eigene Geräte-ID je Server, Anmeldung nur beim Server, bei dem sie entstand).
+https-Seite und kein `http://` zu einem Rechner im Internet, eigene Geräte-ID je Server, Anmeldung nur beim Server, bei
+dem sie entstand).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem die Speicherschicht mit SQLite und mit Postgres (pg-mem,
 eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig: Migrationen, Konten und Sitzungen,
 gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und
@@ -375,7 +416,13 @@ bleibt beim Löschen stehen, fremdes Rezept bzw. unbekannte ID ohne Pfad, Export
 Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash,
 Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt) und dass ohne
 Einwilligung keine Anfrage an die KI geht (`403 ai_consent_required` für jede KI-Funktion, Eingaben werden vorher
-geprüft, Planen ohne Wünsche braucht keine).
+geprüft, Planen ohne Wünsche braucht keine) sowie die Sicherheit im Internet (`security.test.ts`: nur über https mit
+Umleitung bzw. `403 https_required` und HSTS, Header jeder Antwort, Größengrenzen mit und ohne Content-Length,
+`TRUST_PROXY` in allen Varianten – gefälschte Header helfen nicht am Rate-Limit vorbei –, Hinweise ohne Adressen,
+Rate-Limits für alle Anfragen, KI je Adresse und Konto, Uploads und die Sicherung ohne Konto, Protokolle ohne
+E-Mail-Adressen, Tokens und Passwörter, kaputtes JSON als 400 ohne Protokoll) und dass das Repository keine Geheimnisse
+enthält (`repoSecrets.test.ts`: Schlüssel, Passwörter in Adressen, private Schlüssel, `.env`-Dateien und Datenbanken in
+allen eingecheckten Dateien).
 Der Web-Rauchtest öffnet jede Seite in headless Chromium und spielt Fragebogen → Monatsplan → Einkauf (zwei Zeilen
 abhaken und in den Vorrat buchen) → Vorrat durch, danach „Entdecken“ und Tauschen (nicht alle Fotos auf einmal),
 prüft, dass Rezept, Plan, Profil, Anmeldung und Übersetzen ohne Server keine Fehlermeldung zeigen, und zuletzt die
@@ -438,8 +485,8 @@ und falsche Passwörter ergeben dieselbe Antwort. Endpunkte: `POST /api/auth/reg
 dem Server löschen, mit Passwort bestätigt), `GET /api/auth/export` („Meine Daten exportieren“ als JSON).
 „Passwort vergessen?“ (`/api/auth/password/forgot` und `/reset`, ein 8-stelliger Code per E-Mail, 30 Minuten gültig)
 gibt es nur mit einem Mail-Dienst (`SMTP_*` in `server/.env`, Beispiel Gmail in `.env.example`); `GET /api/auth/config`
-meldet, ob er eingerichtet ist. Hinter einem Proxy (Cloudflare Tunnel, Render) `TRUST_PROXY=1` setzen, damit die
-Grenzen pro IP-Adresse greifen.
+meldet, ob er eingerichtet ist. Hinter einem Proxy (Cloudflare Tunnel, Render) `TRUST_PROXY=cloudflare` setzen, damit
+die Grenzen pro IP-Adresse greifen (siehe „Sicherheit“ unter „Server im Internet (Docker)“).
 
 **Was das Gerät ohne Konto hatte, kommt mit:** Nach jeder Anmeldung ruft die App einmal `POST /api/auth/claim-device`
 auf. Fotos, Sterne, geteilte Rezepte, Favoriten und Meldungen der Geräte-ID gehören danach dem Konto, die Sicherung des

@@ -133,6 +133,16 @@ Der Server läuft bei [[ANGABE: Hoster, Sitz, Standort der Server]]. [[ANGABE: V
 Auftragsverarbeitung (Art. 28 DSGVO) mit dem Hoster]]. Er protokolliert [[ANGABE: welche Daten, z. B. IP-Adresse,
 Zeitpunkt, aufgerufene Adresse, Fehlermeldungen]] und löscht die Protokolle nach [[ANGABE: Frist]].
 
+Gegen Missbrauch – etwa das Durchprobieren von Passwörtern oder massenhafte KI-Anfragen – zählt der Server Anfragen je
+IP-Adresse (bei Anfragen über Cloudflare die Adresse, die Cloudflare meldet) und je Konto. Diese Zähler liegen nur im
+Arbeitsspeicher, nicht in der Datenbank, und verschwinden nach höchstens etwa einer Stunde bzw. beim Neustart. In sein
+eigenes Protokoll schreibt der Server keine IP-Adressen, E-Mail-Adressen, Passwörter oder Tokens. Rechtsgrundlage ist
+mein berechtigtes Interesse an einem sicheren Betrieb (Art. 6 Abs. 1 lit. f DSGVO).
+
+> Rate-Limits und Protokoll: `server/src/http/rateLimit.ts` (Zähler im Speicher, jede Minute aufgeräumt; längstes
+> Zeitfenster eine Stunde) und `server/src/log.ts` (Fehlermeldungen geschwärzt), siehe README, „Sicherheit im
+> Internet“. Was der Hoster selbst protokolliert (z. B. Render), steht oben als `[[ANGABE]]`.
+
 Fotos (Galerie der Rezepte, geteilte und eigene Rezepte) speichert der Server [[ANGABE: auf dem Server selbst oder bei
 einem Objektspeicher-Anbieter – Name, Sitz, Standort der Server, Vertrag zur Auftragsverarbeitung]].
 

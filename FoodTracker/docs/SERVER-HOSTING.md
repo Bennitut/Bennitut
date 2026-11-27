@@ -76,14 +76,16 @@ Windows-Firewall muss dafür nichts geöffnet werden.
 
    ```env
    # ALLOW_DEV_LOGIN=1          ← auskommentieren oder löschen
-   TRUST_PROXY=1
+   TRUST_PROXY=cloudflare
    CORS_ORIGINS=https://bennitut.github.io
    ADMIN_EMAILS=deine.adresse@example.com
    ```
 
-   - `TRUST_PROXY=1`: Über den Tunnel kommen alle Anfragen von `cloudflared` auf dem Laptop. Ohne die Zeile hielte das
-     Rate-Limit alle für eine Person – wer sich ein paarmal vertippt, sperrte dann alle aus. Mit der Zeile nimmt der
-     Server die echte Adresse aus dem Header, den Cloudflare setzt.
+   - `TRUST_PROXY=cloudflare`: Über den Tunnel kommen alle Anfragen von `cloudflared` auf dem Laptop. Ohne die Zeile
+     hielte das Rate-Limit alle für eine Person – wer sich ein paarmal vertippt, sperrte dann alle aus. Mit der Zeile
+     nimmt der Server die echte Adresse aus `CF-Connecting-IP`, den Cloudflare bei jeder Anfrage selbst setzt (andere
+     Header kann jede:r mitschicken). Fehlt die Zeile, sagt es das Server-Fenster bei der ersten Anfrage über den Tunnel.
+     (Bis 27.11. stand hier `TRUST_PROXY=1` – geht mit Cloudflare auch, `cloudflare` ist genauer.)
    - `CORS_ORIGINS`: damit die Web-Version auf GitHub Pages den Server aus dem Browser nutzen darf.
    - Optional „Passwort vergessen?“: `SMTP_*` mit einem Gmail-App-Passwort (Anleitung in `server/.env.example`).
 
@@ -142,7 +144,10 @@ Windows-Firewall muss dafür nichts geöffnet werden.
   Windows installieren und anmelden (Gratis-Tarif „Personal“), dann `tailscale funnel 3000`. Die Adresse
   `https://<gerät>.<tailnet>.ts.net` setzt sich aus dem Namen des Laptops und deines Tailnets zusammen, ändert sich also
   nicht bei jedem Start. Die Bandbreite begrenzt Tailscale, ohne eine Zahl zu nennen. Voraussetzung sind MagicDNS und
-  HTTPS-Zertifikate in der Tailscale-Verwaltung; die Freigabe für Funnel holt der Befehl beim ersten Aufruf ein.
+  HTTPS-Zertifikate in der Tailscale-Verwaltung; die Freigabe für Funnel holt der Befehl beim ersten Aufruf ein. Funnel
+  nimmt nur https an (Ports 443, 8443 und 10000). Welche Header Funnel an den Server weitergibt, dokumentiert Tailscale
+  nicht – vermutlich `X-Forwarded-For`, also `TRUST_PROXY=1` statt `cloudflare` (ungeprüft; passt es nicht, sagt es das
+  Server-Fenster bei den ersten Anfragen).
 
 ---
 
@@ -198,7 +203,7 @@ Neon laut FAQ nichts.
    |---|---|
    | `DATABASE_URL` | die Verbindungsadresse von Neon |
    | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | vom Objektspeicher bei Neon |
-   | `TRUST_PROXY` | `1` (Render steht als Proxy davor; sonst sieht das Rate-Limit nicht die echten Adressen) |
+   | `TRUST_PROXY` | `cloudflare` (Render läuft laut Berichten hinter Cloudflare; sonst sehen die Rate-Limits nicht die echten Adressen – passt es nicht, steht nach den ersten Anfragen ein Hinweis im Log) |
    | `ADMIN_EMAILS` | deine Adresse |
    | KI | siehe Schritt 3 |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | optional, für „Passwort vergessen?“ – nur über Port 2525 (siehe Grenzen) |
@@ -337,7 +342,10 @@ von Render über Cloudflare zu deinem Laptop – das gehört in B1 und B3 der Da
 3. Abmelden, in einem anderen Browser (oder nach dem Löschen der Browserdaten) anmelden – Plan und Tagebuch sind wieder
    da.
 4. Mit KI: ein Foto erkennen lassen oder ein Rezept importieren.
-5. Im Log (Server-Fenster bzw. Render → Logs) stehen keine Fehler.
+5. Im Log (Server-Fenster bzw. Render → Logs) stehen keine Fehler – und kein „Hinweis: … TRUST_PROXY …“. Steht dort
+   einer, passt `TRUST_PROXY` nicht zum Weg der Anfragen; der Hinweis sagt, welcher Wert stimmt.
+6. `http://<adresse>/api/health` (ohne „s“) leitet auf https um; in der App nimmt 👤 Profil → Server eine Adresse mit
+   `http://` ins Internet gar nicht erst an.
 
 ## Was es kostet
 
