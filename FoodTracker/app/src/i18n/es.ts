@@ -87,6 +87,10 @@ export const es: Dictionary = {
     ai_unavailable: "No se puede contactar con la IA ahora mismo. ¿Está Ollama en marcha en el ordenador del servidor? Vuelve a intentarlo en un momento.",
     ai_timeout: "La IA ha tardado demasiado. Vuelve a intentarlo: la primera vez, la IA local tiene que cargar su modelo.",
     ai_consent_required: "Falta tu consentimiento actual para las funciones de IA. Vuelve a cargar o actualiza FoodTracker y acepta de nuevo.",
+    rate_limited: "Acaban de llegar muchísimas solicitudes desde este dispositivo o esta red. Vuelve a intentarlo dentro de unos {minutes} min.",
+    ai_rate_limited: "Las funciones de IA se han usado muchísimo en la última hora. Vuelve a intentarlo dentro de unos {minutes} min.",
+    payload_too_large: "Es demasiado grande para el servidor. Usa una foto más pequeña o menos imágenes.",
+    https_required: "Este servidor solo acepta solicitudes por https. Introduce su dirección con https:// en 👤 Perfil → Servidor.",
   },
   today: {
     planned: "Hoy en el plan",
@@ -714,5 +718,6 @@ export const es: Dictionary = {
     errorScheme: "La dirección debe empezar por http:// o https://.",
     errorCredentials: "No incluyas usuario ni contraseña en la dirección.",
     errorInsecure: "La versión web en https solo puede conectar con servidores https (p. ej. mediante Cloudflare Tunnel o un servicio en la nube).",
+    errorHttps: "Servidores en Internet solo con https://; si no, tu contraseña y tus datos viajarían sin cifrar. Sin https solo funciona un ordenador de tu propia red (p. ej. 192.168.1.20:3000).",
   },
 };

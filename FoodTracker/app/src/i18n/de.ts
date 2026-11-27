@@ -87,6 +87,10 @@ export const de = {
     ai_unavailable: "Die KI ist gerade nicht erreichbar. Läuft Ollama auf dem Server-Rechner? Bitte gleich noch einmal versuchen.",
     ai_timeout: "Die KI hat zu lange gebraucht. Bitte noch einmal versuchen – beim ersten Mal lädt die lokale KI ihr Modell.",
     ai_consent_required: "Für die KI-Funktionen fehlt deine aktuelle Einwilligung. Bitte FoodTracker neu laden bzw. aktualisieren und noch einmal zustimmen.",
+    rate_limited: "Gerade kamen sehr viele Anfragen von diesem Gerät bzw. Netz. Bitte in etwa {minutes} Min. noch einmal versuchen.",
+    ai_rate_limited: "Die KI-Funktionen wurden in der letzten Stunde sehr oft genutzt. Bitte in etwa {minutes} Min. noch einmal versuchen.",
+    payload_too_large: "Das ist zu groß für den Server. Bitte ein kleineres Foto bzw. weniger Bilder nehmen.",
+    https_required: "Dieser Server nimmt Anfragen nur über https an. Bitte unter 👤 Profil → Server die Adresse mit https:// eintragen.",
   },
   today: {
     planned: "Heute auf dem Plan",
@@ -714,5 +718,6 @@ export const de = {
     errorScheme: "Die Adresse muss mit http:// oder https:// beginnen.",
     errorCredentials: "Bitte ohne Benutzername und Passwort in der Adresse.",
     errorInsecure: "Die Web-Version über https erreicht nur Server mit https (z. B. über Cloudflare Tunnel oder einen Cloud-Dienst).",
+    errorHttps: "Server im Internet nur mit https:// – sonst gingen Passwort und Daten unverschlüsselt durchs Netz. Ohne https geht nur ein Rechner im eigenen Netz (z. B. 192.168.1.20:3000).",
   },
 };

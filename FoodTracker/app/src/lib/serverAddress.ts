@@ -45,13 +45,18 @@ export function defaultServer({ env, devHost, web, dev, pageHost }: DefaultServe
   return { url: "http://localhost:3000", source: "dev" };
 }
 
-export type ServerUrlError = "empty" | "invalid" | "scheme" | "credentials" | "insecure";
+export type ServerUrlError = "empty" | "invalid" | "scheme" | "credentials" | "insecure" | "https";
 export type ParsedServerUrl = { ok: true; url: string } | { ok: false; error: ServerUrlError };
 
-/** Rechner im eigenen Netz bzw. auf dem eigenen Gerät – dort läuft der Server meist ohne https. */
+/**
+ * Rechner im eigenen Netz bzw. auf dem eigenen Gerät – dort läuft der Server meist ohne https: localhost, private
+ * IPv4- und IPv6-Adressen, Namen ohne Punkt (z. B. der Name des Laptops) und die Endungen fürs eigene Netz.
+ */
 function isLocalHost(host: string): boolean {
   const h = host.replace(/^\[|\]$/g, "").toLowerCase();
-  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h === "::1") return true;
+  if (h === "localhost" || h === "::1" || /\.(localhost|local|lan|internal|home\.arpa|fritz\.box)$/.test(h)) return true;
+  if (h.includes(":")) return /^(f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(h);
+  if (!h.includes(".")) return true;
   const ip = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(h);
   if (!ip) return false;
   const [a, b] = [Number(ip[1]), Number(ip[2])];
@@ -63,7 +68,8 @@ const isLoopback = (host: string) => /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/
 
 /**
  * Prüft eine im Profil eingetragene Adresse und bringt sie in eine einheitliche Form (ohne „/“ am Ende). Ohne
- * „http://“ bzw. „https://“ nimmt sie für Rechner im eigenen Netz http, sonst https. Eine kopierte Test-Adresse wie
+ * „http://“ bzw. „https://“ nimmt sie für Rechner im eigenen Netz http, sonst https; „http://“ zu einem Rechner im
+ * Internet lehnt sie ab (`https`). Eine kopierte Test-Adresse wie
  * „…/api/health“ wird auf den Server gekürzt. `pageProtocol`: in der Web-Version das Protokoll der Seite – eine Seite
  * über https (GitHub Pages) darf keinen Server ohne https fragen (außer dem eigenen Rechner).
  */
@@ -84,6 +90,9 @@ export function parseServerUrl(input: string, { pageProtocol }: { pageProtocol?:
   if (!url.hostname || url.hostname.includes("..")) return { ok: false, error: "invalid" };
   if (url.username || url.password) return { ok: false, error: "credentials" };
   if (url.search || url.hash) return { ok: false, error: "invalid" };
+  // Server im Internet nur über https (Vorrang 1, 9.3 „Sicherheit“) – sonst gingen Passwort, Sitzung und Daten
+  // unverschlüsselt durchs Netz. Ohne https nur der eigene Rechner und das eigene Netz (der Laptop zum Testen).
+  if (url.protocol === "http:" && !isLocalHost(url.hostname)) return { ok: false, error: "https" };
   if (pageProtocol === "https:" && url.protocol === "http:" && !isLoopback(url.hostname)) return { ok: false, error: "insecure" };
   const path = url.pathname.replace(/\/+$/, "").replace(/\/api(?:\/health)?$/i, "");
   return { ok: true, url: `${url.protocol}//${url.host}${path}` };

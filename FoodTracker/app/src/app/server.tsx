@@ -21,6 +21,7 @@ const ERRORS: Record<ServerUrlError, TKey> = {
   scheme: "server.errorScheme",
   credentials: "server.errorCredentials",
   insecure: "server.errorInsecure",
+  https: "server.errorHttps",
 };
 
 /** „https://…“ ohne Protokoll, damit die Adresse kurz bleibt. */

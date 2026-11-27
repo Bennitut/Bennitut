@@ -82,6 +82,21 @@ describe("Server-Adresse: Eingabe prüfen", () => {
     assert.equal(error("http://"), "invalid");
   });
 
+  it("lehnt http:// zu einem Rechner im Internet ab – Passwort und Daten gingen sonst unverschlüsselt", () => {
+    for (const input of ["http://foodtracker.onrender.com", "http://abc.trycloudflare.com/api/health", "http://203.0.113.5:3000", "http://[2001:db8::1]:3000"]) {
+      assert.equal(error(input), "https", input);
+    }
+    // Spezifischer als „insecure“, auch aus einer Seite über https.
+    assert.equal(error("http://foodtracker.onrender.com", "https:"), "https");
+    // Im eigenen Netz bleibt http erlaubt – auch mit dem Namen des Laptops und mit privaten IPv6-Adressen.
+    for (const input of ["http://192.168.1.20:3000", "http://localhost:3000", "http://laptop:3000", "http://laptop.fritz.box:3000", "http://[fd12:3456::1]:3000", "http://[fe80::1]:3000", "http://[::1]:3000"]) {
+      assert.ok(parseServerUrl(input).ok, input);
+    }
+    assert.equal(ok("laptop:3000"), "http://laptop:3000");
+    // Gespeicherte Einstellung mit http:// ins Internet (ältere Fassung): gilt nicht mehr, die Standard-Adresse gilt.
+    assert.equal(readServerSetting(JSON.stringify({ custom: "http://foodtracker.example.org", deviceIds: {} })).custom, null);
+  });
+
   it("erlaubt einer Seite über https nur Server mit https – außer dem eigenen Rechner", () => {
     assert.equal(error("http://192.168.1.20:3000", "https:"), "insecure");
     assert.equal(error("192.168.1.20:3000", "https:"), "insecure");

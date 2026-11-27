@@ -279,12 +279,19 @@ async function main() {
     serverPage.on("console", (m) => m.type() === "error" && !expected404(m) && !/ERR_CONNECTION_REFUSED/.test(m.text()) && failures.push(`/server: ${m.text()}`));
     await serverPage.goto(site + "/server", { waitUntil: "networkidle" });
     await serverPage.getByText("Kein Server eingestellt.", { exact: true }).waitFor({ timeout: 10_000 });
+    // http:// zu einem Rechner im Internet (9.3 „Sicherheit“): abgelehnt, ohne dort nachzufragen.
+    const asked = [];
+    serverPage.on("request", (r) => r.url().includes("foodtracker.example.org") && asked.push(r.url()));
+    await serverPage.getByLabel("Andere Adresse", { exact: true }).fill("http://foodtracker.example.org");
+    await serverPage.getByRole("button", { name: "Prüfen und verwenden", exact: true }).click();
+    await serverPage.getByText("Server im Internet nur mit https://", { exact: false }).waitFor({ timeout: 10_000 });
+    if (asked.length > 0) throw new Error("Adresse mit http:// ins Internet wurde abgefragt");
     await serverPage.getByLabel("Andere Adresse", { exact: true }).fill("127.0.0.1:59999");
     await serverPage.getByRole("button", { name: "Prüfen und verwenden", exact: true }).click();
     await serverPage.getByText("Unter dieser Adresse antwortet kein FoodTracker-Server", { exact: false }).waitFor({ timeout: 15_000 });
     if (await serverPage.evaluate(() => localStorage.getItem("foodtracker/server/v1"))) throw new Error("Adresse ohne Server wurde übernommen");
     await serverPage.close();
-    console.log("Profil → Server: ohne Server „Kein Server eingestellt“, eine Adresse ohne FoodTracker-Server wird erkannt und nicht übernommen.");
+    console.log("Profil → Server: ohne Server „Kein Server eingestellt“, http:// ins Internet abgelehnt, eine Adresse ohne FoodTracker-Server wird erkannt und nicht übernommen.");
   } catch (e) {
     failures.push(`Server-Seite: ${e.message.split("\n")[0]}`);
   }
