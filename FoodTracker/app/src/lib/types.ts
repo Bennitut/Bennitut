@@ -1,4 +1,7 @@
 // Domain-Typen des Backends; reine Typ-Importe, im Bundle entfällt der Import.
+import type { Allergen, Cuisine, Diet, FoodRule, MealType, Nutrients, Recipe } from "../../../server/src/types";
+import type { Region, UILanguage } from "../i18n";
+
 export type {
   Allergen,
   Cuisine,
@@ -19,8 +22,6 @@ export type {
   ShoppingItem,
   WeekPlan,
 } from "../../../server/src/types";
-import type { Allergen, Cuisine, Diet, FoodRule, MealType, Nutrients, Recipe } from "../../../server/src/types";
-import type { Region, UILanguage } from "../i18n";
 
 export const ALLERGENS: Allergen[] = ["gluten", "laktose", "ei", "nuesse", "erdnuss", "soja", "fisch", "krebstiere", "sellerie", "sesam"];
 export const DIETS: Diet[] = ["alles", "pescetarisch", "vegetarisch", "vegan"];
@@ -54,6 +55,8 @@ export interface DiaryEntry {
   title: string;
   nutrients: Nutrients;
   source: "foto" | "plan" | "manuell";
+  /** Letzte Änderung (ISO) – für den Abgleich mit dem Server; fehlt bei Einträgen aus älteren Versionen. */
+  updatedAt?: string;
 }
 
 export interface MealAnalysis {
@@ -92,6 +95,8 @@ export interface Order {
   lines: { ingredientId: string; packs: number; packSize: number; unit: string }[];
   checkoutUrl: string | null;
   createdAt: string;
+  /** Nur in der App: Plan (Startdatum) und Woche (ab 0), für die bestellt wurde – damit nichts doppelt in den Vorrat kommt. */
+  forWeek?: { planStart: string; week: number };
 }
 
 export interface CommunityRecipe {
@@ -124,14 +129,23 @@ export interface RecipePhoto {
   mine: boolean;
 }
 
-/** Eigenes Foto; private bleiben nur auf dem Gerät, öffentliche landen zusätzlich in der Galerie. */
+/**
+ * Eigenes Foto aus der Galerie eines Rezepts; öffentliche landen zusätzlich in der Galerie (`remoteId`). Ohne Konto
+ * bleiben alle auf dem Gerät, mit Konto gleicht lib/dataSync.ts sie zwischen den Geräten ab.
+ */
 export interface MyPhoto {
   id: string;
   recipeId: string;
+  /**
+   * Das Foto: auf dem Gerät, wo es aufgenommen wurde, eine data-URI; auf den anderen Geräten des Kontos der Pfad im
+   * Bildspeicher des Servers („/api/images/…“, angezeigt über lib/serverImages.ts).
+   */
   uri: string;
   public: boolean;
   remoteId: string | null;
   createdAt: string;
+  /** Pfad des Fotos im Bildspeicher des Servers, sobald es dort liegt (nur neben einer data-URI, lib/dataSync.ts). */
+  server?: string;
 }
 
 export const FLAG_REASONS = ["text", "amounts", "image", "other"] as const;
@@ -153,7 +167,7 @@ export interface Account {
   name: string;
   email: string | null;
   role: Role;
-  provider: "apple" | "google" | "dev";
+  provider: "apple" | "google" | "dev" | "password";
   createdAt: string;
 }
 

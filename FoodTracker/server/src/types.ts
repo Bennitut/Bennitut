@@ -87,11 +87,27 @@ export interface RecipeVideo {
   url: string;
   title?: string;
   author?: string;
+  /**
+   * Sprache des Videos ("de", "en", "fr", "it", "es"); haben die Katalogvideos (recipeVideos.ts). Die App zeigt sie nur
+   * in dieser Sprache. Ohne Angabe (Originalbeitrag eines Imports, selbst eingetragene Links) erscheint das Video immer.
+   */
+  language?: string;
 }
 
 export interface RecipeMedia {
-  /** Foto des Gerichts: URL oder data-URI (eigenes Foto). */
-  image?: { uri: string; credit?: string; /** Seite mit Urheber und Lizenz. */ source?: string };
+  /** Foto des Gerichts: URL, Pfad im Bildspeicher des Servers („/api/images/…“) oder data-URI (eigenes Foto). */
+  image?: {
+    uri: string;
+    credit?: string;
+    /** Seite mit Urheber und Lizenz. */
+    source?: string;
+    /**
+     * Nur in der App, bei einem eigenen Foto (data-URI): Pfad, unter dem dasselbe Foto im Bildspeicher des Kontos liegt
+     * (app/src/lib/dataSync.ts). Die App schickt beim Abgleich den Pfad statt des Fotos und zeigt weiter ihre data-URI –
+     * auch ohne Verbindung. Geht nie an andere (beim Teilen entfernt).
+     */
+    server?: string;
+  };
   videos?: RecipeVideo[];
 }
 

@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Text, TextInput, View } from "react-native";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, colors, styles } from "../components/ui";
+import { providerName } from "../lib/account";
 import { api } from "../lib/api";
 import { RECIPES } from "../lib/catalog";
 import { useI18n } from "../lib/i18n";
@@ -9,8 +10,6 @@ import { useStore } from "../lib/store";
 import type { AdminUser, FlagReason, FlagSummary, RecipePhoto } from "../lib/types";
 
 type Tab = "users" | "flags" | "photos" | "recipes";
-
-const PROVIDER_NAMES = { apple: "Apple", google: "Google", dev: "Test" } as const;
 
 const REASON_KEYS: Record<FlagReason, "feedback.reasonText" | "feedback.reasonAmounts" | "feedback.reasonImage" | "feedback.reasonOther"> = {
   text: "feedback.reasonText",
@@ -104,7 +103,7 @@ export default function AdminScreen() {
                 />
               </View>
               <Muted>
-                {user.email ?? "—"} · {t("account.via", { provider: PROVIDER_NAMES[user.provider] })}
+                {user.email ?? "—"} · {t("account.via", { provider: providerName(user.provider, t("account.providerEmail")) })}
               </Muted>
               <Muted>
                 {t("account.joined", { date: date(user.createdAt) })} · {t("admin.lastLogin", { date: date(user.lastLoginAt) })}

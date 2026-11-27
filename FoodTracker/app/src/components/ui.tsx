@@ -80,11 +80,12 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  variant?: "primary" | "secondary";
+  /** "danger": rot, für Endgültiges wie „Konto löschen“. */
+  variant?: "primary" | "secondary" | "danger";
   loading?: boolean;
   disabled?: boolean;
 }) {
-  const primary = variant === "primary";
+  const primary = variant !== "secondary";
   return (
     <Pressable
       accessibilityRole="button"
@@ -92,7 +93,7 @@ export function Button({
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.button,
-        primary ? styles.buttonPrimary : styles.buttonSecondary,
+        variant === "danger" ? styles.buttonDanger : primary ? styles.buttonPrimary : styles.buttonSecondary,
         (pressed || disabled) && { opacity: 0.6 },
       ]}
     >
@@ -103,6 +104,12 @@ export function Button({
       )}
     </Pressable>
   );
+}
+
+/** „Mehr anzeigen (30 von 236)“ unter einer gekürzten Liste; nichts, sobald alles zu sehen ist. */
+export function ShowMore({ shown, total, onPress }: { shown: number; total: number; onPress: () => void }) {
+  const { t } = useI18n();
+  return shown < total ? <Button label={t("common.showMore", { shown, total })} variant="secondary" onPress={onPress} /> : null;
 }
 
 export function Muted({ children }: { children: ReactNode }) {
@@ -180,6 +187,7 @@ export const styles = StyleSheet.create({
   button: { borderRadius: 14, paddingVertical: 13, paddingHorizontal: 18, alignItems: "center" },
   buttonPrimary: { backgroundColor: colors.primary },
   buttonSecondary: { backgroundColor: colors.selected },
+  buttonDanger: { backgroundColor: colors.danger },
   buttonText: { fontSize: 15, fontWeight: "700" },
   input: {
     borderWidth: 1,

@@ -1,26 +1,12 @@
 import { useMemo } from "react";
 import { contentLocale, formatNumber, formatPrice, regionalize, translate, type TKey } from "../i18n";
+import { errorParams } from "./account";
 import { ApiError } from "./api";
+import { localizeRecipe } from "./recipeText";
 import { useStore } from "./store";
-import type { Ingredient, MealType, Recipe, RecipeText } from "./types";
+import type { Ingredient, MealType, Recipe } from "./types";
 
 type Unit = Ingredient["unit"];
-
-/** Text eines Rezepts in der gewünschten Sprache, mit Fallback auf Englisch bzw. das Original. */
-export function localizeRecipe(recipe: Recipe, language: string): Required<RecipeText> {
-  const own = recipe.language === language ? undefined : recipe.translations?.[language];
-  const english = recipe.language === "en" || language === recipe.language ? undefined : recipe.translations?.en;
-  return {
-    name: own?.name ?? english?.name ?? recipe.name,
-    steps: own?.steps ?? english?.steps ?? recipe.steps,
-    otherIngredients: own?.otherIngredients ?? english?.otherIngredients ?? recipe.otherIngredients,
-  };
-}
-
-/** Ob Claude die Zubereitung noch in die Sprache übersetzen sollte. */
-export function needsTranslation(recipe: Recipe, language: string): boolean {
-  return recipe.language !== language && !recipe.translations?.[language]?.steps;
-}
 
 export function useI18n() {
   const { settings, ingredients } = useStore();
@@ -55,11 +41,11 @@ export function useI18n() {
           otherIngredients: text.otherIngredients.map((s) => regionalize(s, language, region)),
         };
       },
-      /** Fehlermeldung zu einem Fehler aus der API. */
+      /** Fehlermeldung zu einem Fehler aus der API (mit Wartezeit bzw. Mindestlänge, wo der Text sie nennt). */
       error: (e: unknown) => {
         const code = e instanceof ApiError ? e.code : "internal";
         const key = `errors.${code}` as TKey;
-        const text = translate(language, key);
+        const text = translate(language, key, errorParams(e instanceof ApiError ? e.details : {}));
         return regionalize(text === key ? translate(language, "errors.internal") : text, language, region);
       },
     };

@@ -1,13 +1,17 @@
 import { Link, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, colors, styles } from "../../components/ui";
-import { ApiError, api } from "../../lib/api";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
+import { RecipeThumb } from "../../components/RecipeThumb";
+import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, ShowMore, colors, styles } from "../../components/ui";
+import { ApiError, hasServer, api } from "../../lib/api";
 import { MONTH_WEEKS, PlanError, matchesPreferences, planMonth, weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
 import { aggregatePantry, today } from "../../lib/pantry";
 import { planOptions } from "../../lib/profile";
+import { PAGE_SIZE, firstPage } from "../../lib/recipeLists";
+import { prepareReplan } from "../../lib/replan";
 import { mealKey, useStore } from "../../lib/store";
 import type { LockedMeal, MonthPlan, PlannedMeal, WeekPlan } from "../../lib/types";
 
@@ -26,6 +30,8 @@ export default function PlanScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [swap, setSwap] = useState<PlannedMeal | null>(null);
   const [alternatives, setAlternatives] = useState<string[]>([]);
+  const [alternativesLimit, setAlternativesLimit] = useState(PAGE_SIZE);
+  const consent = useAiConsent();
   const todayIndex = plan ? daysBetween(plan.startDate, today()) : 0;
   const [selectedWeek, setSelectedWeek] = useState(() => weekOfDay(Math.max(0, todayIndex)));
   const loading = progress !== null;
@@ -41,16 +47,15 @@ export default function PlanScreen() {
       router.push("/onboarding");
       return;
     }
+    // Ohne Server (Web-Version) gibt es kein Wunschfeld; früher eingetragene Wünsche bleiben gespeichert,
+    // lösen aber keine Anfrage und keinen Hinweis „braucht eine Verbindung“ aus. Wünsche zählen nur für den ganzen Monat.
+    const wishes = hasServer() && fromWeek === 0 ? settings.preferences.trim() : "";
+    // Wünsche gehen an die KI: vorher fragen. Ohne Erlaubnis plant das Handy wie ohne Wünsche.
+    const useWishes = wishes !== "" && (await consent.ask("wishes"));
     setError(null);
-    setNotice(null);
+    setNotice(wishes && !useWishes ? t("plan.aiDeclined") : null);
     setProgress(fromWeek + 1);
-    const startDate = plan && (fromWeek > 0 || plan.startDate === today()) ? plan.startDate : today();
-    const keepWeeks = plan && fromWeek > 0 ? plan.weeks.slice(0, fromWeek) : [];
-    const locked: LockedMeal[] = (plan && plan.startDate === startDate ? plan.weeks.flatMap((w) => w.meals) : [])
-      .filter((m) => m.locked && settings.mealTypes.includes(m.mealType))
-      .filter((m) => !(extraLock && m.day === extraLock.day && m.mealType === extraLock.mealType))
-      .map(({ day, mealType, recipeId }) => ({ day, mealType, recipeId }));
-    if (extraLock) locked.push(extraLock);
+    const { startDate, keepWeeks, locked } = prepareReplan({ plan, fromWeek, swapped: extraLock, mealTypes: settings.mealTypes, today: today() });
     const request = {
       ...options,
       people: settings.people,
@@ -63,8 +68,7 @@ export default function PlanScreen() {
       effort: DEVICE_EFFORT,
     };
 
-    const wishes = settings.preferences.trim();
-    if (wishes && fromWeek === 0) {
+    if (useWishes) {
       try {
         const result = await api.plan({ ...request, startDate, recipes: userRecipes, preferences: wishes, language: i18n.language });
         setPlan(result.plan, result.extraRecipes);
@@ -104,12 +108,16 @@ export default function PlanScreen() {
     }
   };
 
-  // Nach dem Fragebogen direkt den ersten Plan erstellen.
+  // Nach dem Fragebogen direkt den ersten Plan erstellen. Der Start läuft im nächsten Tick,
+  // damit der Effekt nicht selbst State setzt (sonst rendert alles doppelt) und ein doppelt
+  // ausgeführter Effekt (Strict Mode) nicht zwei Pläne rechnet.
   useEffect(() => {
-    if (store.pendingPlan && settings.onboarded) {
+    if (!store.pendingPlan || !settings.onboarded) return;
+    const timer = setTimeout(() => {
       store.setPendingPlan(false);
       createPlan(0);
-    }
+    }, 0);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.pendingPlan, settings.onboarded]);
 
@@ -119,8 +127,11 @@ export default function PlanScreen() {
       .map((r) => r.id);
     // Favoriten zuerst.
     setAlternatives(ids.sort((a, b) => Number(favoriteIds.includes(b)) - Number(favoriteIds.includes(a))));
+    setAlternativesLimit(PAGE_SIZE);
     setSwap(meal);
   };
+  // Ohne Einschränkungen passen fast 190 Rezepte: zuerst nur einen Teil zeigen, jede Zeile lädt ein Foto (siehe PAGE_SIZE).
+  const alternativesPage = firstPage(alternatives, alternativesLimit);
 
   const chooseAlternative = (recipeId: string) => {
     if (!swap) return;
@@ -151,7 +162,7 @@ export default function PlanScreen() {
     return (
       <View key={mealKey(meal)} style={{ gap: 4, paddingVertical: 6, borderTopWidth: 1, borderColor: colors.border }}>
         <Pressable onPress={() => router.push(`/recipe/${encodeURIComponent(meal.recipeId)}`)} style={[styles.row, { justifyContent: "flex-start" }]}>
-          {image ? <Image source={{ uri: image }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+          <RecipeThumb uri={image} />
           <View style={{ flex: 1, gap: 2 }}>
             <Muted>
               {i18n.mealType(meal.mealType)}
@@ -180,10 +191,18 @@ export default function PlanScreen() {
 
   return (
     <Screen>
+      {consent.dialog}
       {!settings.onboarded ? (
         <Card title={t("plan.onboardingTitle")} icon="👋">
           <Muted>{t("plan.onboardingText")}</Muted>
           <Button label={t("plan.onboardingStart")} onPress={() => router.push("/onboarding")} />
+          {/* Neues Gerät: erst anmelden, dann kommen Plan und Essgewohnheiten vom Konto (lib/dataSync.ts). */}
+          {hasServer() && !store.auth ? (
+            <>
+              <Muted>{t("plan.onboardingSignInText")}</Muted>
+              <Button label={t("plan.onboardingSignIn")} variant="secondary" onPress={() => router.push("/login")} />
+            </>
+          ) : null}
         </Card>
       ) : (
         <Card title={plan ? t("plan.monthSummary") : t("plan.createMonth")} icon="📅">
@@ -191,12 +210,17 @@ export default function PlanScreen() {
           <Link href="/onboarding" style={[styles.text, { color: colors.primary }]}>
             {t("plan.editPreferences")} ›
           </Link>
-          <TextInput
-            style={styles.input}
-            placeholder={t("plan.wishesPlaceholder")}
-            defaultValue={settings.preferences}
-            onChangeText={(preferences) => store.updateSettings({ preferences })}
-          />
+          {/* Wünsche für neue KI-Rezepte braucht Claude über den Server; ohne ihn bleibt die Karte aufgeräumt. */}
+          {hasServer() ? (
+            <TextInput
+              style={styles.input}
+              placeholder={t("plan.wishesPlaceholder")}
+              defaultValue={settings.preferences}
+              // So viel nimmt der Server für Wünsche an (POST /api/plan).
+              maxLength={1000}
+              onChangeText={(preferences) => store.updateSettings({ preferences })}
+            />
+          ) : null}
           <Muted>{t("plan.pantryHint", { n: aggregatePantry(pantry).length })}</Muted>
           <Button label={plan ? t("plan.recreate") : t("plan.createMonth")} onPress={() => createPlan(0)} loading={loading} />
           {loading ? <Muted>{t("plan.progress", { n: progress!, total: MONTH_WEEKS.length })}</Muted> : null}
@@ -286,12 +310,12 @@ export default function PlanScreen() {
             <Muted>{t("plan.noAlternatives")}</Muted>
           ) : (
             <ScrollView contentContainerStyle={{ gap: 8, paddingBottom: 40 }}>
-              {alternatives.map((id) => {
+              {alternativesPage.shown.map((id) => {
                 const recipe = recipes.get(id);
                 if (!recipe) return null;
                 return (
                   <Pressable key={id} onPress={() => chooseAlternative(id)} style={[styles.card, styles.row, { justifyContent: "flex-start" }]} accessibilityRole="button">
-                    {store.imageFor(recipe) ? <Image source={{ uri: store.imageFor(recipe)!.uri }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+                    <RecipeThumb uri={store.imageFor(recipe)?.uri} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.text}>
                         {favoriteIds.includes(id) ? "♥ " : ""}
@@ -302,6 +326,7 @@ export default function PlanScreen() {
                   </Pressable>
                 );
               })}
+              <ShowMore shown={alternativesPage.shown.length} total={alternativesPage.total} onPress={() => setAlternativesLimit((n) => n + PAGE_SIZE)} />
             </ScrollView>
           )}
           {loading ? <ActivityIndicator color={colors.primary} /> : null}

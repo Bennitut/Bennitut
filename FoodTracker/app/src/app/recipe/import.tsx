@@ -3,15 +3,19 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import * as VideoThumbnails from "expo-video-thumbnails";
 import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Platform, Text, TextInput, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
 import { Button, Card, ErrorText, Field, Muted, Screen, styles } from "../../components/ui";
-import { api, type ImagePayload } from "../../lib/api";
+import { ComingSoon } from "../../components/ComingSoon";
+import { api, hasServer, type ImagePayload } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
 import { useStore } from "../../lib/store";
 import type { Recipe } from "../../lib/types";
 
 /** So viele Einzelbilder schicken wir aus einem Video an Claude. */
 const FRAME_COUNT = 6;
+/** Im Browser gibt es weder Video-Thumbnails noch das Dateisystem; dort nur Link und Beschreibung. */
+const CAN_READ_VIDEO = Platform.OS !== "web";
 
 /** Verteilt Einzelbilder gleichmäßig über das Video (Anfang und Ende auslassen). */
 async function extractFrames(uri: string, durationMs: number): Promise<ImagePayload[]> {
@@ -38,6 +42,7 @@ export default function ImportRecipeScreen() {
   const [loading, setLoading] = useState<"frames" | "import" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const consent = useAiConsent();
 
   const pickVideo = async () => {
     setError(null);
@@ -54,8 +59,9 @@ export default function ImportRecipeScreen() {
   };
 
   const start = async () => {
-    setLoading("import");
     setError(null);
+    if (!(await consent.ask("import"))) return;
+    setLoading("import");
     try {
       const result = await api.importRecipe({
         url: url.trim() || undefined,
@@ -79,6 +85,9 @@ export default function ImportRecipeScreen() {
 
   return (
     <Screen>
+      {consent.dialog}
+      {/* Den Import macht Claude auf dem Server; ohne Server gleich erklären statt nach dem Ausfüllen zu scheitern. */}
+      {hasServer() ? null : <ComingSoon />}
       <Card>
         <Muted>{t("import.hint")}</Muted>
         <Field label={t("import.url")}>
@@ -95,15 +104,17 @@ export default function ImportRecipeScreen() {
         <Field label={t("import.caption")} hint={t("import.captionHint")}>
           <TextInput style={[styles.input, { minHeight: 80 }]} value={caption} onChangeText={setCaption} multiline />
         </Field>
-        <Field label={t("import.video")} hint={t("import.videoHint")}>
-          <Button label={t("import.pickVideo")} variant="secondary" onPress={pickVideo} loading={loading === "frames"} />
-        </Field>
+        {CAN_READ_VIDEO ? (
+          <Field label={t("import.video")} hint={t("import.videoHint")}>
+            <Button label={t("import.pickVideo")} variant="secondary" onPress={pickVideo} loading={loading === "frames"} />
+          </Field>
+        ) : null}
         {frames.length > 0 ? <Muted>✓ {t("import.frames", { n: frames.length })}</Muted> : null}
         <Button
           label={t("import.start")}
           onPress={start}
           loading={loading === "import"}
-          disabled={loading !== null || (!url.trim() && !caption.trim() && frames.length === 0)}
+          disabled={!hasServer() || loading !== null || (!url.trim() && !caption.trim() && frames.length === 0)}
         />
         <ErrorText message={error} />
       </Card>

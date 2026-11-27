@@ -6,21 +6,31 @@
     "test": "test"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "dev": "tsx watch --disable-warning=ExperimentalWarning src/index.ts",
+    "start": "tsx --disable-warning=ExperimentalWarning src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start:prod": "node --disable-warning=ExperimentalWarning dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "translate-ui": "tsx scripts/translate-ui.ts"
+    "translate-ui": "tsx scripts/translate-ui.ts",
+    "photos:copy": "tsx --disable-warning=ExperimentalWarning scripts/copy-photos.ts",
+    "ollama:relay": "tsx --disable-warning=ExperimentalWarning scripts/ollama-relay.ts",
+    "check": "npm run typecheck && npm test",
+    "docker:smoke": "bash scripts/docker-smoke.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
     "@hono/node-server": "^2.1.5",
     "hono": "^4.13.13",
     "jose": "^6.2.12",
+    "nodemailer": "^10.4.1",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "pg-mem": "^3.0.14",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"

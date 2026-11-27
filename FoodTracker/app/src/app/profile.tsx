@@ -1,48 +1,174 @@
-import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
-import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, colors, styles } from "../components/ui";
-import { api } from "../lib/api";
-import { addDays, formatDay } from "../lib/dates";
+import { AccountManage } from "../components/AccountManage";
+import { ComingSoonNote } from "../components/ComingSoon";
+import { legalDraftState } from "../components/Legal";
+import { StorageWarning } from "../components/StorageWarning";
+import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, ShowMore, colors, styles } from "../components/ui";
+import type { TKey } from "../i18n";
+import { providerName } from "../lib/account";
+import { hasAiConsent } from "../lib/aiConsent";
+import { api, hasServer } from "../lib/api";
+import { formatDate, formatDay } from "../lib/dates";
+import { HISTORY_RANGES, backupFileName, diaryCsv, diaryJson, historySummary, type HistoryRange } from "../lib/history";
+import { offerFile, pickBackupFile } from "../lib/historyFiles";
 import { useI18n } from "../lib/i18n";
-import { sumNutrients, today } from "../lib/pantry";
+import { serverLine, type ServerHealth } from "../lib/serverStatus";
+import { today } from "../lib/pantry";
 import { useStore } from "../lib/store";
 
-const RANGES = [7, 30] as const;
+const RANGE_LABELS: Record<HistoryRange, TKey> = { 7: "profile.days7", 30: "profile.days30", 365: "history.days365", all: "history.daysAll" };
+const BAR_LEGEND: Record<"day" | "week" | "month", TKey> = { day: "history.barsDay", week: "history.barsWeek", month: "history.barsMonth" };
+/** Tage pro Seite in der Liste der vergangenen Tage. */
+const DAYS_PAGE = 30;
 
 export default function ProfileScreen() {
-  const { settings, updateSettings, diary, auth, setAuth, isAdmin } = useStore();
+  const {
+    settings,
+    updateSettings,
+    diary,
+    diaryState,
+    importDiary,
+    diarySync,
+    dataSyncStatus,
+    refreshSync,
+    auth,
+    setAuth,
+    isAdmin,
+    deviceClaim,
+    aiConsent,
+    setAiConsent,
+  } = useStore();
   const i18n = useI18n();
   const { t } = i18n;
-  const [range, setRange] = useState<(typeof RANGES)[number]>(7);
+  const [range, setRange] = useState<HistoryRange>(7);
+  const [shownDays, setShownDays] = useState(DAYS_PAGE);
+  const [backupMessage, setBackupMessage] = useState<{ text: string; error: boolean } | null>(null);
+  /** Bestätigung nach „Konto löschen“ (dann ist man abgemeldet). */
+  const [accountNotice, setAccountNotice] = useState<string | null>(null);
+  /** Bestätigung nach „Erlaubnis widerrufen“ (KI-Funktionen). */
+  const [aiRevoked, setAiRevoked] = useState(false);
+  // Beim Öffnen holen, was andere Geräte geändert haben (Tagebuch; mit Konto auch Plan, Vorrat und Einstellungen).
+  useFocusEffect(
+    useCallback(() => {
+      if (hasServer()) refreshSync();
+    }, [refreshSync]),
+  );
+  // undefined = wird geprüft, null = keine Antwort. Bei jedem Öffnen neu, z. B. nachdem Ollama gestartet wurde.
+  const [health, setHealth] = useState<ServerHealth | null | undefined>(undefined);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasServer()) return;
+      let active = true;
+      api
+        .health()
+        .then((h) => active && setHealth(h))
+        .catch(() => active && setHealth(null));
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+  const server = serverLine(health);
   const target = settings.kcalPerPersonPerDay;
   const list = (items: string[]) => (items.length > 0 ? items.join(", ") : t("profile.none"));
 
-  const history = useMemo(() => {
-    const end = today();
-    const days = Array.from({ length: range }, (_, i) => addDays(end, -i));
-    const perDay = days.map((date) => {
-      const entries = diary.filter((e) => e.date === date);
-      return { date, entries, total: sumNutrients(entries.map((e) => e.nutrients)) };
-    });
-    const logged = perDay.filter((d) => d.entries.length > 0);
-    const avg = sumNutrients(logged.map((d) => d.total));
-    const n = Math.max(1, logged.length);
-    const counts = new Map<string, number>();
-    for (const d of logged) for (const e of d.entries) counts.set(e.title, (counts.get(e.title) ?? 0) + 1);
-    const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-    return {
-      perDay,
-      logged: logged.length,
-      avg: { kcal: avg.kcal / n, protein: avg.protein / n, carbs: avg.carbs / n, fat: avg.fat / n },
-      top,
-    };
-  }, [diary, range]);
+  const history = useMemo(() => historySummary(diary, range, today()), [diary, range]);
+  const maxKcal = Math.max(target * 1.3, ...history.bars.map((b) => b.kcal));
+  const thisYear = today().slice(0, 4);
 
-  const maxKcal = Math.max(target * 1.3, ...history.perDay.map((d) => d.total.kcal));
+  /** „14:05“ bzw. mit Datum, wenn es nicht heute war. */
+  const syncTime = (iso: string | null) => {
+    const at = iso ? new Date(iso) : null;
+    const time = at ? at.toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" }) : "";
+    const sameDay = at && at.toDateString() === new Date().toDateString();
+    return at && !sameDay ? `${at.toLocaleDateString(i18n.language)} ${time}` : time;
+  };
+  const syncText = (() => {
+    switch (diarySync.state) {
+      case "off":
+        return t("history.syncLocal");
+      case "synced":
+        return t("history.syncDone", { time: syncTime(diarySync.at) });
+      case "syncing":
+        return t("history.syncRunning");
+      case "offline":
+        return t("history.syncOffline");
+      default:
+        return t("history.syncWaiting");
+    }
+  })();
+  // Plan, Einkaufsliste, Vorrat und Essgewohnheiten: nur mit Konto auf allen Geräten (lib/dataSync.ts).
+  const dataText = (() => {
+    switch (dataSyncStatus.state) {
+      case "off":
+        return null;
+      case "local":
+        return t("history.dataLocal");
+      case "synced":
+        return t("history.dataDone", { time: syncTime(dataSyncStatus.at) });
+      case "syncing":
+        return t("history.dataRunning");
+      case "offline":
+        return t("history.dataOffline");
+      default:
+        return t("history.dataWaiting");
+    }
+  })();
+
+  const exportHistory = async (kind: "csv" | "json") => {
+    setBackupMessage(null);
+    const name = backupFileName(today(), kind);
+    const text =
+      kind === "json"
+        ? diaryJson(diaryState)
+        : diaryCsv(
+            diary,
+            {
+              date: t("history.csvDate"),
+              time: t("history.csvTime"),
+              title: t("history.csvTitle"),
+              kcal: t("history.csvKcal"),
+              protein: t("history.csvProtein"),
+              carbs: t("history.csvCarbs"),
+              fat: t("history.csvFat"),
+              source: t("history.csvSource"),
+              sources: { foto: t("history.sourceFoto"), plan: t("history.sourcePlan"), manuell: t("history.sourceManuell") },
+            },
+            // Deutsch, Französisch, Italienisch und Spanisch schreiben 1,5 – Excel trennt dort Spalten mit „;“.
+            i18n.language !== "en",
+          );
+    try {
+      if ((await offerFile(name, text, kind, t("profile.history"))) === "downloaded") {
+        setBackupMessage({ text: t("history.exportDone", { name }), error: false });
+      }
+    } catch {
+      setBackupMessage({ text: t("history.exportFailed"), error: true });
+    }
+  };
+
+  const importHistory = async () => {
+    setBackupMessage(null);
+    let text: string | null;
+    try {
+      text = await pickBackupFile();
+    } catch {
+      setBackupMessage({ text: t("history.importFailed"), error: true });
+      return;
+    }
+    if (text === null) return;
+    const result = importDiary(text);
+    setBackupMessage(
+      result.ok
+        ? { text: t("history.imported", { added: result.added, updated: result.updated, unchanged: result.unchanged }), error: false }
+        : { text: t(result.error === "not_json" ? "history.importNotJson" : "history.importNotBackup"), error: true },
+    );
+  };
 
   return (
     <Screen>
+      <StorageWarning />
       <Card title={t("account.title")} icon="🔐">
         {auth ? (
           <>
@@ -55,8 +181,9 @@ export default function ProfileScreen() {
               />
             </View>
             <Muted>
-              {auth.user.email ?? ""} {t("account.via", { provider: auth.user.provider === "apple" ? "Apple" : auth.user.provider === "google" ? "Google" : "Test" })}
+              {auth.user.email ?? ""} {t("account.via", { provider: providerName(auth.user.provider, t("account.providerEmail")) })}
             </Muted>
+            {deviceClaim ? <Text style={styles.text}>{t("account.deviceClaimed")}</Text> : null}
             <Button label={t("account.directory")} variant="secondary" onPress={() => router.push("/users")} />
             {isAdmin ? <Button label={t("account.adminArea")} onPress={() => router.push("/admin")} /> : null}
             <Button
@@ -68,13 +195,19 @@ export default function ProfileScreen() {
               }}
             />
           </>
-        ) : (
+        ) : hasServer() ? (
           <>
+            {accountNotice ? <Text style={styles.text}>{accountNotice}</Text> : null}
             <Muted>{t("account.notSignedIn")}</Muted>
-            <Button label={t("account.signIn")} onPress={() => router.push("/login")} />
+            <Button label={t("account.signInOrRegister")} onPress={() => router.push("/login")} />
           </>
+        ) : (
+          // Ohne Server keine Anmeldung: Hinweis statt eines Knopfs, der zu „Ohne Verbindung … keine Anmeldung“ führt.
+          <ComingSoonNote text={t("account.signInSoon")} />
         )}
+        {hasServer() ? <Muted>{t(server.key, { model: server.model })}</Muted> : null}
       </Card>
+      {auth ? <AccountManage auth={auth} onDeleted={() => setAccountNotice(t("account.deleted"))} /> : null}
 
       <Card title={t("profile.you")} icon="🙋">
         <Field label={t("settings.displayName")} hint={t("settings.displayNameHint")}>
@@ -117,11 +250,19 @@ export default function ProfileScreen() {
 
       <Card title={t("profile.history")} icon="📈" tint={colors.accentTint}>
         <ChipRow>
-          {RANGES.map((r) => (
-            <Chip key={r} label={t(r === 7 ? "profile.days7" : "profile.days30")} selected={range === r} onPress={() => setRange(r)} />
+          {HISTORY_RANGES.map((r) => (
+            <Chip
+              key={r}
+              label={t(RANGE_LABELS[r])}
+              selected={range === r}
+              onPress={() => {
+                setRange(r);
+                setShownDays(DAYS_PAGE);
+              }}
+            />
           ))}
         </ChipRow>
-        {history.logged === 0 ? (
+        {history.days.length === 0 ? (
           <Muted>{t("profile.noHistory")}</Muted>
         ) : (
           <>
@@ -133,24 +274,31 @@ export default function ProfileScreen() {
                 fat: Math.round(history.avg.fat),
               })}
             </Muted>
-            <Muted>{t("profile.daysLogged", { n: history.logged, total: range })}</Muted>
-            {/* Balken pro Tag, älteste links; die Linie markiert das Kalorienziel. */}
-            <View style={{ height: 90, flexDirection: "row", alignItems: "flex-end", gap: range === 7 ? 6 : 2, marginTop: 8 }}>
+            <Muted>{t("profile.daysLogged", { n: history.days.length, total: history.totalDays })}</Muted>
+            {/* Balken pro Tag, Woche oder Monat (Ø pro erfasstem Tag), älteste links; die Linie markiert das Kalorienziel. */}
+            <View
+              style={{ height: 90, flexDirection: "row", alignItems: "flex-end", gap: history.bars.length <= 7 ? 6 : history.bars.length <= 31 ? 2 : 1, marginTop: 8 }}
+            >
               <View
                 style={{ position: "absolute", left: 0, right: 0, bottom: (target / maxKcal) * 90, height: 1, backgroundColor: colors.muted }}
               />
-              {[...history.perDay].reverse().map((d) => (
+              {history.bars.map((bar) => (
                 <View
-                  key={d.date}
+                  key={bar.start}
                   style={{
                     flex: 1,
-                    height: Math.max(2, (d.total.kcal / maxKcal) * 90),
-                    borderRadius: 3,
-                    backgroundColor: d.total.kcal > target * 1.1 ? "#d98b3a" : d.entries.length > 0 ? colors.primary : colors.border,
+                    height: Math.max(2, (bar.kcal / maxKcal) * 90),
+                    borderRadius: history.bars.length > 60 ? 1 : 3,
+                    backgroundColor: bar.kcal > target * 1.1 ? "#d98b3a" : bar.logged > 0 ? colors.primary : colors.border,
                   }}
                 />
               ))}
             </View>
+            <View style={styles.row}>
+              <Muted>{formatDate(history.from, i18n.language)}</Muted>
+              <Muted>{formatDate(history.to, i18n.language)}</Muted>
+            </View>
+            <Muted>{t(BAR_LEGEND[history.unit])}</Muted>
             {history.top.length > 0 ? (
               <Field label={t("profile.topMeals")}>
                 {history.top.map(([title, n]) => (
@@ -160,25 +308,64 @@ export default function ProfileScreen() {
                 ))}
               </Field>
             ) : null}
-            {history.perDay
-              .filter((d) => d.entries.length > 0)
-              .map((d) => (
-                <View key={d.date} style={{ gap: 2, paddingVertical: 6, borderTopWidth: 1, borderColor: colors.border }}>
-                  <View style={styles.row}>
-                    <Text style={[styles.text, { flex: 1, fontWeight: "600" }]}>{formatDay(d.date, i18n.language)}</Text>
-                    <Muted>
-                      {Math.round(d.total.kcal)} kcal · {t("profile.entries", { n: d.entries.length })}
-                    </Muted>
-                  </View>
-                  <Muted>{d.entries.map((e) => e.title).join(", ")}</Muted>
-                  <NutrientRow nutrients={d.total} />
+            {/* Alle erfassten Tage, neueste zuerst, zum Blättern in Seiten zu 30 Tagen. */}
+            {history.days.slice(0, shownDays).map((d) => (
+              <View key={d.date} style={{ gap: 2, paddingVertical: 6, borderTopWidth: 1, borderColor: colors.border }}>
+                <View style={styles.row}>
+                  <Text style={[styles.text, { flex: 1, fontWeight: "600" }]}>{formatDay(d.date, i18n.language, d.date.slice(0, 4) !== thisYear)}</Text>
+                  <Muted>
+                    {Math.round(d.total.kcal)} kcal · {t("profile.entries", { n: d.entries.length })}
+                  </Muted>
                 </View>
-              ))}
+                <Muted>{d.entries.map((e) => e.title).join(", ")}</Muted>
+                <NutrientRow nutrients={d.total} />
+              </View>
+            ))}
+            <ShowMore shown={Math.min(shownDays, history.days.length)} total={history.days.length} onPress={() => setShownDays((n) => n + DAYS_PAGE)} />
           </>
         )}
       </Card>
 
+      <Card title={t("history.backupTitle")} icon="💾">
+        <Text style={styles.text}>{syncText}</Text>
+        {hasServer() ? <Muted>{t(auth ? "history.syncSignedIn" : "history.syncAccount")}</Muted> : null}
+        {dataText ? <Text style={styles.text}>{dataText}</Text> : null}
+        <Button label={t("history.exportCsv")} variant="secondary" onPress={() => exportHistory("csv")} />
+        <Button label={t("history.exportJson")} variant="secondary" onPress={() => exportHistory("json")} />
+        <Button label={t("history.importJson")} variant="secondary" onPress={importHistory} />
+        <Muted>{t("history.exportHint")}</Muted>
+        {backupMessage ? <Text style={backupMessage.error ? styles.error : styles.text}>{backupMessage.text}</Text> : null}
+      </Card>
+
+      {/* Einwilligung in die KI-Funktionen (lib/aiConsent.ts): ansehen und widerrufen. Ohne Server gibt es keine KI. */}
+      {hasServer() ? (
+        <Card title={t("aiConsent.profileTitle")} icon="🤖">
+          {hasAiConsent(aiConsent) ? (
+            <>
+              <Text style={styles.text}>{t("aiConsent.profileGranted", { date: formatDate(today(new Date(aiConsent.at)), i18n.language) })}</Text>
+              <Muted>{t("aiConsent.profileGrantedHint")}</Muted>
+              <Button
+                label={t("aiConsent.revoke")}
+                variant="secondary"
+                onPress={() => {
+                  setAiConsent(null);
+                  setAiRevoked(true);
+                }}
+              />
+            </>
+          ) : (
+            <Muted>{t(aiRevoked ? "aiConsent.revoked" : "aiConsent.profileNotYet")}</Muted>
+          )}
+        </Card>
+      ) : null}
+
       <Button label={`🌐 ${t("profile.settings")} ›`} variant="secondary" onPress={() => router.push("/settings")} />
+      <Button label={`🖥️ ${t("server.title")} ›`} variant="secondary" onPress={() => router.push("/server")} />
+      <Button
+        label={`§ ${t("legal.title")}${legalDraftState().draft ? ` · ${t("legal.draftBadge")}` : ""} ›`}
+        variant="secondary"
+        onPress={() => router.push("/legal")}
+      />
     </Screen>
   );
 }

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { api } from "../lib/api";
+import { api, hasServer, imageUrl } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { newId } from "../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../lib/photos";
 import { useStore } from "../lib/store";
 import { FLAG_REASONS, type FlagReason, type ImprovedRecipe, type Recipe, type RecipePhoto } from "../lib/types";
+import { useAiConsent } from "./AiConsent";
+import { ComingSoonNote } from "./ComingSoon";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, Muted, colors, styles } from "./ui";
 
 /** Fünf Sterne; mit onChange antippbar. */
@@ -37,6 +39,10 @@ export function RatingCard({ recipe }: { recipe: Recipe }) {
     }
   };
 
+  // Bewertungen sammelt der Server; ohne ihn gäbe es nur leere Sterne, die „Keine Verbindung“ melden.
+  // Der Hinweis „Bald verfügbar“ steht gesammelt unten im Rezept (ImproveCard).
+  if (!hasServer()) return null;
+
   return (
     <Card title={t("feedback.rating")} icon="⭐" tint="#FFF4D6">
       <View style={styles.row}>
@@ -52,15 +58,20 @@ export function RatingCard({ recipe }: { recipe: Recipe }) {
 
 interface GalleryItem {
   key: string;
-  uri: string;
+  /** Zum Anzeigen; fehlt bei einem eigenen Foto von einem anderen Gerät, solange der Server nicht erreichbar ist. */
+  uri: string | undefined;
   label: string;
   avg: number;
   count: number;
   myRating: number | null;
   /** Öffentliches Foto zum Bewerten (nicht das eigene). */
   rateId: string | null;
-  own: { localId: string; public: boolean; remoteId: string | null } | null;
+  /** Eigenes Foto; `uri` wie gespeichert (data-URI bzw. auf anderen Geräten des Kontos der Pfad im Bildspeicher). */
+  own: { localId: string; public: boolean; remoteId: string | null; uri: string } | null;
 }
+
+/** Ob das Foto auf diesem Gerät liegt (data-URI) – nur dann lässt es sich von hier aus öffentlich machen. */
+const onDevice = (uri: string) => /^data:image\//i.test(uri);
 
 export function PhotoGallery({ recipe }: { recipe: Recipe }) {
   const { myPhotos, addMyPhoto, updateMyPhoto, removeMyPhoto, settings, ready } = useStore();
@@ -72,9 +83,9 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Erst nach dem Laden des Zustands abfragen, sonst fehlt die Geräte-ID.
+  // Erst nach dem Laden des Zustands abfragen, sonst fehlt die Geräte-ID. Ohne Server gibt es nur eigene Fotos.
   useEffect(() => {
-    if (ready) api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
+    if (ready && hasServer()) api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
   }, [recipe.id, ready]);
 
   const mine = myPhotos.filter((p) => p.recipeId === recipe.id);
@@ -84,13 +95,14 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
       const r = remote.find((x) => x.id === p.remoteId);
       return {
         key: p.id,
-        uri: p.uri,
+        // Mit Konto kommen eigene Fotos anderer Geräte als Pfad im Bildspeicher (lib/dataSync.ts).
+        uri: imageUrl(p.uri) ?? r?.uri,
         label: t("feedback.you"),
         avg: r?.avg ?? 0,
         count: r?.count ?? 0,
         myRating: null,
         rateId: null,
-        own: { localId: p.id, public: p.public, remoteId: p.remoteId },
+        own: { localId: p.id, public: p.public, remoteId: p.remoteId, uri: p.uri },
       };
     }),
     ...remote
@@ -129,7 +141,8 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
     setError(null);
     const id = newId();
     let remoteId: string | null = null;
-    if (makePublic) {
+    // Ohne Server bleibt das Foto privat (statt nach dem Speichern „Ohne Verbindung …“ zu melden).
+    if (makePublic && hasServer()) {
       try {
         remoteId = await publish(draft);
       } catch {
@@ -167,7 +180,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
   const share = async (item: GalleryItem) => {
     if (!item.own) return;
     try {
-      const remoteId = await publish(item.uri);
+      const remoteId = await publish(item.own.uri);
       updateMyPhoto(item.own.localId, { public: true, remoteId });
     } catch (e) {
       setError(i18n.error(e));
@@ -182,7 +195,13 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
           {items.map((item) => (
             <View key={item.key} style={{ width: 200, gap: 4 }}>
-              <Image source={{ uri: item.uri }} style={{ width: 200, height: 112, borderRadius: 12 }} />
+              {item.uri ? (
+                <Image source={{ uri: item.uri }} style={{ width: 200, height: 112, borderRadius: 12 }} />
+              ) : (
+                <View style={{ width: 200, height: 112, borderRadius: 12, backgroundColor: colors.border, alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: 28 }}>🖼️</Text>
+                </View>
+              )}
               <View style={styles.row}>
                 <Text style={[styles.muted, { flex: 1 }]} numberOfLines={1}>
                   {item.label}
@@ -196,7 +215,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
               ) : null}
               {item.own ? (
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                  {!item.own.public ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
+                  {!item.own.public && hasServer() && onDevice(item.own.uri) ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
                   <Chip label={t("feedback.deletePhoto")} onPress={() => remove(item)} />
                 </View>
               ) : null}
@@ -219,11 +238,17 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
         <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
           {draft ? <Image source={{ uri: draft }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 16 }} /> : null}
           <Card title={t("feedback.visibility")} icon="👀">
-            <ChipRow>
-              <Chip label={t("feedback.public")} selected={makePublic} onPress={() => setMakePublic(true)} />
-              <Chip label={t("feedback.private")} selected={!makePublic} onPress={() => setMakePublic(false)} />
-            </ChipRow>
-            <Muted>{t("feedback.publicHint")}</Muted>
+            {hasServer() ? (
+              <>
+                <ChipRow>
+                  <Chip label={t("feedback.public")} selected={makePublic} onPress={() => setMakePublic(true)} />
+                  <Chip label={t("feedback.private")} selected={!makePublic} onPress={() => setMakePublic(false)} />
+                </ChipRow>
+                <Muted>{t("feedback.publicHint")}</Muted>
+              </>
+            ) : (
+              <ComingSoonNote text={t("feedback.shareSoon")} />
+            )}
           </Card>
           <Button label={t("feedback.save")} onPress={save} loading={busy} />
           <Button label={t("common.cancel")} variant="secondary" onPress={() => setDraft(null)} />
@@ -252,6 +277,7 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
   const [busy, setBusy] = useState<"report" | "improve" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const consent = useAiConsent();
   const flagged = flaggedIds.includes(recipe.id);
   const hasOverride = Boolean(textOverrides[recipe.id]?.[i18n.language]);
 
@@ -271,8 +297,9 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
   };
 
   const improve = async () => {
-    setBusy("improve");
     setError(null);
+    if (!(await consent.ask("improve"))) return;
+    setBusy("improve");
     try {
       const text = i18n.recipe(recipe);
       setProposal(
@@ -304,8 +331,20 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
     setMessage(t("feedback.improved"));
   };
 
+  // Ohne Server ein gesammelter Hinweis statt Knöpfen, die nur „Keine Verbindung“ melden – auch für die
+  // Bewertung (RatingCard ist dann ausgeblendet).
+  if (!hasServer()) {
+    return (
+      <Card>
+        <ComingSoonNote text={t("feedback.soon")} />
+        {hasOverride ? <Button label={t("feedback.restore")} variant="secondary" onPress={() => setTextOverride(recipe.id, i18n.language, null)} /> : null}
+      </Card>
+    );
+  }
+
   return (
     <Card>
+      {consent.dialog}
       <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
         {hasOverride ? <Badge label={t("feedback.improved")} /> : null}
         {flagged ? <Badge label={t("feedback.flagged")} color={colors.warning} tint={colors.accentTint} /> : null}

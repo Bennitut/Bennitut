@@ -1,5 +1,8 @@
 import { router } from "expo-router";
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { InstallHint } from "../../components/InstallHint";
+import { RecipeThumb } from "../../components/RecipeThumb";
+import { StorageWarning } from "../../components/StorageWarning";
 import { Card, Chip, HeroCard, Muted, ProgressBar, Screen, styles } from "../../components/ui";
 import { daysBetween } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
@@ -18,6 +21,7 @@ export default function TodayScreen() {
 
   return (
     <Screen>
+      <StorageWarning />
       <HeroCard>
         <Text style={styles.heroMuted}>🔥 {t("today.caloriesToday")}</Text>
         <Text style={styles.heroHeading}>
@@ -39,6 +43,9 @@ export default function TodayScreen() {
         </View>
       </HeroCard>
 
+      {/* Erst wer schon einen Plan hat, bekommt im Browser den Hinweis, FoodTracker als App abzulegen. */}
+      {plan ? <InstallHint /> : null}
+
       {planned.length > 0 ? (
         <Card title={t("today.planned")} icon="🍽️">
           {planned.map((meal) => {
@@ -48,7 +55,7 @@ export default function TodayScreen() {
             const image = recipe ? imageFor(recipe)?.uri : undefined;
             return (
               <View key={mealKey(meal)} style={[styles.row, { paddingVertical: 4 }]}>
-                {image ? <Image source={{ uri: image }} style={{ width: 64, height: 36, borderRadius: 8 }} /> : null}
+                <RecipeThumb uri={image} />
                 <Pressable style={{ flex: 1, gap: 2 }} onPress={() => router.push(`/recipe/${encodeURIComponent(meal.recipeId)}`)}>
                   <Muted>{i18n.mealType(meal.mealType)}</Muted>
                   <Text style={styles.text}>{name}</Text>

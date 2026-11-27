@@ -1,16 +1,21 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Image, Linking, Text, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
+import { ComingSoonNote } from "../../components/ComingSoon";
 import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, hasServer } from "../../lib/api";
 import { ImproveCard, PhotoGallery, RatingCard } from "../../components/RecipeFeedback";
 import { communityCache } from "../../lib/communityCache";
+import { CATALOG_VIDEO_LANGUAGES } from "../../lib/catalog";
 import { ingredientEmoji } from "../../lib/emoji";
-import { needsTranslation, useI18n } from "../../lib/i18n";
+import { useI18n } from "../../lib/i18n";
 import { recipeNutrients } from "../../lib/nutrition";
 import { newId } from "../../lib/pantry";
+import { needsTranslation } from "../../lib/recipeText";
 import { useStore } from "../../lib/store";
 import type { Recipe } from "../../lib/types";
+import { videosForLanguage, youtubeSearchUrl } from "../../lib/videos";
 
 const OWN_KINDS: Recipe["source"]["kind"][] = ["eigen", "import"];
 
@@ -20,7 +25,7 @@ const PLATFORM_NAMES = { youtube: "YouTube", tiktok: "TikTok", instagram: "Insta
 const searchLinks = (query: string) => {
   const q = encodeURIComponent(query);
   return [
-    { label: "YouTube", url: `https://www.youtube.com/results?search_query=${q}` },
+    { label: "YouTube", url: youtubeSearchUrl(query) },
     { label: "TikTok", url: `https://www.tiktok.com/search?q=${q}` },
     { label: "Instagram", url: `https://www.instagram.com/explore/search/keyword/?q=${q}` },
   ];
@@ -34,6 +39,7 @@ export default function RecipeDetailScreen() {
   const { t } = i18n;
   const [busy, setBusy] = useState<"translate" | "share" | "favorite" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const consent = useAiConsent();
 
   const cached = communityCache.get(id);
   const recipe = recipes.get(id) ?? cached?.recipe;
@@ -50,10 +56,15 @@ export default function RecipeDetailScreen() {
   const isFavorite = favoriteIds.includes(recipe.id);
   const communityId = shared[recipe.id];
   const author = recipe.source.kind === "community" ? recipe.source.author : null;
-  const videos = recipe.media?.videos ?? [];
+  const allVideos = recipe.media?.videos ?? [];
+  const videoQuery = `${text.name} ${t("recipes.searchSuffix")}`;
+  // Nur Videos in der gewählten Sprache; gibt es keins, sucht derselbe Knopf auf YouTube in dieser Sprache.
+  const { videos, searchUrl: videoSearchUrl } = videosForLanguage(recipe, i18n.language, videoQuery, CATALOG_VIDEO_LANGUAGES);
   const importUrl = recipe.source.kind === "import" ? recipe.source.url : undefined;
-  const sourceUrl = importUrl && !videos.some((v) => v.url === importUrl) ? importUrl : undefined;
+  const sourceUrl = importUrl && !allVideos.some((v) => v.url === importUrl) ? importUrl : undefined;
   const image = store.imageFor(recipe);
+  // Übersetzen braucht Claude über den Server; ohne Server ein Hinweis statt eines Knopfs, der „Keine Verbindung“ meldet.
+  const untranslated = needsTranslation(recipe, i18n.language);
 
   const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>) => {
     setBusy(kind);
@@ -74,14 +85,16 @@ export default function RecipeDetailScreen() {
       store.setFavorite(recipe, !isFavorite);
     });
 
-  const translateNow = () =>
-    run("translate", async () => {
+  const translateNow = async () => {
+    if (!(await consent.ask("translate"))) return;
+    await run("translate", async () => {
       const translated = await api.translateRecipe(
         { name: recipe.name, steps: recipe.steps, otherIngredients: recipe.otherIngredients },
         i18n.language,
       );
       store.cacheTranslation(recipe.id, i18n.language, translated);
     });
+  };
 
   const toggleShare = () =>
     run("share", async () => {
@@ -123,6 +136,7 @@ export default function RecipeDetailScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: text.name }} />
+      {consent.dialog}
       {image ? (
         <View style={{ gap: 4 }}>
           <Image source={{ uri: image.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 14 }} resizeMode="cover" accessibilityIgnoresInvertColors />
@@ -152,11 +166,12 @@ export default function RecipeDetailScreen() {
         <Muted>{t("recipes.perServing")}</Muted>
         <View style={styles.chipRow}>
           <Button label={isFavorite ? t("recipes.unfavorite") : t("recipes.favorite")} variant="secondary" onPress={toggleFavorite} loading={busy === "favorite"} />
-          {needsTranslation(recipe, i18n.language) ? (
+          {untranslated && hasServer() ? (
             <Button label={busy === "translate" ? t("recipes.translating") : t("recipes.translate")} variant="secondary" onPress={translateNow} loading={busy === "translate"} />
           ) : null}
           {sourceUrl ? <Button label={t("recipes.openOriginal")} variant="secondary" onPress={() => Linking.openURL(sourceUrl)} /> : null}
         </View>
+        {untranslated && !hasServer() ? <ComingSoonNote text={t("recipes.translateSoon")} /> : null}
         <ErrorText message={error} />
       </Card>
 
@@ -169,9 +184,15 @@ export default function RecipeDetailScreen() {
           />
         ))}
         {videos[0]?.title ? <Muted>{videos[0].title}</Muted> : null}
+        {videoSearchUrl ? (
+          <>
+            <Button label={`${t("recipes.findVideo")} · YouTube`} onPress={() => Linking.openURL(videoSearchUrl)} />
+            <Muted>{t("recipes.noVideoInLanguage")}</Muted>
+          </>
+        ) : null}
         <Text style={styles.label}>{t("recipes.moreVideos")}</Text>
         <View style={styles.chipRow}>
-          {searchLinks(`${text.name} ${t("recipes.searchSuffix")}`).map((link) => (
+          {searchLinks(videoQuery).map((link) => (
             <Button key={link.label} label={link.label} variant="secondary" onPress={() => Linking.openURL(link.url)} />
           ))}
         </View>
@@ -219,9 +240,15 @@ export default function RecipeDetailScreen() {
         {isOwn ? (
           <>
             <Button label={t("common.edit")} variant="secondary" onPress={() => router.push(`/recipe/edit?id=${encodeURIComponent(recipe.id)}`)} />
-            <Button label={communityId ? t("recipes.unshare") : t("recipes.share")} variant="secondary" onPress={toggleShare} loading={busy === "share"} />
-            {communityId ? <Muted>{t("recipes.shared")}</Muted> : null}
+            {hasServer() ? (
+              <>
+                <Button label={communityId ? t("recipes.unshare") : t("recipes.share")} variant="secondary" onPress={toggleShare} loading={busy === "share"} />
+                {communityId ? <Muted>{t("recipes.shared")}</Muted> : null}
+              </>
+            ) : null}
             <Button label={t("common.delete")} variant="secondary" onPress={remove} />
+            {/* Ohne Server kein Teilen: Hinweis statt eines Knopfs, der nur „Keine Verbindung“ meldet. */}
+            {hasServer() ? null : <ComingSoonNote text={t("recipes.shareSoon")} />}
           </>
         ) : (
           <Button label={t("recipes.copyToMine")} variant="secondary" onPress={copyToMine} />

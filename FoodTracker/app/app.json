@@ -22,6 +22,10 @@
       "package": "com.bennitut.foodtracker"
     },
     "web": {
+      "output": "single",
+      "lang": "de",
+      "themeColor": "#1E9E5A",
+      "description": "Essen planen ohne Reste: Monatsplan, Einkaufsliste, Vorrat und Ernährungstagebuch.",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
@@ -48,7 +52,13 @@
       ],
       "expo-status-bar",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ]
     ],
     "scheme": "foodtracker"
   }

@@ -1,4 +1,4 @@
-import type { MealType, Recipe } from "../types.js";
+import type { MealType, Recipe, RecipeVideo } from "../types.js";
 import { recipe } from "./recipeHelper.js";
 import { RECIPE_CUISINES } from "./recipeCuisines.js";
 import { RECIPE_IMAGES } from "./recipeImages.js";
@@ -7,7 +7,7 @@ import { MEAT_EUROPE_CUISINES, RECIPES_MEAT_EUROPE } from "./recipesMeatEurope.j
 import { RECIPES_VEGAN, VEGAN_CUISINES } from "./recipesVegan.js";
 import { RECIPES_VEGGIE, VEGGIE_CUISINES } from "./recipesVeggie.js";
 import { RECIPES_WORLD, WORLD_CUISINES } from "./recipesWorld.js";
-import { RECIPE_VIDEOS } from "./recipeVideos.js";
+import { videosOfRecipe } from "./recipeVideos.js";
 
 const B: MealType[] = ["breakfast"];
 const LD: MealType[] = ["lunch", "dinner"];
@@ -251,23 +251,21 @@ export const BASE_RECIPES: Recipe[] = [
 /** Küche als Tag sowie Kochvideo und Foto (Video-Vorschaubild) ergänzen. */
 const CUISINES = { ...RECIPE_CUISINES, ...VEGAN_CUISINES, ...VEGGIE_CUISINES, ...MEAT_EUROPE_CUISINES, ...WORLD_CUISINES };
 
-/** Ergänzt Küche, frei lizenziertes Foto und Kochvideo (als Link). */
+/** Ergänzt Küche, frei lizenziertes Foto und Kochvideos (als Links, je Sprache eines). */
 function withExtras(recipe: Recipe): Recipe {
-  const video = RECIPE_VIDEOS[recipe.id];
+  const videos: RecipeVideo[] = videosOfRecipe(recipe.id).map((video) => ({
+    platform: "youtube",
+    url: `https://www.youtube.com/watch?v=${video.youtubeId}`,
+    title: video.title,
+    author: video.channel,
+    language: video.language,
+  }));
   const image = RECIPE_IMAGES[recipe.id];
   const cuisine = CUISINES[recipe.id];
   return {
     ...recipe,
     tags: cuisine ? [...recipe.tags, cuisine] : recipe.tags,
-    media:
-      image || video
-        ? {
-            ...(image ? { image } : {}),
-            ...(video
-              ? { videos: [{ platform: "youtube", url: `https://www.youtube.com/watch?v=${video.youtubeId}`, title: video.title, author: video.channel }] }
-              : {}),
-          }
-        : undefined,
+    media: image || videos.length > 0 ? { ...(image ? { image } : {}), ...(videos.length > 0 ? { videos } : {}) } : undefined,
   };
 }
 

@@ -1,0 +1,8 @@
+# Ins Image kommt nur, was zum Bauen nötig ist – nie .env (Schlüssel), data/ (Datenbank, Fotos) oder node_modules
+# (die Pakete installiert das Dockerfile selbst, passend zum Image).
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.build.json
+!src/

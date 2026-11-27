@@ -1,8 +1,10 @@
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Image, Text, View } from "react-native";
+import { useAiConsent } from "../../components/AiConsent";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, NutrientRow, Screen, styles } from "../../components/ui";
-import { api, toMediaType } from "../../lib/api";
+import { ComingSoon } from "../../components/ComingSoon";
+import { api, hasServer, toMediaType } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
 import { useStore } from "../../lib/store";
 import type { MealAnalysis, PantryItem, ReceiptAnalysis } from "../../lib/types";
@@ -23,6 +25,7 @@ export default function ScanScreen() {
   const [portion, setPortion] = useState(1);
   const [receipt, setReceipt] = useState<{ receipt: ReceiptAnalysis; pantry: PantryItem[] } | null>(null);
   const [saved, setSaved] = useState(false);
+  const consent = useAiConsent();
 
   const reset = (nextMode: Mode) => {
     setMode(nextMode);
@@ -35,6 +38,8 @@ export default function ScanScreen() {
 
   const pick = async (source: "camera" | "library") => {
     setError(null);
+    // Erst fragen, dann fotografieren – ohne Erlaubnis geht kein Foto an die KI.
+    if (!(await consent.ask(mode))) return;
     if (source === "camera") {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -89,6 +94,7 @@ export default function ScanScreen() {
 
   return (
     <Screen>
+      {consent.dialog}
       <ChipRow>
         {(["meal", "receipt"] as const).map((m) => (
           <Chip key={m} label={t(m === "meal" ? "scan.meal" : "scan.receipt")} selected={mode === m} onPress={() => reset(m)} />
@@ -97,10 +103,16 @@ export default function ScanScreen() {
 
       <Card title={t(mode === "meal" ? "scan.mealTitle" : "scan.receiptTitle")} icon={mode === "meal" ? "🍽️" : "🧾"}>
         <Muted>{t(mode === "meal" ? "scan.mealHint" : "scan.receiptHint")}</Muted>
-        <Button label={t("scan.takePhoto")} onPress={() => pick("camera")} loading={loading} />
-        <Button label={t("scan.fromLibrary")} variant="secondary" onPress={() => pick("library")} disabled={loading} />
+        {hasServer() ? (
+          <>
+            <Button label={t("scan.takePhoto")} onPress={() => pick("camera")} loading={loading} />
+            <Button label={t("scan.fromLibrary")} variant="secondary" onPress={() => pick("library")} disabled={loading} />
+          </>
+        ) : null}
         <ErrorText message={error} />
       </Card>
+      {/* Ohne Server keine Foto- und Bon-Erkennung: erklären statt nach dem Foto einen Fehler zu zeigen. */}
+      {hasServer() ? null : <ComingSoon />}
 
       {imageUri ? <Image source={{ uri: imageUri }} style={{ width: "100%", height: 220, borderRadius: 14 }} /> : null}
 

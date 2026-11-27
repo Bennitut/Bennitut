@@ -4,11 +4,13 @@ import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { IngredientPicker } from "../../components/IngredientPicker";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, Field, Screen, colors, styles } from "../../components/ui";
 import { useI18n } from "../../lib/i18n";
-import { api } from "../../lib/api";
+import { api, imageUrl } from "../../lib/api";
+import { CATALOG_VIDEO_LANGUAGES } from "../../lib/catalog";
 import { newId } from "../../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../../lib/photos";
 import { useStore } from "../../lib/store";
 import { MEAL_TYPES, type MealType, type Recipe, type RecipeVideo } from "../../lib/types";
+import { editableVideo, replaceEditableVideo } from "../../lib/videos";
 
 interface DraftIngredient {
   ingredientId: string;
@@ -61,7 +63,8 @@ export default function RecipeEditorScreen() {
   const [other, setOther] = useState(existingText?.otherIngredients.join("\n") ?? "");
   const [steps, setSteps] = useState(existingText?.steps.join("\n") ?? "");
   const [photo, setPhoto] = useState(existing?.media?.image);
-  const [videoUrl, setVideoUrl] = useState(existing?.media?.videos?.[0]?.url ?? "");
+  // Bearbeitet wird der eigene Link; Katalogvideos einer Kopie (je Sprache eines) bleiben unverändert.
+  const [videoUrl, setVideoUrl] = useState(editableVideo(existing?.media?.videos ?? [], CATALOG_VIDEO_LANGUAGES)?.url ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,10 +89,8 @@ export default function RecipeEditorScreen() {
     if (!name.trim()) return setError(t("editor.nameRequired"));
     if (parsed.length === 0) return setError(t("editor.ingredientRequired"));
     if (mealTypes.length === 0) return setError(t("editor.mealTypeRequired"));
-    const video = videoFromUrl(videoUrl);
-    // Weitere Videos (z. B. vom Import) bleiben erhalten; das erste ist das hier bearbeitete.
-    const otherVideos = (existing?.media?.videos ?? []).slice(1).filter((v) => v.url !== video?.url);
-    const videos = [...(video ? [video] : []), ...otherVideos];
+    // Weitere Videos (vom Import, Katalogvideos einer Kopie) bleiben erhalten; der bearbeitete Link steht vorn.
+    const videos = replaceEditableVideo(existing?.media?.videos ?? [], videoFromUrl(videoUrl), CATALOG_VIDEO_LANGUAGES);
 
     const media = photo || videos.length > 0 ? { ...(photo ? { image: photo } : {}), ...(videos.length > 0 ? { videos } : {}) } : undefined;
     if (adminMode && existing) {
@@ -160,7 +161,10 @@ export default function RecipeEditorScreen() {
       </Card>
 
       <Card title={t("editor.photo")} icon="📷">
-        {photo ? <Image source={{ uri: photo.uri }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 10 }} resizeMode="cover" /> : null}
+        {/* Kopie eines geteilten Rezepts: Das Foto liegt im Bildspeicher des Servers, gespeichert bleibt der Pfad. */}
+        {photo && imageUrl(photo.uri) ? (
+          <Image source={{ uri: imageUrl(photo.uri) }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 10 }} resizeMode="cover" />
+        ) : null}
         <View style={styles.chipRow}>
           <Button label={t("scan.takePhoto")} variant="secondary" onPress={() => pickPhoto("camera")} />
           <Button label={t("editor.addPhoto")} variant="secondary" onPress={() => pickPhoto("library")} />

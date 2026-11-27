@@ -1,0 +1,83 @@
+# FoodTracker: baut die Web-Version und stellt sie auf GitHub Pages bereit.
+# Adresse: https://bennitut.github.io/Bennitut/
+#
+# Läuft bei jedem Push auf feature/food-tracker-app, der die App oder den mitgenutzten Server-Code ändert
+# (also auch nach dem Mergen eines Pull Requests dorthin), und per Hand über „Run workflow“.
+#
+# Einmalig einrichten (Settings des Repos):
+# 1. Pages → Build and deployment → Source: „GitHub Actions“.
+# 2. Environments → github-pages → Deployment branches and tags: feature/food-tracker-app erlauben.
+#    Sonst bricht die Bereitstellung ab mit „Branch "feature/food-tracker-app" is not allowed to deploy to
+#    github-pages due to environment protection rules“.
+#
+# Bricht ab, solange in FoodTracker/app/src/legal/angaben.ts Angaben für Impressum und Datenschutzerklärung fehlen
+# (die Liste steht im Protokoll des Schritts „Web-Version bauen“) – ohne Offenlegung geht keine Web-Version online.
+#
+# Lokal nachbauen und prüfen: cd FoodTracker/app && npm run web:pages && npm run web:smoke -- dist-pages
+name: FoodTracker Web-Version
+
+on:
+  push:
+    branches: [feature/food-tracker-app]
+    paths:
+      - "FoodTracker/app/**"
+      - "FoodTracker/server/src/**"
+      - ".github/workflows/foodtracker-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Immer nur eine Bereitstellung zur Zeit; eine laufende wird nicht abgebrochen.
+concurrency:
+  group: foodtracker-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FoodTracker/app
+    env:
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: FoodTracker/app/package-lock.json
+
+      # Prüft, dass Pages eingeschaltet ist, und liefert den Unterpfad der Seite („/Bennitut“).
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - run: npm ci
+
+      # Web-Export mit Unterpfad, angepasstem Manifest und 404.html für Direktlinks (scripts/web-pages.cjs).
+      # Server-Adresse: Repository-Variable FOODTRACKER_API_URL (Settings → Secrets and variables → Actions →
+      # Variables), z. B. https://foodtracker.onrender.com – der Server braucht https und
+      # CORS_ORIGINS=https://bennitut.github.io. Ohne Variable läuft die Web-Version ohne Server.
+      - name: Web-Version bauen
+        run: npm run web:pages
+        env:
+          WEB_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          EXPO_PUBLIC_API_URL: ${{ vars.FOODTRACKER_API_URL }}
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: FoodTracker/app/dist-pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
