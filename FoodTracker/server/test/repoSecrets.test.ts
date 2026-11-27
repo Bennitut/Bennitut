@@ -79,12 +79,14 @@ describe.skipIf(files === null)("Keine Geheimnisse im Repository", () => {
   });
 
   it("erkennt die Muster wirklich (Gegenprobe)", () => {
+    // Zusammengesetzt, damit der Test diese Datei nicht selbst findet.
+    const j = (...parts: string[]) => parts.join("");
     const samples = [
-      "ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345",
-      "DATABASE_URL=postgresql://neondb_owner:npg_AbCdEf123456@ep-cool-1.eu-central-1.aws.neon.tech/neondb",
-      "OLLAMA_RELAY_KEY=Zq3X9mN2vB7cL4kJ8hG1fD6sA0pO5iU3yT",
-      "-----BEGIN OPENSSH PRIVATE KEY-----",
-      "SMTP_PASS=abcdefghijklmnop",
+      j("ANTHROPIC_API_KEY=", "sk-", "ant-api03-abcdefghijklmnopqrstuvwxyz012345"),
+      j("DATABASE_URL=postgresql://neondb_owner:", "npg_AbCdEf123456", "@ep-cool-1.eu-central-1.aws.neon.tech/neondb"),
+      j("OLLAMA_RELAY_KEY", "=Zq3X9mN2vB7cL4kJ8hG1fD6sA0pO5iU3yT"),
+      j("-----BEGIN OPENSSH ", "PRIVATE KEY-----"),
+      j("SMTP_PASS", "=abcdefghijklmnop"),
     ];
     for (const sample of samples) expect(SECRET_PATTERNS.some(([, p]) => p.test(sample)), sample).toBe(true);
     for (const placeholder of ["postgresql://nutzer:…@host/db", "postgresql://USER:PASSWORT@host", "S3_SECRET_ACCESS_KEY=…", "OLLAMA_RELAY_KEY=${key}", "OLLAMA_API_KEY = OLLAMA_RELAY_KEY", "# SMTP_PASS=", "AKIAIOSFODNN7EXAMPLE"]) {

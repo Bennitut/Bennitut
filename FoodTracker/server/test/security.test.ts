@@ -226,7 +226,9 @@ describe("Protokolle ohne Passwörter, Tokens und E-Mail-Adressen", () => {
   it("schwärzt Adressen, Tokens, Schlüssel und Zugangsdaten", () => {
     const text = redact(
       'Fehler für lena.huber+test@example.co.at: Authorization: Bearer abc.DEF-123_xyz, {"password":"Topfenstrudel 42","newPassword":"x y"} ' +
-        "postgresql://neondb_owner:npg_GeHeim123@ep-cool.eu-central-1.aws.neon.tech/neondb sk-ant-api03-AbCdEf_123 " +
+        // Zusammengesetzt, damit test/repoSecrets.test.ts hier kein echtes Passwort vermutet.
+        "postgresql://neondb_owner:" +
+        "npg_GeHeim123@ep-cool.eu-central-1.aws.neon.tech/neondb sk-ant-api03-AbCdEf_123 " +
         "Sitzung q7Xk2v9LmN4pR8sT1wY6zB3cD5fG0hJ2kL4mN6pQ8rS passwort=hunter2 token: 0123456789abcdef0123456789abcdef",
     );
     for (const secret of ["lena.huber", "example.co.at", "abc.DEF-123_xyz", "Topfenstrudel", "x y", "npg_GeHeim123", "neondb_owner", "AbCdEf_123", "q7Xk2v9", "hunter2", "0123456789abcdef"]) {
