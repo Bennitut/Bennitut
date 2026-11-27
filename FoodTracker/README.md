@@ -15,7 +15,7 @@ die so geplant werden, dass **keine Reste übrig bleiben**. Gemacht für Deutsch
 | **Profil (👤)** | Ernährungshistorie (7 Tage, 30 Tage, 1 Jahr oder alles – Kalorien pro Tag, Woche oder Monat, Durchschnitt pro erfasstem Tag, Makros, häufigste Gerichte, alle erfassten Tage zum Blättern), Essgewohnheiten jederzeit neu anpassen, Anzeigename, Sprache und Region. |
 | **Historie sichern** | Das Tagebuch wird nie automatisch gelöscht und liegt in einem eigenen Speicher (auch wenn Fotos den übrigen Speicher füllen; scheitert das Speichern, erscheint ein Hinweis). Mit Server wird es automatisch gesichert – mit Konto kommt es auf einem neuen Gerät oder nach dem Löschen der Browserdaten zurück. Ohne Server und Konto: Export als Tabelle (CSV) oder Sicherung (JSON) und Import ohne Duplikate. |
 | **Bilder & Videos** | Katalogrezepte haben frei lizenzierte Fotos (mit Urheber und Lizenz) und Links zu passenden YouTube-Kochvideos – je Sprache eines; die App zeigt nur Videos in der gewählten Sprache und sucht sonst auf YouTube in dieser Sprache. Dazu Suchlinks zu YouTube, TikTok und Instagram. Eigene Rezepte bekommen ein Foto (Kamera/Galerie) und einen Video-Link; importierte Rezepte behalten Vorschaubild und Originalbeitrag. |
-| **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
+| **Fotos & Bewertungen** | Zu jedem Rezept eigene Fotos hinzufügen – privat oder öffentlich, mit Konto auf allen eigenen Geräten. Öffentliche Fotos landen in der Galerie des Rezepts und können bewertet werden; das bestbewertete wird allen als Rezeptbild gezeigt. Rezepte lassen sich mit 1–5 Sternen bewerten: gut bewertete stehen in „Entdecken“ oben und werden im Plan öfter eingeplant. |
 | **Konten & Rollen** | Konto mit E-Mail und Passwort oder Anmeldung mit Apple bzw. Google (optional – die App funktioniert auch anonym); Passwort ändern, Konto mit allen Daten löschen, Daten exportieren (im Profil unter „Konto verwalten“). Was das Gerät vorher ohne Konto auf dem Server hatte (Fotos, Sterne, geteilte Rezepte, Favoriten, Meldungen, Sicherung des Tagebuchs), gehört nach dem Anmelden dem Konto – ohne Doppeltes. Mit Konto sind **Plan, Einkaufsliste (mit Häkchen), Vorrat und Essgewohnheiten auf allen Geräten gleich** – auch nach dem Löschen der Browserdaten; ohne Konto bleiben sie auf dem Gerät. Nutzerverzeichnis aller Konten. **Admins** verwalten im Admin-Bereich Nutzer (Rollen vergeben, sperren), erledigen Meldungen, löschen Fotos und Community-Rezepte und können jedes Katalogrezept bearbeiten oder ausblenden – die Änderungen gelten für alle. |
 | **Rezepte verbessern** | „Problem melden“ markiert ein Rezept (Text, Mengen, Foto) zum späteren Verbessern (`GET /api/recipes/flags` listet die Meldungen). „Text mit KI verbessern“ lässt Claude Name, Schritte und Gewürze an Zutaten und Mengen anpassen; der neue Text kann übernommen oder verworfen werden. |
 | **Plan anpassen** | Einzelne Gerichte 🔒 fixieren oder ⇄ gegen ein passendes anderes Rezept tauschen; der Rest wird neu verteilt, damit trotzdem nichts übrig bleibt. Lieblingsrezepte werden bevorzugt eingeplant. |
@@ -62,7 +62,7 @@ FoodTracker/
     ├── src/delivery/     Lieferdienst-Schnittstelle + Demo-Anbieter
     ├── src/diary/        Sicherung der Ernährungshistorie (in der Datenbank, pro Konto bzw. Gerät)
     ├── src/sync/         Abgleich von Einstellungen, Plan mit Häkchen, Vorrat, eigenen Rezepten (Fotos in den
-    │                     Bildspeicher), Favoriten und Rezepttexten eines Kontos (userData.ts)
+    │                     Bildspeicher), Favoriten, Rezepttexten und eigenen Fotos der Galerie eines Kontos (userData.ts)
     ├── src/storage/      Speicherschicht: SQLite-Datei (data/foodtracker.db) oder Postgres (DATABASE_URL),
     │                     versionierte Migrationen, Tabelle für den Abgleich mit der App (sync.ts), Bildspeicher für
     │                     Fotos (images.ts, data/photos/), einmaliger Umzug aus den JSON-Dateien älterer Fassungen
@@ -214,7 +214,9 @@ anderen Gerät setzt die alten Häkchen zurück, ohne die neuen zu löschen, nic
 den echten Abgleich des Servers mit derselben Prüfung der Anfrage) und von eigenen Rezepten, Favoriten und Rezepttexten
 (Foto auf dem Gerät bleibt offline sichtbar, das neue Gerät bekommt den Pfad, nur der Name geändert → Foto bleibt, neues
 Foto auf einem anderen Gerät → das neue gilt, Kopie eines geteilten Rezepts bekommt ein eigenes Foto, erneuter erster
-Abgleich ohne doppelte Dateien, große Fotos auf mehrere Anfragen verteilt).
+Abgleich ohne doppelte Dateien, große Fotos auf mehrere Anfragen verteilt) und von eigenen Fotos der Galerie („Nur ich“
+mit Foto bzw. Pfad, öffentliche nur mit der ID in der Galerie, öffentlich machen und löschen auf einem Gerät kommt auf dem
+anderen an, Fotos ohne Bild vom Server werden nicht gezeigt).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem die Speicherschicht mit SQLite und mit Postgres (pg-mem,
 eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig: Migrationen, Konten und Sitzungen,
 gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und
@@ -228,7 +230,9 @@ Häkchen eines abgelösten Plans verschwinden, bei gleichem Zeitpunkt gilt der S
 und Löschen, Grenze pro Konto) sowie von eigenen Rezepten, Favoriten und Texten (Foto als Datei statt data-URI, die App
 bekommt den Pfad zurück, unverändertes Foto ohne neue Datei, ersetzte und gelöschte Fotos verschwinden, Kopien
 bekommen eine eigene Datei, Fotos im Netz bleiben verlinkt, Unlesbares fällt weg, Export mit Fotos, Konto löschen samt
-Fotos, keine Datei bleibt übrig, wenn das Speichern scheitert) und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
+Fotos, keine Datei bleibt übrig, wenn das Speichern scheitert), von eigenen Fotos der Galerie (private als Datei,
+öffentliche mit dem Pfad der Galerie und ohne eigene Datei, „Öffentlich machen“ löscht die private Datei, die der Galerie
+bleibt beim Löschen stehen, fremdes Rezept bzw. unbekannte ID ohne Pfad, Export und Konto löschen) und die Konten (Registrieren, Anmelden, Rate-Limit, gleiche Antwort für unbekannte
 Adressen, Passwort ändern und per Code zurücksetzen, Konto mit allen Daten löschen, Export ohne Passwort-Hash,
 Übernahme der Gerätedaten beim Anmelden ohne Doppeltes, keine Geräte-ID, die sich als Konto ausgibt) und dass ohne
 Einwilligung keine Anfrage an die KI geht (`403 ai_consent_required` für jede KI-Funktion, Eingaben werden vorher
@@ -294,8 +298,8 @@ Grenzen pro IP-Adresse greifen.
 auf. Fotos, Sterne, geteilte Rezepte, Favoriten und Meldungen der Geräte-ID gehören danach dem Konto, die Sicherung des
 Tagebuchs unter der Geräte-ID wandert ins Konto und ist dort danach weg. Nichts doppelt: Hat das Konto dasselbe Rezept
 oder Foto schon bewertet, favorisiert oder gemeldet, gilt seine Fassung; im Tagebuch gewinnt wie beim Abgleich die
-neuere Fassung. Plan, Einkaufsliste, Vorrat, eigene Rezepte, Favoriten und Essgewohnheiten gehen beim ersten Abgleich
-mit dem Konto ganz hoch (Abschnitt „Datenbank“, „Abgleich mit der App“). Die Geräte-ID besteht nur aus Buchstaben,
+neuere Fassung. Plan, Einkaufsliste, Vorrat, eigene Rezepte und Fotos, Favoriten und Essgewohnheiten gehen beim ersten
+Abgleich mit dem Konto ganz hoch (Abschnitt „Datenbank“, „Abgleich mit der App“). Die Geräte-ID besteht nur aus Buchstaben,
 Ziffern, „-“ und „_“ – der Server lehnt andere ab, damit sich kein Gerät als Konto (`user:<id>`) ausgeben kann.
 
 Der Server liest außerdem diese Umgebungsvariablen:
@@ -325,8 +329,7 @@ Katalogrezepten liegen in der Datenbank (nächster Abschnitt).
 Alles, was der Server speichert, liegt in einer Datenbank (`src/storage/`): Konten und Sitzungen, die Sicherung der
 Ernährungshistorie, geteilte Rezepte mit Favoriten, Fotos mit Sternen, Sterne für Rezepte, „Problem melden“ und die
 Admin-Änderungen an Katalogrezepten, mit Konto auch Einstellungen, Plan mit Häkchen, Vorrat, eigene Rezepte,
-Favoriten und Rezepttexte – nur die Fotos selbst nicht (siehe „Fotos“). Eigene Fotos aus der Galerie mit „Nur ich“
-liegen bisher nur auf dem Gerät (Vorrang 1, 9.2 in `BACKLOG.md`).
+Favoriten, Rezepttexte und eigene Fotos der Galerie – nur die Fotos selbst nicht (siehe „Fotos“).
 
 - **Ohne Einstellung** eine Datei auf dem eigenen Rechner: `server/data/foodtracker.db` (SQLite, in Node.js ab 22.13
   eingebaut – nichts zu installieren, keine nativen Pakete; anderer Ort mit `DATABASE_FILE`). Übersteht auch ein hart
@@ -368,6 +371,14 @@ liegen bisher nur auf dem Gerät (Vorrang 1, 9.2 in `BACKLOG.md`).
     kann (z. B. GIF, eine Datei auf dem Gerät), fällt auf dem Server weg und bleibt auf dem Gerät. Ein ersetztes Foto,
     ein gelöschtes Rezept und „Konto löschen“ löschen die Dateien. Große Fotos verteilt die App auf mehrere Anfragen
     (bis rund 4 MB je Art und Anfrage).
+  - `photos` – eigene Fotos aus der Galerie eines Rezepts, ebenfalls nur mit Konto: je Foto (ID aus der App) ein Eintrag
+    `{ recipeId, createdAt, public, remoteId?, uri? }`, höchstens 2000. **Private** („Nur ich“) wie Fotos eigener
+    Rezepte: einmal als data-URI, danach als Pfad, eigene Datei je Eintrag, auf dem aufnehmenden Gerät offline sichtbar.
+    **Öffentliche** liegen schon in der Galerie (`recipe_photos`): Die App schickt nur die ID dort (`remoteId`), der
+    Server trägt den Pfad der Galerie ein (wenn es das Foto dort zum selben Rezept gibt), legt keine eigene Datei an und
+    löscht die der Galerie nie – die verschwindet mit dem Foto in der Galerie. So zeigen auch die anderen Geräte des
+    Kontos das Foto (im Rezept und als Rezeptbild) und können es löschen; „Öffentlich machen“ geht nur auf dem Gerät,
+    auf dem das Foto liegt.
 - **Fotos** (Galerie der Rezepte, Foto eines geteilten bzw. eigenen Rezepts) speichert der Server als Bilddateien in
   `server/data/photos/` (anderer Ort mit `PHOTOS_DIR`), in der Datenbank steht nur ihr Schlüssel. Die App bekommt
   einen Pfad (`/api/images/<Schlüssel>`) statt der früheren data-URI und setzt erst beim Anzeigen die Adresse des
@@ -416,9 +427,9 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 
 - Alles, was der Server speichert, liegt in der Datenbank (SQLite oder Postgres), Fotos als Dateien in
   `data/photos/` – auf Cloud-Diensten ohne dauerhafte Dateien braucht es dafür noch einen Objektspeicher (9.3). Plan,
-  Einkaufsliste, Vorrat, eigene Rezepte (mit Foto), Favoriten, Rezepttexte und Essgewohnheiten gleicht die App mit Konto
-  ab; eigene Fotos aus der Galerie mit „Nur ich“ liegen noch nur auf dem Gerät. Ohne Anmeldung zählt weiter eine anonyme
-  Geräte-ID.
+  Einkaufsliste, Vorrat, eigene Rezepte (mit Foto), Favoriten, Rezepttexte, eigene Fotos der Galerie und
+  Essgewohnheiten gleicht die App mit Konto ab. Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
+- Ein privates Foto der Galerie lässt sich nur auf dem Gerät öffentlich machen, auf dem es aufgenommen wurde.
 - Abgleich: Kocht man auf zwei Geräten ohne Verbindung aus demselben Vorratsposten, gilt danach die zuletzt geänderte
   Menge (der andere Abzug fehlt); plant man auf zwei Geräten gleichzeitig neu, gilt der neuere Plan.
 - Nährwerte und Preise im Katalog sind gerundete Richtwerte; Preise in AT/CH sind grob umgerechnet.
@@ -435,8 +446,6 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 ## Nächste Schritte
 
 - Echten Lieferdienst-Partner anbinden
-- Eigene Fotos der Galerie („Nur ich“) zwischen Geräten abgleichen (Tagebuch, Plan, Vorrat, eigene Rezepte, Favoriten
-  und Essgewohnheiten schon)
 - Zutatenkatalog an eine Produktdatenbank (z. B. Open Food Facts) anbinden, Barcode-Scan
 - „Teilen“-Menü von Instagram/TikTok direkt in die App (Share Extension)
 - Mehrere Lieferungen pro Plan für sehr verderbliche Zutaten (Fisch, Fleisch)

@@ -337,7 +337,7 @@ function partB(): LegalSection[] {
       ],
     },
     {
-      title: "B7. Plan, Einkaufsliste, Vorrat, eigene Rezepte und Essgewohnheiten (mit Konto)",
+      title: "B7. Plan, Einkaufsliste, Vorrat, eigene Rezepte, Fotos und Essgewohnheiten (mit Konto)",
       level: 3,
       blocks: [
         "Bist du angemeldet, gleicht FoodTracker diese Daten zwischen deinen Geräten ab, damit du überall denselben Stand " +
@@ -345,15 +345,17 @@ function partB(): LegalSection[] {
           "Region und Anzeigename, den Monatsplan mit den Rezepten, die nur darin vorkommen, was du darin als gegessen, " +
           "eingekauft und in den Vorrat gebucht abgehakt hast, deinen Vorrat (Zutat, Einkaufstag, Menge), deine eigenen " +
           "und importierten Rezepte samt Foto (und ob du sie in der Community geteilt hast), deine Favoriten (bei " +
-          "Community-Rezepten mit der gespeicherten Kopie) und die Rezepttexte, die die KI für dich übersetzt oder " +
-          "verbessert hat. Der Server speichert sie zu deinem Konto, je Eintrag mit dem Zeitpunkt der letzten Änderung; " +
+          "Community-Rezepten mit der gespeicherten Kopie), die Rezepttexte, die die KI für dich übersetzt oder " +
+          "verbessert hat, und deine eigenen Fotos aus der Galerie eines Rezepts (zu welchem Rezept, wann aufgenommen, " +
+          "ob öffentlich). Der Server speichert sie zu deinem Konto, je Eintrag mit dem Zeitpunkt der letzten Änderung; " +
           "Gelöschtes bleibt als Löschmarke ohne Inhalt, damit es von anderen Geräten nicht zurückkommt. Häkchen eines " +
           "abgelösten Plans löscht er. Ohne Konto bleiben diese Daten auf deinem Gerät.",
-        "Fotos eigener Rezepte legt der Server als Bilddatei zu deinem Konto ab, nicht in der Datenbank. Abrufbar sind sie " +
-          "über eine zufällige, nicht erratbare Adresse, die nur deine Geräte bekommen; löschst du das Rezept oder ersetzt " +
-          "das Foto, löscht der Server die Datei. Auf dem Gerät, auf dem du das Foto aufgenommen hast, bleibt es zusätzlich " +
-          "gespeichert. Fotos aus der Galerie eines Rezepts, die du mit „Nur ich“ gespeichert hast, bleiben vorerst nur " +
-          "auf dem Gerät.",
+        "Fotos eigener Rezepte und Fotos aus der Galerie, die du mit „Nur ich“ gespeichert hast, legt der Server als " +
+          "Bilddatei zu deinem Konto ab, nicht in der Datenbank. Abrufbar sind sie über eine zufällige, nicht erratbare " +
+          "Adresse, die nur deine Geräte bekommen; löschst du das Rezept bzw. das Foto oder ersetzt es, löscht der Server " +
+          "die Datei. Auf dem Gerät, auf dem du das Foto aufgenommen hast, bleibt es zusätzlich gespeichert. Von " +
+          "öffentlichen Fotos merkt sich der Server nur, welches Foto der Galerie (B4) deines ist; das Foto selbst liegt " +
+          "dort einmal.",
         "[[PRÜFEN: Unverträglichkeiten und Körperdaten sind Gesundheitsdaten (Art. 9 DSGVO). Sicherer Weg wie bei B6: den " +
           "Abgleich erst nach einer ausdrücklichen Einwilligung starten und im Profil abschaltbar machen. Heute beginnt " +
           "er mit der Anmeldung – vor einem Server für andere klären.]]",
