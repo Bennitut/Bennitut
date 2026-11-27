@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { ComingSoon } from "../components/ComingSoon";
 import { Badge, Button, Card, ErrorText, IconBubble, Muted, Screen, colors, styles } from "../components/ui";
-import { api, HAS_SERVER } from "../lib/api";
+import { api, hasServer } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useStore } from "../lib/store";
 import type { DirectoryUser } from "../lib/types";
@@ -31,7 +31,7 @@ export default function UsersScreen() {
   }, [auth, query, i18n]);
 
   // Ohne Server gibt es keine Konten – „Bald verfügbar“ statt „Bitte melde dich an“ mit einem Knopf ins Leere.
-  if (!HAS_SERVER) {
+  if (!hasServer()) {
     return (
       <Screen>
         <ComingSoon />

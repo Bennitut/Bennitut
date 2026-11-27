@@ -4,7 +4,7 @@ import { Image, Text, View } from "react-native";
 import { useAiConsent } from "../../components/AiConsent";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, NutrientRow, Screen, styles } from "../../components/ui";
 import { ComingSoon } from "../../components/ComingSoon";
-import { api, HAS_SERVER, toMediaType } from "../../lib/api";
+import { api, hasServer, toMediaType } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
 import { useStore } from "../../lib/store";
 import type { MealAnalysis, PantryItem, ReceiptAnalysis } from "../../lib/types";
@@ -103,7 +103,7 @@ export default function ScanScreen() {
 
       <Card title={t(mode === "meal" ? "scan.mealTitle" : "scan.receiptTitle")} icon={mode === "meal" ? "🍽️" : "🧾"}>
         <Muted>{t(mode === "meal" ? "scan.mealHint" : "scan.receiptHint")}</Muted>
-        {HAS_SERVER ? (
+        {hasServer() ? (
           <>
             <Button label={t("scan.takePhoto")} onPress={() => pick("camera")} loading={loading} />
             <Button label={t("scan.fromLibrary")} variant="secondary" onPress={() => pick("library")} disabled={loading} />
@@ -112,7 +112,7 @@ export default function ScanScreen() {
         <ErrorText message={error} />
       </Card>
       {/* Ohne Server keine Foto- und Bon-Erkennung: erklären statt nach dem Foto einen Fehler zu zeigen. */}
-      {HAS_SERVER ? null : <ComingSoon />}
+      {hasServer() ? null : <ComingSoon />}
 
       {imageUri ? <Image source={{ uri: imageUri }} style={{ width: "100%", height: 220, borderRadius: 14 }} /> : null}
 

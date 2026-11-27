@@ -4,7 +4,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View 
 import { useAiConsent } from "../../components/AiConsent";
 import { RecipeThumb } from "../../components/RecipeThumb";
 import { Button, Card, Chip, ChipRow, ErrorText, Muted, Screen, ShowMore, colors, styles } from "../../components/ui";
-import { ApiError, HAS_SERVER, api } from "../../lib/api";
+import { ApiError, hasServer, api } from "../../lib/api";
 import { MONTH_WEEKS, PlanError, matchesPreferences, planMonth, weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { useI18n } from "../../lib/i18n";
@@ -49,7 +49,7 @@ export default function PlanScreen() {
     }
     // Ohne Server (Web-Version) gibt es kein Wunschfeld; früher eingetragene Wünsche bleiben gespeichert,
     // lösen aber keine Anfrage und keinen Hinweis „braucht eine Verbindung“ aus. Wünsche zählen nur für den ganzen Monat.
-    const wishes = HAS_SERVER && fromWeek === 0 ? settings.preferences.trim() : "";
+    const wishes = hasServer() && fromWeek === 0 ? settings.preferences.trim() : "";
     // Wünsche gehen an die KI: vorher fragen. Ohne Erlaubnis plant das Handy wie ohne Wünsche.
     const useWishes = wishes !== "" && (await consent.ask("wishes"));
     setError(null);
@@ -197,7 +197,7 @@ export default function PlanScreen() {
           <Muted>{t("plan.onboardingText")}</Muted>
           <Button label={t("plan.onboardingStart")} onPress={() => router.push("/onboarding")} />
           {/* Neues Gerät: erst anmelden, dann kommen Plan und Essgewohnheiten vom Konto (lib/dataSync.ts). */}
-          {HAS_SERVER && !store.auth ? (
+          {hasServer() && !store.auth ? (
             <>
               <Muted>{t("plan.onboardingSignInText")}</Muted>
               <Button label={t("plan.onboardingSignIn")} variant="secondary" onPress={() => router.push("/login")} />
@@ -211,7 +211,7 @@ export default function PlanScreen() {
             {t("plan.editPreferences")} ›
           </Link>
           {/* Wünsche für neue KI-Rezepte braucht Claude über den Server; ohne ihn bleibt die Karte aufgeräumt. */}
-          {HAS_SERVER ? (
+          {hasServer() ? (
             <TextInput
               style={styles.input}
               placeholder={t("plan.wishesPlaceholder")}

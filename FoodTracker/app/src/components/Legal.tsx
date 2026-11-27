@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { Linking, Text, View, type TextStyle } from "react-native";
-import { HAS_SERVER } from "../lib/api";
+import { hasServer } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { bulletText, describePlaceholder, parseInline, type LegalSection } from "../lib/legal";
 import { missingLegalInfo } from "../legal/texte";
@@ -12,7 +12,7 @@ export const DRAFT_TEXT = "#A0561A";
 /** Was in den Texten dieser App noch fehlt: ohne Server (Impressum, Teil A) und zusätzlich mit Server (Teil B). */
 export function legalDraftState() {
   const missing = missingLegalInfo({ withServer: false });
-  const serverDraft = HAS_SERVER && missingLegalInfo({ withServer: true }).length > missing.length;
+  const serverDraft = hasServer() && missingLegalInfo({ withServer: true }).length > missing.length;
   return { missing, serverDraft, draft: missing.length > 0 || serverDraft };
 }
 

@@ -8,7 +8,7 @@
 export const SERVER_IMAGE_PATH = "/api/images/";
 
 /**
- * Adresse zum Anzeigen: Pfade aus dem Bildspeicher mit `baseUrl` (BASE_URL in lib/api.ts) davor; ohne Server gibt es
+ * Adresse zum Anzeigen: Pfade aus dem Bildspeicher mit `baseUrl` (serverUrl() in lib/api.ts) davor; ohne Server gibt es
  * diese Bilder nicht (undefined – dann zeigt die App den Platzhalter). Alles andere (data-URI, https-Adresse) bleibt.
  */
 export function resolveImageUri(uri: string | undefined, baseUrl: string | null): string | undefined {

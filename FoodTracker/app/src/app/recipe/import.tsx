@@ -7,7 +7,7 @@ import { Platform, Text, TextInput, View } from "react-native";
 import { useAiConsent } from "../../components/AiConsent";
 import { Button, Card, ErrorText, Field, Muted, Screen, styles } from "../../components/ui";
 import { ComingSoon } from "../../components/ComingSoon";
-import { api, HAS_SERVER, type ImagePayload } from "../../lib/api";
+import { api, hasServer, type ImagePayload } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
 import { useStore } from "../../lib/store";
 import type { Recipe } from "../../lib/types";
@@ -87,7 +87,7 @@ export default function ImportRecipeScreen() {
     <Screen>
       {consent.dialog}
       {/* Den Import macht Claude auf dem Server; ohne Server gleich erklären statt nach dem Ausfüllen zu scheitern. */}
-      {HAS_SERVER ? null : <ComingSoon />}
+      {hasServer() ? null : <ComingSoon />}
       <Card>
         <Muted>{t("import.hint")}</Muted>
         <Field label={t("import.url")}>
@@ -114,7 +114,7 @@ export default function ImportRecipeScreen() {
           label={t("import.start")}
           onPress={start}
           loading={loading === "import"}
-          disabled={!HAS_SERVER || loading !== null || (!url.trim() && !caption.trim() && frames.length === 0)}
+          disabled={!hasServer() || loading !== null || (!url.trim() && !caption.trim() && frames.length === 0)}
         />
         <ErrorText message={error} />
       </Card>

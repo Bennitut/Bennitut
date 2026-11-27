@@ -6,7 +6,15 @@ import type { Account } from "./types";
 export interface Session {
   token: string;
   user: Account;
+  /**
+   * Für welchen Server die Anmeldung gilt (lib/serverAddress.ts, serverKey): die im Profil eingetragene Adresse bzw.
+   * „default“. Ältere Sitzungen ohne Angabe gehören zur Standard-Adresse. Ein anderer Server bekommt das Token nie.
+   */
+  server?: string;
 }
+
+/** Die Sitzung, wenn sie zu diesem Server gehört – sonst null (dann ist man dort nicht angemeldet). */
+export const sessionFor = (session: Session | null, server: string): Session | null => (session && (session.server ?? "default") === server ? session : null);
 
 /** Erlaubt sind bei expo-secure-store nur Buchstaben, Ziffern, „.“, „-“ und „_“. */
 export const SESSION_KEY = "foodtracker.session.v1";
@@ -30,6 +38,7 @@ export function asSession(value: unknown): Session | null {
   if (typeof token !== "string" || token.length < 16 || !user || typeof user !== "object") return null;
   const u = user as Record<string, unknown>;
   if (typeof u.id !== "string" || !u.id || typeof u.name !== "string") return null;
+  const { server } = value as { server?: unknown };
   return {
     token,
     user: {
@@ -40,6 +49,7 @@ export function asSession(value: unknown): Session | null {
       provider: PROVIDERS.includes(u.provider as Account["provider"]) ? (u.provider as Account["provider"]) : "dev",
       createdAt: typeof u.createdAt === "string" ? u.createdAt : "",
     },
+    ...(typeof server === "string" && server ? { server } : {}),
   };
 }
 

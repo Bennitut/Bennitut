@@ -7,7 +7,7 @@ import { Platform, Text, TextInput } from "react-native";
 import { ComingSoon } from "../components/ComingSoon";
 import { PasswordSignIn } from "../components/PasswordSignIn";
 import { Button, Card, ErrorText, Field, Muted, Screen, styles } from "../components/ui";
-import { api, HAS_SERVER, type AuthConfig } from "../lib/api";
+import { api, hasServer, type AuthConfig } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import type { Session } from "../lib/session";
 import { useStore } from "../lib/store";
@@ -52,7 +52,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!HAS_SERVER) return;
+    if (!hasServer()) return;
     api.authConfig().then(setConfig).catch(() => setError(t("account.noServer")));
     if (Platform.OS === "ios") AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
   }, [t]);
@@ -98,7 +98,7 @@ export default function LoginScreen() {
   };
 
   // Ohne Server (Web-Version) „Bald verfügbar“ statt „Ohne Verbindung zum Server ist keine Anmeldung möglich.“
-  if (!HAS_SERVER) {
+  if (!hasServer()) {
     return (
       <Screen>
         <ComingSoon />

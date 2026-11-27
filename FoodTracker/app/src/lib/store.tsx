@@ -4,15 +4,39 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState } from "react-native";
 import { isUILanguage, regionFromCode } from "../i18n";
 import { readAiConsent, type AiConsent } from "./aiConsent";
-import { ApiError, BASE_URL, HAS_SERVER, api, setAiConsent as setApiAiConsent, setAuthToken, setDeviceId } from "./api";
+import {
+  ApiError,
+  DEFAULT_SERVER,
+  api,
+  hasServer,
+  serverReady,
+  serverUrl,
+  setAiConsent as setApiAiConsent,
+  setAuthToken,
+  setDeviceId,
+  setServer as setApiServer,
+} from "./api";
 import { INGREDIENTS, RECIPES, applyOverrides } from "./catalog";
 import { emptyDataSync, lastSynced, pendingChanges, readDataSync, syncData, syncedWith, trackChanges, type DataSync } from "./dataSync";
 import { claimedAnything, needsDeviceClaim, type DeviceClaim } from "./deviceClaim";
+import { randomDeviceId } from "./deviceId";
 import { addEntry, emptyDiary, loadDiary, removeEntry, saveDiary, syncDiary, type DiaryState } from "./diary";
 import { importDiaryJson, type ImportResult } from "./history";
 import { addToPantry, consumeMeal, migrateStock, newId, nowTime, setPantryAmount, today, type StockItem } from "./pantry";
 import { withStoredTexts } from "./recipeText";
-import { loadSession, sessionWriter, type Session } from "./session";
+import { loadSession, sessionFor, sessionWriter, type Session } from "./session";
+import {
+  SERVER_KEY,
+  deviceIdFor,
+  effectiveServer,
+  emptyServerSetting,
+  knownDeviceId,
+  readServerSetting,
+  serverKey,
+  withCustom,
+  type ServerAddress,
+  type ServerSetting,
+} from "./serverAddress";
 import { resolveImage, resolveImageUri } from "./serverImages";
 import { sessionStore } from "./sessionStore";
 import { checkedToBook, deliveryToBook } from "./shopping";
@@ -123,7 +147,7 @@ function defaultSettings(): Settings {
 
 function initialState(): PersistedState {
   return {
-    deviceId: `${newId()}${newId()}`,
+    deviceId: randomDeviceId(),
     pantry: [],
     plan: null,
     planRecipes: [],
@@ -301,6 +325,15 @@ interface Store extends PersistedState {
   setShared: (recipeId: string, communityId: string | null) => void;
   /** Einwilligung in die KI-Funktionen erteilen bzw. mit null widerrufen; gilt sofort für die nächste Anfrage. */
   setAiConsent: (consent: AiConsent | null) => void;
+  /** Server, mit dem die App spricht (lib/serverAddress.ts), und die Standard-Adresse ohne Eintrag. */
+  server: ServerAddress;
+  defaultServer: ServerAddress;
+  /**
+   * Andere Adresse verwenden (null = Standard). Meldet beim bisherigen Server ab – das Token gehört ihm; Tagebuch, Plan,
+   * Vorrat und Rezepte bleiben auf dem Gerät und gleichen sich mit dem neuen Server ab (bei einer anderen Datenbank von
+   * vorn, lib/diary.ts). Ein anderer Server bekommt eine eigene Geräte-ID.
+   */
+  setServer: (custom: string | null) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -319,6 +352,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [dataSyncState, setDataSyncState] = useState<"idle" | "syncing" | "offline">("idle");
   const [dataSyncRequest, setDataSyncRequest] = useState(0);
   const [deviceClaim, setDeviceClaim] = useState<DeviceClaim | null>(null);
+  /** Im Profil eingetragene Server-Adresse und Geräte-IDs je Adresse (eigener Schlüssel, lib/serverAddress.ts). */
+  const [serverSetting, setServerSetting] = useState<ServerSetting>(emptyServerSetting);
+  const server = useMemo(() => effectiveServer(serverSetting, DEFAULT_SERVER), [serverSetting]);
   // Speichern: was darf geschrieben werden (nach einem Lesefehler nichts, damit nichts überschrieben wird), was steht
   // schon im Speicher, und das Tagebuch vom alten Speicherort, bis es unter dem eigenen Schlüssel gespeichert ist.
   const persist = useRef({
@@ -362,15 +398,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist.current.legacyDiary = loaded.legacyDiary;
         setStorageIssues((i) => ({ ...i, diary: "unreadable" }));
       }
-      const loadedSession = await loadSession(sessionStore, loaded.legacyAuth);
-      writeSession.current = sessionWriter(sessionStore, loadedSession);
-      setDeviceId(loaded.state.deviceId);
+      // Server-Adresse aus dem Profil (sonst die Standard-Adresse) und die Geräte-ID dafür – vor der ersten Anfrage.
+      let setting = emptyServerSetting();
+      try {
+        setting = readServerSetting(await AsyncStorage.getItem(SERVER_KEY));
+      } catch {
+        // unlesbar: Standard-Adresse
+      }
+      const ids = deviceIdFor(setting, loaded.state.deviceId, randomDeviceId);
+      if (ids.setting !== setting) AsyncStorage.setItem(SERVER_KEY, JSON.stringify(ids.setting)).catch(() => {});
+      setApiServer(effectiveServer(ids.setting, DEFAULT_SERVER));
+      const storedSession = await loadSession(sessionStore, loaded.legacyAuth);
+      // Eine Anmeldung bei einem anderen Server gilt hier nicht (und wird gelöscht, siehe writeSession).
+      const loadedSession = sessionFor(storedSession, serverKey(ids.setting));
+      writeSession.current = sessionWriter(sessionStore, storedSession);
+      setDeviceId(ids.id);
       setAuthToken(loadedSession?.token ?? null);
       setApiAiConsent(loaded.state.aiConsent);
+      serverReady();
+      setServerSetting(ids.setting);
       setSession(loadedSession);
       setState(loaded.state);
       setReady(true);
-    })();
+    })().finally(() => serverReady());
   }, []);
 
   useEffect(() => {
@@ -431,20 +481,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Zurück in der App bzw. im Browser-Tab: holen, was andere Geräte inzwischen geändert haben.
   useEffect(() => {
-    if (!HAS_SERVER) return;
+    if (!server.url) return;
     const subscription = AppState.addEventListener("change", (status) => {
       if (status === "active") refreshSync();
     });
     return () => subscription.remove();
-  }, [refreshSync]);
+  }, [refreshSync, server.url]);
 
   // Sicherung auf dem Server: beim Start einmal abgleichen, danach kurz nach jeder Änderung und nach dem An- oder
   // Abmelden (dann geht alles hoch und alles kommt zurück). Ohne Verbindung in einer Minute noch einmal.
-  const owner = session ? `user:${session.user.id}` : `device:${state.deviceId}`;
+  const deviceId = knownDeviceId(serverSetting, state.deviceId);
+  const owner = session ? `user:${session.user.id}` : `device:${deviceId}`;
   const pendingCount = diary.pending.length;
   const syncedOwner = diary.sync?.owner;
   useEffect(() => {
-    if (!ready || !HAS_SERVER) return;
+    if (!ready || !server.url) return;
     const s = sync.current;
     if (s.running || (s.pulled && pendingCount === 0 && syncedOwner === owner)) return;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -478,7 +529,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       if (retry) clearTimeout(retry);
     };
-  }, [ready, owner, pendingCount, syncedOwner, syncRequest]);
+  }, [ready, owner, pendingCount, syncedOwner, syncRequest, server.url]);
 
   // Abgleich von Einstellungen, Plan mit Einkaufsliste, Vorrat, eigenen Rezepten, Favoriten, Rezepttexten und eigenen
   // Fotos – nur mit Konto (lib/dataSync.ts): beim Start bzw. nach der Anmeldung einmal, danach kurz nach jeder Änderung;
@@ -490,7 +541,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     dataRef.current.latest = state;
   }, [state]);
   useEffect(() => {
-    if (!ready || !HAS_SERVER || !signedIn) return;
+    if (!ready || !server.url || !signedIn) return;
     const d = dataRef.current;
     if (d.owner !== owner) {
       d.owner = owner;
@@ -529,14 +580,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       if (retry) clearTimeout(retry);
     };
-  }, [ready, owner, signedIn, dataPending, dataSyncedFor, dataSyncRequest]);
+  }, [ready, owner, signedIn, dataPending, dataSyncedFor, dataSyncRequest, server.url]);
 
   // Nach jeder Anmeldung einmal: Was dieses Gerät ohne Konto auf dem Server hat (Fotos, Sterne, geteilte Rezepte,
   // Favoriten, Meldungen, Sicherung des Tagebuchs), gehört danach dem Konto (lib/deviceClaim.ts). Ohne Verbindung beim
   // nächsten Start noch einmal. setAuth setzt `claimedFor` zurück, damit auch kommt, was ohne Konto dazukam.
   const accountId = session?.user.id ?? null;
   useEffect(() => {
-    if (!ready || !HAS_SERVER || !needsDeviceClaim(accountId, state.claimedFor)) return;
+    if (!ready || !server.url || !needsDeviceClaim(accountId, state.claimedFor)) return;
     let current = true;
     api.claimDevice().then(
       (claim) => {
@@ -559,10 +610,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       current = false;
     };
-  }, [ready, accountId, state.claimedFor]);
+  }, [ready, accountId, state.claimedFor, server.url]);
 
-  // Bewertungen, Galerie-Fotos, Admin-Änderungen und Konto einmal beim Start laden;
-  // ohne Server gilt der gespeicherte Stand.
+  // Bewertungen, Galerie-Fotos, Admin-Änderungen und Konto einmal beim Start (und nach einem Wechsel des Servers)
+  // laden; ohne Server gilt der gespeicherte Stand.
   useEffect(() => {
     if (!ready) return;
     api
@@ -589,9 +640,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setTopPhotos(top);
       })
       .catch(() => {});
-    // Absichtlich nur einmal nach dem Laden: eine spätere Anmeldung bringt das Konto über setAuth mit.
+    // Absichtlich nur einmal nach dem Laden bzw. Wechseln des Servers: eine spätere Anmeldung bringt das Konto über
+    // setAuth mit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [ready, server.url]);
 
   const store = useMemo<Store>(() => {
     // Katalog mit den Änderungen der Admins; ausgeblendete Rezepte fallen weg.
@@ -627,7 +679,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return counts;
       },
       diarySync: {
-        state: !HAS_SERVER
+        state: !hasServer()
           ? "off"
           : syncState === "syncing"
             ? "syncing"
@@ -640,7 +692,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         at: diary.sync?.at ?? null,
       },
       dataSyncStatus: {
-        state: !HAS_SERVER
+        state: !hasServer()
           ? "off"
           : !session
             ? "local"
@@ -784,7 +836,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       deviceClaim,
       setAuth: (auth) => {
         setAuthToken(auth?.token ?? null);
-        setSession(auth);
+        // Die Anmeldung gilt nur für den Server, bei dem sie entstand (lib/session.ts).
+        setSession(auth ? { ...auth, server: serverKey(serverSetting) } : null);
         setDeviceClaim(null);
         update((s) => ({
           ...s,
@@ -810,13 +863,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // Eigene Fotos von anderen Geräten des Kontos kommen als Pfad im Bildspeicher (lib/dataSync.ts) – ohne Server
         // nicht zu sehen, dann gilt das nächste.
         for (const own of state.myPhotos) {
-          const uri = own.recipeId === recipe.id ? resolveImageUri(own.uri, BASE_URL) : undefined;
+          const uri = own.recipeId === recipe.id ? resolveImageUri(own.uri, serverUrl()) : undefined;
           if (uri) return { uri };
         }
         const top = topPhotos[recipe.id];
         if (top) return { uri: top.uri, credit: top.authorName || undefined };
         // Fotos geteilter Rezepte liegen im Bildspeicher des Servers (Pfad statt data-URI, lib/serverImages.ts).
-        return resolveImage(recipe.media?.image, BASE_URL);
+        return resolveImage(recipe.media?.image, serverUrl());
       },
       ratingAverages: () =>
         Object.fromEntries(Object.entries(state.ratings).filter(([, r]) => r.count > 0).map(([id, r]) => [id, r.avg])),
@@ -825,8 +878,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setApiAiConsent(aiConsent);
         update((s) => ({ ...s, aiConsent }));
       },
+      server,
+      defaultServer: DEFAULT_SERVER,
+      setServer: (custom) => {
+        const target = withCustom(serverSetting, custom, DEFAULT_SERVER);
+        if (target === serverSetting) return;
+        const next = deviceIdFor(target, state.deviceId, randomDeviceId);
+        // Beim bisherigen Server abmelden – die Anfrage geht noch dorthin (lib/api.ts), danach gilt die neue Adresse.
+        if (session) api.logout().catch(() => {});
+        setApiServer(effectiveServer(next.setting, DEFAULT_SERVER));
+        setDeviceId(next.id);
+        setAuthToken(null);
+        setSession(null);
+        setDeviceClaim(null);
+        setTopPhotos({});
+        setServerSetting(next.setting);
+        setState((s) => ({ ...s, claimedFor: null }));
+        AsyncStorage.setItem(SERVER_KEY, JSON.stringify(next.setting)).catch(() => {});
+        // Mit dem neuen Server gleich abgleichen (Tagebuch auch ohne Konto) und dessen Bewertungen holen.
+        sync.current.pulled = false;
+        dataRef.current.pulled = false;
+        setSyncRequest((n) => n + 1);
+        setDataSyncRequest((n) => n + 1);
+      },
     };
-  }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, dataSyncState, owner, refreshSync, update, deviceClaim]);
+  }, [state, session, diary, ready, pendingPlan, topPhotos, storageIssues, syncState, dataSyncState, owner, refreshSync, update, deviceClaim, serverSetting, server]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

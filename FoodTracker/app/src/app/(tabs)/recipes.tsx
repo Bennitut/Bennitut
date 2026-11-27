@@ -4,7 +4,7 @@ import { TextInput, View } from "react-native";
 import { ComingSoonNote } from "../../components/ComingSoon";
 import { RecipeRow } from "../../components/RecipeRow";
 import { Button, Card, Chip, ChipRow, Muted, Screen, ShowMore, styles } from "../../components/ui";
-import { api, HAS_SERVER } from "../../lib/api";
+import { api, hasServer } from "../../lib/api";
 import { communityCache } from "../../lib/communityCache";
 import { useI18n } from "../../lib/i18n";
 import { PAGE_SIZE, firstPage, sortByRating, topRated } from "../../lib/recipeLists";
@@ -28,7 +28,7 @@ export default function RecipesScreen() {
   useFocusEffect(
     useCallback(() => {
       // Ohne Server gibt es keine Community – die Karte zeigt dann „Bald verfügbar“.
-      if (segment !== "discover" || !HAS_SERVER) return;
+      if (segment !== "discover" || !hasServer()) return;
       let active = true;
       const timer = setTimeout(() => {
         api
@@ -102,7 +102,7 @@ export default function RecipesScreen() {
       {segment === "discover" ? (
         <>
           <Card title={t("recipes.community")} icon="💬" tint="#ECEBF8">
-            {HAS_SERVER ? (
+            {hasServer() ? (
               <>
                 <ChipRow>
                   <Chip label={t("recipes.sortPopular")} selected={sort === "popular"} onPress={() => setSort("popular")} />

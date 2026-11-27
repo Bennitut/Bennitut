@@ -4,7 +4,7 @@ import { Alert, Image, Linking, Text, View } from "react-native";
 import { useAiConsent } from "../../components/AiConsent";
 import { ComingSoonNote } from "../../components/ComingSoon";
 import { Button, Card, ErrorText, Muted, NutrientRow, Screen, colors, styles } from "../../components/ui";
-import { api, HAS_SERVER } from "../../lib/api";
+import { api, hasServer } from "../../lib/api";
 import { ImproveCard, PhotoGallery, RatingCard } from "../../components/RecipeFeedback";
 import { communityCache } from "../../lib/communityCache";
 import { CATALOG_VIDEO_LANGUAGES } from "../../lib/catalog";
@@ -166,12 +166,12 @@ export default function RecipeDetailScreen() {
         <Muted>{t("recipes.perServing")}</Muted>
         <View style={styles.chipRow}>
           <Button label={isFavorite ? t("recipes.unfavorite") : t("recipes.favorite")} variant="secondary" onPress={toggleFavorite} loading={busy === "favorite"} />
-          {untranslated && HAS_SERVER ? (
+          {untranslated && hasServer() ? (
             <Button label={busy === "translate" ? t("recipes.translating") : t("recipes.translate")} variant="secondary" onPress={translateNow} loading={busy === "translate"} />
           ) : null}
           {sourceUrl ? <Button label={t("recipes.openOriginal")} variant="secondary" onPress={() => Linking.openURL(sourceUrl)} /> : null}
         </View>
-        {untranslated && !HAS_SERVER ? <ComingSoonNote text={t("recipes.translateSoon")} /> : null}
+        {untranslated && !hasServer() ? <ComingSoonNote text={t("recipes.translateSoon")} /> : null}
         <ErrorText message={error} />
       </Card>
 
@@ -240,7 +240,7 @@ export default function RecipeDetailScreen() {
         {isOwn ? (
           <>
             <Button label={t("common.edit")} variant="secondary" onPress={() => router.push(`/recipe/edit?id=${encodeURIComponent(recipe.id)}`)} />
-            {HAS_SERVER ? (
+            {hasServer() ? (
               <>
                 <Button label={communityId ? t("recipes.unshare") : t("recipes.share")} variant="secondary" onPress={toggleShare} loading={busy === "share"} />
                 {communityId ? <Muted>{t("recipes.shared")}</Muted> : null}
@@ -248,7 +248,7 @@ export default function RecipeDetailScreen() {
             ) : null}
             <Button label={t("common.delete")} variant="secondary" onPress={remove} />
             {/* Ohne Server kein Teilen: Hinweis statt eines Knopfs, der nur „Keine Verbindung“ meldet. */}
-            {HAS_SERVER ? null : <ComingSoonNote text={t("recipes.shareSoon")} />}
+            {hasServer() ? null : <ComingSoonNote text={t("recipes.shareSoon")} />}
           </>
         ) : (
           <Button label={t("recipes.copyToMine")} variant="secondary" onPress={copyToMine} />

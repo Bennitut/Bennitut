@@ -1,7 +1,7 @@
 import { Text } from "react-native";
 import { DRAFT_TEXT, LegalText, legalDraftState } from "../components/Legal";
 import { Badge, Card, Muted, Screen, colors, styles } from "../components/ui";
-import { HAS_SERVER } from "../lib/api";
+import { hasServer } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { describePlaceholder } from "../lib/legal";
 import { legalDocuments } from "../legal/texte";
@@ -16,7 +16,7 @@ const ANGABEN_FILE = "FoodTracker/app/src/legal/angaben.ts";
 export default function LegalScreen() {
   const { t, language } = useI18n();
   const { missing, serverDraft, draft } = legalDraftState();
-  const docs = legalDocuments({ withServer: HAS_SERVER });
+  const docs = legalDocuments({ withServer: hasServer() });
 
   return (
     <Screen>

@@ -4,7 +4,7 @@ import { Linking, Pressable, Text, View } from "react-native";
 import { ComingSoonNote } from "../../components/ComingSoon";
 import { Badge, Button, Card, Chip, ChipRow, ErrorText, HeroCard, IconBubble, Muted, ProgressBar, Screen, colors, styles } from "../../components/ui";
 import { CATEGORY_ORDER, CATEGORY_STYLE, ingredientEmoji } from "../../lib/emoji";
-import { api, HAS_SERVER } from "../../lib/api";
+import { api, hasServer } from "../../lib/api";
 import { weekOfDay } from "../../lib/catalog";
 import { addDays, daysBetween, formatDay } from "../../lib/dates";
 import { today } from "../../lib/pantry";
@@ -30,7 +30,7 @@ export default function ShoppingScreen() {
 
   useEffect(() => {
     // Ohne Server gibt es keine Lieferdienste – die Karte zeigt dann „Bald verfügbar“ statt eines Fehlers.
-    if (!HAS_SERVER) return;
+    if (!hasServer()) return;
     api
       .providers()
       .then((list) => {
@@ -231,7 +231,7 @@ export default function ShoppingScreen() {
 
       {toBuy.length > 0 ? (
         <Card title={t("shopping.deliver")} icon="🚚" tint={colors.accentTint}>
-          {HAS_SERVER ? (
+          {hasServer() ? (
             <>
               <ChipRow>
                 {providers.map((p) => (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { api, HAS_SERVER, imageUrl } from "../lib/api";
+import { api, hasServer, imageUrl } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { newId } from "../lib/pantry";
 import { CameraDeniedError, pickRecipePhoto } from "../lib/photos";
@@ -41,7 +41,7 @@ export function RatingCard({ recipe }: { recipe: Recipe }) {
 
   // Bewertungen sammelt der Server; ohne ihn gäbe es nur leere Sterne, die „Keine Verbindung“ melden.
   // Der Hinweis „Bald verfügbar“ steht gesammelt unten im Rezept (ImproveCard).
-  if (!HAS_SERVER) return null;
+  if (!hasServer()) return null;
 
   return (
     <Card title={t("feedback.rating")} icon="⭐" tint="#FFF4D6">
@@ -85,7 +85,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
 
   // Erst nach dem Laden des Zustands abfragen, sonst fehlt die Geräte-ID. Ohne Server gibt es nur eigene Fotos.
   useEffect(() => {
-    if (ready && HAS_SERVER) api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
+    if (ready && hasServer()) api.photos(recipe.id).then(setRemote).catch(() => setRemote([]));
   }, [recipe.id, ready]);
 
   const mine = myPhotos.filter((p) => p.recipeId === recipe.id);
@@ -142,7 +142,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
     const id = newId();
     let remoteId: string | null = null;
     // Ohne Server bleibt das Foto privat (statt nach dem Speichern „Ohne Verbindung …“ zu melden).
-    if (makePublic && HAS_SERVER) {
+    if (makePublic && hasServer()) {
       try {
         remoteId = await publish(draft);
       } catch {
@@ -215,7 +215,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
               ) : null}
               {item.own ? (
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                  {!item.own.public && HAS_SERVER && onDevice(item.own.uri) ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
+                  {!item.own.public && hasServer() && onDevice(item.own.uri) ? <Chip label={t("feedback.makePublic")} onPress={() => share(item)} /> : null}
                   <Chip label={t("feedback.deletePhoto")} onPress={() => remove(item)} />
                 </View>
               ) : null}
@@ -238,7 +238,7 @@ export function PhotoGallery({ recipe }: { recipe: Recipe }) {
         <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
           {draft ? <Image source={{ uri: draft }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 16 }} /> : null}
           <Card title={t("feedback.visibility")} icon="👀">
-            {HAS_SERVER ? (
+            {hasServer() ? (
               <>
                 <ChipRow>
                   <Chip label={t("feedback.public")} selected={makePublic} onPress={() => setMakePublic(true)} />
@@ -333,7 +333,7 @@ export function ImproveCard({ recipe }: { recipe: Recipe }) {
 
   // Ohne Server ein gesammelter Hinweis statt Knöpfen, die nur „Keine Verbindung“ melden – auch für die
   // Bewertung (RatingCard ist dann ausgeblendet).
-  if (!HAS_SERVER) {
+  if (!hasServer()) {
     return (
       <Card>
         <ComingSoonNote text={t("feedback.soon")} />

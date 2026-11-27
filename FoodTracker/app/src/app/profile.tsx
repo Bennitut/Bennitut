@@ -9,7 +9,7 @@ import { Badge, Button, Card, Chip, ChipRow, Field, Muted, NutrientRow, Screen, 
 import type { TKey } from "../i18n";
 import { providerName } from "../lib/account";
 import { hasAiConsent } from "../lib/aiConsent";
-import { api, HAS_SERVER } from "../lib/api";
+import { api, hasServer } from "../lib/api";
 import { formatDate, formatDay } from "../lib/dates";
 import { HISTORY_RANGES, backupFileName, diaryCsv, diaryJson, historySummary, type HistoryRange } from "../lib/history";
 import { offerFile, pickBackupFile } from "../lib/historyFiles";
@@ -52,14 +52,14 @@ export default function ProfileScreen() {
   // Beim Öffnen holen, was andere Geräte geändert haben (Tagebuch; mit Konto auch Plan, Vorrat und Einstellungen).
   useFocusEffect(
     useCallback(() => {
-      if (HAS_SERVER) refreshSync();
+      if (hasServer()) refreshSync();
     }, [refreshSync]),
   );
   // undefined = wird geprüft, null = keine Antwort. Bei jedem Öffnen neu, z. B. nachdem Ollama gestartet wurde.
   const [health, setHealth] = useState<ServerHealth | null | undefined>(undefined);
   useFocusEffect(
     useCallback(() => {
-      if (!HAS_SERVER) return;
+      if (!hasServer()) return;
       let active = true;
       api
         .health()
@@ -195,7 +195,7 @@ export default function ProfileScreen() {
               }}
             />
           </>
-        ) : HAS_SERVER ? (
+        ) : hasServer() ? (
           <>
             {accountNotice ? <Text style={styles.text}>{accountNotice}</Text> : null}
             <Muted>{t("account.notSignedIn")}</Muted>
@@ -205,7 +205,7 @@ export default function ProfileScreen() {
           // Ohne Server keine Anmeldung: Hinweis statt eines Knopfs, der zu „Ohne Verbindung … keine Anmeldung“ führt.
           <ComingSoonNote text={t("account.signInSoon")} />
         )}
-        {HAS_SERVER ? <Muted>{t(server.key, { model: server.model })}</Muted> : null}
+        {hasServer() ? <Muted>{t(server.key, { model: server.model })}</Muted> : null}
       </Card>
       {auth ? <AccountManage auth={auth} onDeleted={() => setAccountNotice(t("account.deleted"))} /> : null}
 
@@ -328,7 +328,7 @@ export default function ProfileScreen() {
 
       <Card title={t("history.backupTitle")} icon="💾">
         <Text style={styles.text}>{syncText}</Text>
-        {HAS_SERVER ? <Muted>{t(auth ? "history.syncSignedIn" : "history.syncAccount")}</Muted> : null}
+        {hasServer() ? <Muted>{t(auth ? "history.syncSignedIn" : "history.syncAccount")}</Muted> : null}
         {dataText ? <Text style={styles.text}>{dataText}</Text> : null}
         <Button label={t("history.exportCsv")} variant="secondary" onPress={() => exportHistory("csv")} />
         <Button label={t("history.exportJson")} variant="secondary" onPress={() => exportHistory("json")} />
@@ -338,7 +338,7 @@ export default function ProfileScreen() {
       </Card>
 
       {/* Einwilligung in die KI-Funktionen (lib/aiConsent.ts): ansehen und widerrufen. Ohne Server gibt es keine KI. */}
-      {HAS_SERVER ? (
+      {hasServer() ? (
         <Card title={t("aiConsent.profileTitle")} icon="🤖">
           {hasAiConsent(aiConsent) ? (
             <>
@@ -360,6 +360,7 @@ export default function ProfileScreen() {
       ) : null}
 
       <Button label={`🌐 ${t("profile.settings")} ›`} variant="secondary" onPress={() => router.push("/settings")} />
+      <Button label={`🖥️ ${t("server.title")} ›`} variant="secondary" onPress={() => router.push("/server")} />
       <Button
         label={`§ ${t("legal.title")}${legalDraftState().draft ? ` · ${t("legal.draftBadge")}` : ""} ›`}
         variant="secondary"

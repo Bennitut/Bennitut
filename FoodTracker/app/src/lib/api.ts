@@ -29,32 +29,47 @@ import { aiConsentHeaders, type AiConsent } from "./aiConsent";
 import type { DataSyncRequest, DataSyncResponse } from "./dataSync";
 import type { DeviceClaim } from "./deviceClaim";
 import type { DiarySyncRequest, DiarySyncResponse } from "./diary";
+import { defaultServer, type ServerAddress } from "./serverAddress";
 import { resolveImageUri } from "./serverImages";
 import type { ServerHealth } from "./serverStatus";
 
 /**
- * Adresse des Backends, null = kein Server. Während der Entwicklung läuft es auf demselben Rechner wie Expo;
- * dessen Adresse kennt die App (z. B. "10.0.0.7:8081"), also nehmen wir denselben Host mit Port 3000.
- * Mit EXPO_PUBLIC_API_URL lässt sich die Adresse fest vorgeben (z. B. für einen echten Server).
+ * Standard-Adresse des Backends (lib/serverAddress.ts): EXPO_PUBLIC_API_URL beim Start bzw. Bauen, sonst während der
+ * Entwicklung der Rechner, auf dem Expo läuft (dessen Adresse kennt die App, z. B. "10.0.0.7:8081" – also derselbe
+ * Host mit Port 3000), in der exportierten Web-Version ohne feste Adresse keiner. Im Profil lässt sich eine andere
+ * eintragen (store.tsx, setServer).
  */
-function serverUrl(): string | null {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  const devHost = Constants.expoConfig?.hostUri?.split(":")[0];
-  if (devHost) return `http://${devHost}:3000`;
-  if (Platform.OS === "web") {
-    // `npx expo start --web`: Server auf dem Rechner, von dem die Seite kommt. Die exportierte Web-Version
-    // (`npx expo export --platform web`) läuft ohne Server und fragt nicht bei „localhost“ der Besucher:innen an.
-    return __DEV__ && typeof window !== "undefined" ? `http://${window.location.hostname}:3000` : null;
-  }
-  return "http://localhost:3000";
+export const DEFAULT_SERVER: ServerAddress = defaultServer({
+  env: process.env.EXPO_PUBLIC_API_URL,
+  devHost: Constants.expoConfig?.hostUri?.split(":")[0],
+  web: Platform.OS === "web",
+  dev: __DEV__,
+  pageHost: typeof window !== "undefined" ? window.location?.hostname : undefined,
+});
+
+let server: ServerAddress = DEFAULT_SERVER;
+/** Adresse des Servers, mit dem die App gerade spricht; null = kein Server. */
+export const serverUrl = () => server.url;
+/** Ob es überhaupt einen Server gibt; sonst zeigen Server-Funktionen „Bald verfügbar“ statt eines Fehlers. */
+export const hasServer = () => server.url !== null;
+/** Andere Adresse (store.tsx): gilt für jede Anfrage, die danach beginnt. */
+export function setServer(address: ServerAddress) {
+  server = address;
 }
 
-export const BASE_URL = serverUrl();
-/** Ob es überhaupt einen Server gibt; sonst zeigen Server-Funktionen „Bald verfügbar“ statt eines Fehlers. */
-export const HAS_SERVER = BASE_URL !== null;
+let isLoaded = false;
+let markReady: () => void = () => {};
+/** Erst wenn die App Adresse und Geräte-ID geladen hat (store.tsx, `serverReady`), gehen Anfragen hinaus. */
+const loaded = new Promise<void>((resolve) => {
+  markReady = () => {
+    isLoaded = true;
+    resolve();
+  };
+});
+export const serverReady = () => markReady();
 
 /** Adresse zum Anzeigen eines Bildes – Fotos aus dem Bildspeicher des Servers mit dessen Adresse (lib/serverImages.ts). */
-export const imageUrl = (uri: string | undefined) => resolveImageUri(uri, BASE_URL);
+export const imageUrl = (uri: string | undefined) => resolveImageUri(uri, server.url);
 /** Fotos der Galerie kommen als Pfad im Bildspeicher; die App zeigt sie mit der Adresse des Servers. */
 const withImageUrl = (photo: RecipePhoto): RecipePhoto => ({ ...photo, uri: imageUrl(photo.uri) ?? photo.uri });
 const withImageUrls = (photos: RecipePhoto[]) => photos.map(withImageUrl);
@@ -102,8 +117,14 @@ export function setAiConsent(consent: AiConsent | null) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!isLoaded) await loaded;
+  // Adresse, Geräte-ID und Anmeldung gehören zusammen und gelten ab dem Aufruf (ohne `await` davor): Wechselt danach die
+  // Adresse, geht diese Anfrage noch an den bisherigen Server – z. B. das Abmelden beim Wechsel.
+  const base = server.url;
+  const device = deviceId;
+  const token = authToken;
   // Ohne Server wie ohne Verbindung: Katalog, Planer, Vorrat und Tagebuch laufen in der App weiter.
-  if (!BASE_URL) throw new ApiError("network");
+  if (!base) throw new ApiError("network");
   let res: Response;
   // KI-Anfragen dürfen dauern – mit lokaler KI (Ollama) oft 20–90 Sekunden, beim ersten Mal länger. Der Server
   // bricht nach 240 Sekunden selbst ab und meldet „ai_timeout“; ohne Server soll die App nicht ewig warten.
@@ -113,13 +134,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const syncing = path === "/api/diary/sync" || path === "/api/sync";
   const timer = setTimeout(() => controller.abort(), slow ? 300_000 : syncing ? 60_000 : 10_000);
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(`${base}${path}`, {
       signal: controller.signal,
       ...init,
       headers: {
         "Content-Type": "application/json",
-        "X-Device-Id": deviceId,
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        "X-Device-Id": device,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
     });
@@ -165,6 +186,26 @@ export interface PlanPreferences {
   allergens: Allergen[];
   excludeIngredients: string[];
   maxCookMinutes: number;
+}
+
+/**
+ * Prüft eine Adresse, bevor die App sie nutzt (Profil → Server): GET /api/health ohne Geräte-ID und ohne Anmeldung –
+ * ein fremder Server erfährt dabei nichts über dieses Gerät. Liefert die Antwort bzw. null, wenn dort kein
+ * FoodTracker-Server antwortet (keine Verbindung, kein JSON, kein `ok`). Großzügiges Zeitlimit: Gratis-Server
+ * schlafen und brauchen zum Aufwachen bis zu einer Minute.
+ */
+export async function probeServer(url: string, timeoutMs = 60_000): Promise<ServerHealth | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${url}/api/health`, { signal: controller.signal, credentials: "omit" });
+    const body = (await res.json().catch(() => null)) as ServerHealth | null;
+    return res.ok && body && body.ok === true ? body : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const api = {
