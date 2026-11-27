@@ -41,7 +41,10 @@ const withBase = (p) => (typeof p === "string" && p.startsWith("/") && !p.starts
 const tsx = require("tsx/cjs/api");
 const { missingLegalInfo } = tsx.require("../src/legal/texte.ts", __filename);
 const { describePlaceholder } = tsx.require("../src/lib/legal.ts", __filename);
-const missingLegal = missingLegalInfo({ withServer: Boolean(process.env.EXPO_PUBLIC_API_URL) });
+// Mit fester Server-Adresse (EXPO_PUBLIC_API_URL, im Workflow aus der Variable FOODTRACKER_API_URL) gehört Teil B dazu;
+// „off“ heißt ohne Server (src/lib/serverAddress.ts).
+const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? "").trim();
+const missingLegal = missingLegalInfo({ withServer: apiUrl !== "" && apiUrl.toLowerCase() !== "off" });
 if (missingLegal.length > 0) {
   const list = missingLegal.map((p) => `  - ${describePlaceholder(p)}`).join("\n");
   if (!allowDraft) {

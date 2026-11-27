@@ -26,7 +26,7 @@ const path = require("node:path");
 
 // npm-Skripte laufen im App-Ordner; dort legt `expo export` den Ordner dist/ an.
 const DIST = path.resolve(process.argv[2] ?? "dist");
-const ROUTES = ["/", "/scan", "/plan", "/recipes", "/pantry", "/shopping", "/profile", "/onboarding", "/settings", "/login", "/recipe/edit", "/recipe/import", "/admin", "/users", "/legal"];
+const ROUTES = ["/", "/scan", "/plan", "/recipes", "/pantry", "/shopping", "/profile", "/onboarding", "/settings", "/server", "/login", "/recipe/edit", "/recipe/import", "/admin", "/users", "/legal"];
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".ttf": "font/ttf", ".svg": "image/svg+xml" };
 
 /** Unterpfad aus den Skript-Pfaden von index.html, z. B. "/Bennitut" – oder "" für die Wurzel. */
@@ -269,6 +269,24 @@ async function main() {
   } catch (e) {
     failures.push(`Bald verfügbar: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: path.join(DIST, "web-smoke-fehler.png") }).catch(() => {});
+  }
+
+  // Profil → Server ohne Server (9.2 Teil 7): „Kein Server eingestellt“, eine Adresse ohne FoodTracker-Server wird
+  // erkannt und nicht übernommen (die abgelehnte Verbindung meldet Chromium in der Konsole – hier erwartet).
+  try {
+    const serverPage = await context.newPage();
+    serverPage.on("pageerror", (e) => failures.push(`/server: ${e.message}`));
+    serverPage.on("console", (m) => m.type() === "error" && !expected404(m) && !/ERR_CONNECTION_REFUSED/.test(m.text()) && failures.push(`/server: ${m.text()}`));
+    await serverPage.goto(site + "/server", { waitUntil: "networkidle" });
+    await serverPage.getByText("Kein Server eingestellt.", { exact: true }).waitFor({ timeout: 10_000 });
+    await serverPage.getByLabel("Andere Adresse", { exact: true }).fill("127.0.0.1:59999");
+    await serverPage.getByRole("button", { name: "Prüfen und verwenden", exact: true }).click();
+    await serverPage.getByText("Unter dieser Adresse antwortet kein FoodTracker-Server", { exact: false }).waitFor({ timeout: 15_000 });
+    if (await serverPage.evaluate(() => localStorage.getItem("foodtracker/server/v1"))) throw new Error("Adresse ohne Server wurde übernommen");
+    await serverPage.close();
+    console.log("Profil → Server: ohne Server „Kein Server eingestellt“, eine Adresse ohne FoodTracker-Server wird erkannt und nicht übernommen.");
+  } catch (e) {
+    failures.push(`Server-Seite: ${e.message.split("\n")[0]}`);
   }
 
   // Videos in der gewählten Sprache: Deutsch (hier de-AT) zeigt nur deutsche Videos, Englisch nur englische; fehlt

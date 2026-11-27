@@ -24,7 +24,10 @@
 //                                     # danach die Einwilligung vor den KI-Funktionen: „Nicht jetzt“ schickt nichts,
 //                                     # „Einverstanden“ schickt mit Header (der Server ohne KI meldet das), danach
 //                                     # keine Frage mehr, ohne Header lehnt der Server ab, Widerruf im Profil, dann
-//                                     # fragt die App wieder; „Mindestalter“ in der Datenschutzerklärung
+//                                     # fragt die App wieder; „Mindestalter“ in der Datenschutzerklärung; zuletzt
+//                                     # Profil → Server: andere Adresse (zweiter Test-Server, leere Datenbank) prüfen
+//                                     # und verwenden – abgemeldet, eigene Geräte-ID, Tagebuch dort; Umzug dieses
+//                                     # Servers auf eine leere Datenbank (die App gleicht von vorn ab); zurück
 //   npm run web:account -- --no-build # mit dem vorhandenen dist-account/
 //
 // Der Server bekommt SMTP_HOST auf einen Port, an dem niemand lauscht: So erscheint „Passwort vergessen?“, die Mail
@@ -118,6 +121,26 @@ function writeLegacyCommunityFiles(dir, jpeg) {
   fs.writeFileSync(path.join(dir, "overrides.json"), JSON.stringify({ kaiserschmarrn: { patch: { name: "Kaiserschmarrn vom Admin" }, updatedBy: "Chefin", updatedAt: at } }));
 }
 
+/** Wie viele Einträge eines Besitzers („device:…“) im Abgleich der Datenbank eines Test-Servers stehen (nur lesend). */
+function recordsOf(file, owner) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    return Number(db.prepare("SELECT COUNT(*) AS n FROM sync_records WHERE owner = ?").get(owner).n);
+  } finally {
+    db.close();
+  }
+}
+
+/** Beendet einen Test-Server und wartet, bis der Port frei ist. */
+async function stopServer(server) {
+  if (server.child.exitCode !== null) return;
+  await new Promise((resolve) => {
+    server.child.once("exit", resolve);
+    server.child.kill();
+  });
+}
+
 /** Wie viele Konten mit dieser Adresse in der Datenbank des Test-Servers stehen (zweite Verbindung, nur lesend). */
 function accountsWith(file, email) {
   const { DatabaseSync } = require("node:sqlite");
@@ -129,12 +152,12 @@ function accountsWith(file, email) {
   }
 }
 
-async function startServer(dataDir) {
+async function startServer(dataDir, port = PORT) {
   const child = spawn(process.execPath, [path.join(SERVER, "node_modules/tsx/dist/cli.mjs"), "src/index.ts"], {
     cwd: SERVER,
     env: {
       ...process.env,
-      PORT: String(PORT),
+      PORT: String(port),
       // Eigene, leere Datenbank – nie die echte (server/data/foodtracker.db oder DATABASE_URL aus server/.env).
       DATABASE_FILE: path.join(dataDir, "foodtracker.db"),
       DATABASE_URL: "",
@@ -161,7 +184,7 @@ async function startServer(dataDir) {
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) throw new Error(`Server beendet:\n${log}`);
     try {
-      const res = await fetch(`${API}/api/auth/config`);
+      const res = await fetch(`http://127.0.0.1:${port}/api/auth/config`);
       if (res.ok) return { child, log: () => log };
     } catch {
       // startet noch
@@ -670,6 +693,105 @@ async function main() {
     await see("FoodTracker hat kein Mindestalter", "Abschnitt Mindestalter (mit Server)");
     if (improveRequests.length !== 2) failures.push(`Nach dem Widerruf trotzdem gesendet: ${JSON.stringify(improveRequests)}`);
     step("Widerruf im Profil, danach fragt die App wieder; „Mindestalter“ in der Datenschutzerklärung");
+
+    // Server-Adresse (9.2 Teil 7): Profil → Server – ein Gerät, angemeldet beim Standard-Server, wechselt zu einem
+    // anderen Server mit leerer Datenbank: abgemeldet (auch beim bisherigen Server), eigene Geräte-ID dort, das
+    // Tagebuch geht ganz zum neuen. Zieht der neue Server danach auf eine leere Datenbank um, geht wieder alles hoch
+    // („Neuer Server, alte Abgleich-Marken“). Zurück zur Standard-Adresse gilt die alte Geräte-ID wieder.
+    const otherPort = PORT + 1;
+    const OTHER = `http://127.0.0.1:${otherPort}`;
+    const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), "foodtracker-account-2-"));
+    let otherServer = await startServer(otherDir, otherPort);
+    try {
+      const switcher = await (
+        await fetch(`${API}/api/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "wechsel@example.org", password: "Passwort zum Wechseln", name: "Wechsel" }),
+        })
+      ).json();
+      const serverContext = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT" });
+      const sp = await serverContext.newPage();
+      sp.on("pageerror", (e) => failures.push(`JavaScript-Fehler (Server wechseln): ${e.message}`));
+      sp.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && failures.push(`Konsole (Server wechseln): ${m.text()}`));
+      await sp.addInitScript((auth) => {
+        if (sessionStorage.getItem("e2e-server")) return;
+        sessionStorage.setItem("e2e-server", "1");
+        const diary = [{ id: "e2e-wechsel-1", date: "2026-11-26", time: "19:00", title: "Linsen-Dal", nutrients: { kcal: 520, protein: 22, carbs: 70, fat: 14 }, source: "manuell" }];
+        localStorage.setItem("foodtracker/state/v2", JSON.stringify({ deviceId: "e2e-wechsel-geraet", diary }));
+        localStorage.setItem("foodtracker.session.v1", JSON.stringify(auth));
+      }, { token: switcher.token, user: switcher.user });
+      const spSee = async (text, what) => {
+        try {
+          await sp.getByText(text, { exact: false }).first().waitFor({ timeout: 15_000 });
+        } catch {
+          throw new Error(`${what}: „${text}“ nicht gefunden`);
+        }
+      };
+      const until = async (check, what) => {
+        for (let i = 0; i < 80; i++) {
+          if (await check()) return;
+          await sp.waitForTimeout(250);
+        }
+        throw new Error(what);
+      };
+      const diaryAt = async (base, headers) => {
+        const res = await fetch(`${base}/api/diary/sync`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ since: 0, changes: [] }) });
+        return res.ok ? (await res.json()).changes.map((r) => r.id) : [];
+      };
+      await sp.goto(`${site}/profile`, { waitUntil: "networkidle" });
+      await spSee("Angemeldet als Wechsel", "Anmeldung vor dem Wechsel");
+      await until(async () => (await diaryAt(API, { "X-Device-Id": "e2e-wechsel-geraet", Authorization: `Bearer ${switcher.token}` })).includes("e2e-wechsel-1"), "Tagebuch nicht beim Standard-Server");
+      await sp.getByRole("button", { name: "🖥️ Server ›", exact: true }).click();
+      await sp.waitForURL(/\/server$/);
+      await spSee(`Adresse: 127.0.0.1:${PORT}`, "Server-Seite");
+      await spSee("Beim Start bzw. Bauen fest eingestellt", "Herkunft der Adresse");
+      await spSee("Beim Wechsel meldet dich FoodTracker ab", "Hinweis zum Abmelden");
+      const address = sp.getByLabel("Andere Adresse", { exact: true });
+      await address.fill("ftp://example.org");
+      await sp.getByRole("button", { name: "Prüfen und verwenden", exact: true }).click();
+      await spSee("Die Adresse muss mit http:// oder https:// beginnen.", "Falsches Protokoll");
+      await address.fill("127.0.0.1:59999");
+      await sp.getByRole("button", { name: "Prüfen und verwenden", exact: true }).click();
+      await spSee("Unter dieser Adresse antwortet kein FoodTracker-Server", "Adresse ohne Server");
+      if ((await sp.getByRole("button", { name: "Trotzdem verwenden", exact: true }).count()) !== 1) failures.push("Kein „Trotzdem verwenden“ bei einer Adresse ohne Server");
+      await address.fill(`127.0.0.1:${otherPort}/api/health`);
+      await sp.getByRole("button", { name: "Prüfen und verwenden", exact: true }).click();
+      await spSee(`Jetzt mit 127.0.0.1:${otherPort} verbunden.`, "Wechsel zum anderen Server");
+      await spSee("Selbst eingetragen.", "Herkunft nach dem Wechsel");
+      const setting = await sp.evaluate(() => JSON.parse(localStorage.getItem("foodtracker/server/v1") ?? "{}"));
+      const otherDevice = setting.deviceIds?.[OTHER];
+      if (setting.custom !== OTHER || !otherDevice || otherDevice === "e2e-wechsel-geraet") failures.push(`Einstellung nach dem Wechsel: ${JSON.stringify(setting)}`);
+      await until(async () => !(await sp.evaluate(() => localStorage.getItem("foodtracker.session.v1"))), "Sitzung nach dem Wechsel noch gespeichert");
+      const me = await fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${switcher.token}` } });
+      if (me.status !== 401) failures.push(`Beim bisherigen Server nicht abgemeldet (HTTP ${me.status})`);
+      await until(async () => (await diaryAt(OTHER, { "X-Device-Id": otherDevice })).includes("e2e-wechsel-1"), "Tagebuch nicht beim neuen Server");
+      if (recordsOf(path.join(otherDir, "foodtracker.db"), "device:e2e-wechsel-geraet") !== 0) failures.push("Der neue Server kennt die Geräte-ID des Standard-Servers");
+      await sp.goto(`${site}/profile`, { waitUntil: "networkidle" });
+      await spSee("Nicht angemeldet", "Abgemeldet nach dem Wechsel");
+      step("Profil → Server: andere Adresse geprüft und verwendet – abgemeldet (auch beim bisherigen Server), eigene Geräte-ID, Tagebuch beim neuen Server");
+
+      // Der neue Server zieht auf eine leere Datenbank um (andere Kennung): Die App gleicht von vorn ab.
+      await stopServer(otherServer);
+      for (const f of fs.readdirSync(otherDir)) fs.rmSync(path.join(otherDir, f), { recursive: true, force: true });
+      otherServer = await startServer(otherDir, otherPort);
+      if ((await diaryAt(OTHER, { "X-Device-Id": otherDevice })).length !== 0) failures.push("Neue Datenbank ist nicht leer");
+      await sp.reload({ waitUntil: "networkidle" });
+      await until(async () => (await diaryAt(OTHER, { "X-Device-Id": otherDevice })).includes("e2e-wechsel-1"), "Nach dem Umzug auf eine leere Datenbank fehlt das Tagebuch");
+      step("Umzug auf eine leere Datenbank: andere Kennung, die App gleicht von vorn ab – das Tagebuch ist wieder da");
+
+      await sp.goto(`${site}/server`, { waitUntil: "networkidle" });
+      await sp.getByRole("button", { name: "Zurück zur Standard-Adresse", exact: true }).click();
+      await spSee(`Adresse: 127.0.0.1:${PORT}`, "Zurück zur Standard-Adresse");
+      const back = await sp.evaluate(() => JSON.parse(localStorage.getItem("foodtracker/server/v1") ?? "{}"));
+      if (back.custom !== null || back.deviceIds?.[OTHER] !== otherDevice) failures.push(`Einstellung nach dem Zurückwechseln: ${JSON.stringify(back)}`);
+      await until(async () => recordsOf(path.join(dataDir, "foodtracker.db"), "device:e2e-wechsel-geraet") === 1, "Tagebuch nach dem Zurückwechseln nicht unter der alten Geräte-ID");
+      step("Zurück zur Standard-Adresse: alte Geräte-ID gilt wieder, Tagebuch dort unter ihr");
+      await serverContext.close();
+    } finally {
+      await stopServer(otherServer);
+      fs.rmSync(otherDir, { recursive: true, force: true });
+    }
   } catch (e) {
     failures.push(e.message);
     await page.screenshot({ path: path.join(os.tmpdir(), "foodtracker-account-fehler.png"), fullPage: true }).catch(() => {});

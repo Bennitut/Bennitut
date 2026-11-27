@@ -59,10 +59,14 @@ jobs:
       - run: npm ci
 
       # Web-Export mit Unterpfad, angepasstem Manifest und 404.html für Direktlinks (scripts/web-pages.cjs).
+      # Server-Adresse: Repository-Variable FOODTRACKER_API_URL (Settings → Secrets and variables → Actions →
+      # Variables), z. B. https://foodtracker.onrender.com – der Server braucht https und
+      # CORS_ORIGINS=https://bennitut.github.io. Ohne Variable läuft die Web-Version ohne Server.
       - name: Web-Version bauen
         run: npm run web:pages
         env:
           WEB_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          EXPO_PUBLIC_API_URL: ${{ vars.FOODTRACKER_API_URL }}
 
       - uses: actions/upload-pages-artifact@v4
         with:
