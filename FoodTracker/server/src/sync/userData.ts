@@ -41,6 +41,14 @@ export const IsoTime = z
 const Rev = z.number().int().min(0).max(2_147_483_647).default(0);
 
 export const USER_DATA_KINDS = ["settings", "plan", "pantry", "recipes", "favorites", "texts", "photos"] as const;
+
+/** Ein Foto als data-URI (vom Gerät, noch nicht im Bildspeicher). */
+const isDataImage = (uri: unknown) => typeof uri === "string" && /^data:image\//i.test(uri);
+/** Foto eines gespeicherten bzw. geschickten Rezept-Eintrags (`{ recipe, sharedAs? }`). */
+const recipeUri = (data: unknown): unknown => (data as { recipe?: { media?: { image?: { uri?: unknown } } } } | null)?.recipe?.media?.image?.uri;
+const isPublic = (data: unknown) => (data as { public?: unknown } | null)?.public === true;
+/** Bild eines privaten eigenen Fotos der Galerie (öffentliche zeigen auf die Galerie). */
+const privatePhotoUri = (data: unknown): unknown => (isPublic(data) ? undefined : (data as { uri?: unknown } | null)?.uri);
 export type UserDataKindName = (typeof USER_DATA_KINDS)[number];
 
 interface UserDataKind extends SyncKind {
@@ -185,12 +193,32 @@ export const USER_DATA: Record<UserDataKindName, UserDataKind> = {
   },
   pantry: { name: "pantry", pageSize: 2000, maxRecords: 5000, serverWinsTies: true, maxJson: 500, validId: (id) => POST.test(id), schema: () => Post },
   // Gespeichert ohne Foto (höchstens 100 KB, meist 1–5 KB); 200 pro Antwort sind schlimmstenfalls 20 MB.
-  recipes: { name: "recipes", pageSize: 200, maxRecords: 3000, serverWinsTies: true, maxJson: MAX_RECIPE_JSON + MAX_IMAGE_URI + 1000, validId: (id) => RECIPE.test(id), schema: OwnRecipe },
+  recipes: {
+    name: "recipes",
+    pageSize: 200,
+    maxRecords: 3000,
+    serverWinsTies: true,
+    // Dieselbe Fassung mit dem Foto selbst, die gespeicherte hat keins (Umzug, siehe SyncKind.incomingWinsTie).
+    incomingWinsTie: (incoming, current) => isDataImage(recipeUri(incoming.data)) && recipeUri(current.data) === undefined,
+    maxJson: MAX_RECIPE_JSON + MAX_IMAGE_URI + 1000,
+    validId: (id) => RECIPE.test(id),
+    schema: OwnRecipe,
+  },
   favorites: { name: "favorites", pageSize: 500, maxRecords: 5000, serverWinsTies: true, maxJson: MAX_RECIPE_JSON, validId: (id) => RECIPE.test(id), schema: Favorite },
   // Fünf Sprachen, übersetzt und verbessert, für alle Katalogrezepte und viele eigene.
   texts: { name: "texts", pageSize: 1000, maxRecords: 20_000, serverWinsTies: true, maxJson: 100_000, validId: (id) => TEXT.test(id), schema: () => Text },
   // Gespeichert ohne Foto (Pfad statt data-URI, rund 150 Zeichen); die Galerie erlaubt 5 öffentliche je Rezept.
-  photos: { name: "photos", pageSize: 1000, maxRecords: 2000, serverWinsTies: true, maxJson: MAX_PHOTO_JSON + MAX_IMAGE_URI, validId: (id) => RECIPE.test(id), schema: () => OwnPhoto },
+  photos: {
+    name: "photos",
+    pageSize: 1000,
+    maxRecords: 2000,
+    serverWinsTies: true,
+    // Ein privates Foto mit dem Bild selbst, die gespeicherte Fassung hat keins (Umzug, wie bei Rezepten).
+    incomingWinsTie: (incoming, current) => isDataImage(privatePhotoUri(incoming.data)) && privatePhotoUri(current.data) === undefined && !isPublic(current.data),
+    maxJson: MAX_PHOTO_JSON + MAX_IMAGE_URI,
+    validId: (id) => RECIPE.test(id),
+    schema: () => OwnPhoto,
+  },
 };
 
 const changeFor = (kind: UserDataKind) =>

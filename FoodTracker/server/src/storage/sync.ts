@@ -33,6 +33,13 @@ export interface SyncKind {
    */
   serverWinsTies?: boolean;
   /**
+   * Bei gleichem Zeitpunkt doch die geschickte Fassung nehmen – z. B. ein eigenes Rezept mit dem Foto selbst, wenn die
+   * gespeicherte Fassung keins hat (sync/userData.ts): Nach einem Umzug auf eine leere Datenbank kann zuerst ein Gerät
+   * abgleichen, das das Foto nur als Pfad zum alten Server kennt (der Server lässt es dann weg); das Gerät mit dem Foto
+   * hat dieselbe Fassung, und ohne diese Regel bliebe das Rezept im Konto ohne Foto. Nie gegen eine Löschmarke.
+   */
+  incomingWinsTie?: (incoming: SyncRecord, current: SyncRecord) => boolean;
+  /**
    * Nach dem Übernehmen von Änderungen, in derselben Transaktion, z. B. Häkchen eines abgelösten Plans entfernen. Liefert
    * die IDs der entfernten Datensätze (sie fehlen dann auch in der Antwort).
    */
@@ -66,6 +73,12 @@ export class SyncFullError extends Error {}
 export function wins(incoming: SyncRecord, current: SyncRecord): boolean {
   if (incoming.updatedAt !== current.updatedAt) return incoming.updatedAt > current.updatedAt;
   return incoming.data === null && current.data !== null;
+}
+
+/** Gleicher Zeitpunkt, beide mit Inhalt, und die Art nimmt dann die geschickte Fassung (SyncKind.incomingWinsTie). */
+function winsTie(kind: SyncKind, incoming: SyncRecord, current: SyncRecord): boolean {
+  if (!kind.incomingWinsTie || incoming.updatedAt !== current.updatedAt || incoming.data === null || current.data === null) return false;
+  return kind.incomingWinsTie(incoming, current);
 }
 
 /** Gleicher Stand: gleicher Zeitpunkt, beide gelöscht bzw. beide nicht – mit `sameContent` auch gleicher Inhalt. */
@@ -175,7 +188,7 @@ export class SyncStore {
       // Der Reihe nach wie geschickt; kommt eine ID mehrmals vor, zählt der Vergleich mit dem schon Übernommenen.
       for (const change of changes) {
         const current = applied.get(change.id) ?? stored.get(change.id);
-        if (current && !wins(change, current)) {
+        if (current && !wins(change, current) && !winsTie(kind, change, current)) {
           if (!sameVersion(current, change, kind.serverWinsTies === true)) conflicts.set(change.id, current);
           continue;
         }

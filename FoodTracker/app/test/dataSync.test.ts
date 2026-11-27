@@ -834,6 +834,33 @@ describe("Abgleich mit dem Konto: neuer Server, neue Datenbank (Abgleich-Marken 
     assert.deepEqual(cloud.requests[0]?.kinds.pantry?.changes.map((r) => r.id), ["reis@2026-11-27"]);
   });
 
+  it("bringt beim Umzug das Foto auch dann ins Konto, wenn zuerst ein Gerät abgleicht, das es nur als Pfad kennt", async () => {
+    const laptop = await server();
+    const phone = new Device({ settings: settings(), myRecipes: [withPhoto("eigen_zuerst", jpeg(8))] }, true);
+    await laptop.run(phone);
+    const browser = new Device();
+    await laptop.run(browser);
+    const laptopPath = photoUri(findOwn(browser, "eigen_zuerst"));
+    assert.match(laptopPath ?? "", /^\/api\/images\//, "der Browser kennt das Foto nur als Pfad");
+
+    const cloud = await server();
+    // Der Browser gleicht zuerst mit dem neuen Server ab: Den Pfad kennt der nicht, das Rezept kommt ohne Foto an.
+    await cloud.run(browser);
+    assert.equal(photoUri(findOwn(browser, "eigen_zuerst")), undefined);
+    assert.deepEqual(cloud.images.keys(), []);
+    // Dann das Handy mit dem Foto selbst (dieselbe Fassung): Das Konto bekommt das Foto doch.
+    await cloud.run(phone);
+    const cloudPath = findOwn(phone, "eigen_zuerst")?.media?.image?.server;
+    assert.ok(cloudPath && cloudPath !== laptopPath);
+    assert.deepEqual(cloud.images.keys(), [imageKeyOf(cloudPath)]);
+    assert.equal(photoUri(findOwn(phone, "eigen_zuerst")), jpeg(8), "auf dem Handy bleibt das Foto");
+    // Der Browser bekommt es beim nächsten Abgleich.
+    await cloud.run(browser);
+    assert.equal(photoUri(findOwn(browser, "eigen_zuerst")), cloudPath);
+    assert.deepEqual(phone.pending(), []);
+    assert.deepEqual(browser.pending(), []);
+  });
+
   it("gleicht Marken ohne Kennung (ältere App-Fassung) einmal von vorn ab, eine abweichende Art allein", async () => {
     const { run, requests } = await server();
     const d = new Device({ settings: settings(), pantry: [post("reis", 500)] }, true);

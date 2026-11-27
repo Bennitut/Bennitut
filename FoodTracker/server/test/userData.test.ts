@@ -334,6 +334,25 @@ describe("Abgleich eigener Rezepte, Favoriten und Rezepttexte (/api/sync)", () =
     expect(photoOf(all.kinds.recipes!.changes.find((r) => r.id === "eigen_katalog"))).toBe(web);
   });
 
+  it("nimmt bei gleichem Zeitpunkt die Fassung mit dem Foto, wenn die gespeicherte keins hat (Umzug: zuerst ein Gerät nur mit Pfad)", async () => {
+    const { token } = await login("Umzug mit Fotos");
+    const at = T(9);
+    const record = (image?: string) => ({ id: "eigen_umzug", updatedAt: at, data: { recipe: ownRecipe("eigen_umzug", image ? { media: { image: { uri: image } } } : {}) } });
+    // Zuerst ein Gerät, das das Foto nur als Pfad zum alten Server kennt: Den Pfad gibt es hier nicht, das Foto fällt weg.
+    const pathOnly = await syncAs(recipes(0, [record("/api/images/11111111-2222-4333-8444-555555555555.jpg")]), token);
+    expect(pathOnly.kinds.recipes?.changes.map(photoOf)).toEqual([undefined]);
+    const before = images.keys().length;
+    // Dann das Gerät mit dem Foto selbst, dieselbe Fassung: Jetzt hat das Konto das Foto.
+    const withPhoto = await syncAs(recipes(pathOnly.kinds.recipes!.rev, [record(jpeg(5))]), token);
+    const uri = photoOf(withPhoto.kinds.recipes?.changes[0]);
+    expect(uri).toMatch(/^\/api\/images\//);
+    expect(images.keys().length).toBe(before + 1);
+    // Umgekehrt nicht: Dieselbe Fassung ohne Foto ersetzt die mit Foto nicht, der Server schickt seine.
+    const again = await syncAs(recipes(withPhoto.kinds.recipes!.rev, [record()]), token);
+    expect(again.kinds.recipes?.changes.map(photoOf)).toEqual([uri]);
+    expect(images.keys().length).toBe(before + 1);
+  });
+
   it("legt bei gleichem Zeitpunkt (erster Abgleich eines weiteren Geräts) keine neue Datei an und schickt die eigene Fassung", async () => {
     const { token } = await login("Zweites Gerät");
     const first = await syncAs(recipes(0, [{ id: "eigen_alt", updatedAt: EPOCH, data: { recipe: ownRecipe("eigen_alt", { media: { image: { uri: jpeg(3) } } }) } }]), token);
@@ -545,6 +564,17 @@ describe("Abgleich eigener Fotos der Galerie (/api/sync)", () => {
     await syncAs(photos(result.kinds.photos!.rev, [{ id: "kopie", updatedAt: T(2), data: null }]), token);
     expect(images.keys()).not.toContain(imageKeyOf(copy!));
     expect((await galleryApp.request(shown.uri)).status).toBe(200);
+  });
+
+  it("nimmt bei gleichem Zeitpunkt das private Foto mit Bild, wenn die gespeicherte Fassung keins hat (Umzug)", async () => {
+    const { token } = await login("Umzug Galerie");
+    const at = T(11);
+    const record = (uri: string) => ({ id: "foto_umzug", updatedAt: at, data: { recipeId: "shakshuka", createdAt: at, public: false, uri } });
+    const uriOf = (r: SyncRecord | undefined) => (r?.data as { uri?: string } | undefined)?.uri;
+    const pathOnly = await syncAs(photos(0, [record("/api/images/11111111-2222-4333-8444-555555555555.jpg")]), token);
+    expect(pathOnly.kinds.photos?.changes.map(uriOf)).toEqual([undefined]);
+    const withImage = await syncAs(photos(pathOnly.kinds.photos!.rev, [record(jpeg(6))]), token);
+    expect(uriOf(withImage.kinds.photos?.changes[0])).toMatch(/^\/api\/images\//);
   });
 
   it("lehnt Ungültiges bei eigenen Fotos ab", async () => {
