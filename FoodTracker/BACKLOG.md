@@ -14,7 +14,7 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 16 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 17 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
@@ -28,8 +28,10 @@ offline sichtbar), seit 11 Uhr auch **eigene Fotos der Galerie** („Nur ich“ 
 **Server-Adresse** (Teil 7: unter 👤 Profil → Server änderbar, fest mit `EXPO_PUBLIC_API_URL`, Abgleich-Marken an die
 Kennung der Datenbank gebunden) – damit ist 9.2 fertig. Seit 16 Uhr gibt es das **Dockerfile** für den Server im
 Internet (9.3 Teil 1: Health-Check `/api/health/live`, Web-Version auf GitHub Pages per CORS voreingestellt, Dev-Login im
-Betrieb aus; `npm run docker:smoke`). Als Nächstes in 9.3 die Fotos in einem Objektspeicher (für Cloud-Dienste ohne
-dauerhafte Dateien), dann `docs/SERVER-HOSTING.md`. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+Betrieb aus; `npm run docker:smoke`), seit 17 Uhr den **Objektspeicher für Fotos** (9.3 Teil 2: Bucket mit
+S3-Schnittstelle über `S3_*`, z. B. bei Neon, Cloudflare R2, Backblaze B2 oder Supabase; Umzug mit `npm run
+photos:copy`). Als Nächstes in 9.3 `docs/SERVER-HOSTING.md`, dann die Sicherheitspunkte und „Neuere App, älterer
+Server“. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -223,10 +225,24 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   Zugangsdaten. Ohne Docker: `npm run build`, `npm run start:prod`. README „Server im Internet (Docker)“. 13
   Server-Tests (261); `npm run docker:smoke` baut das Image und prüft es als Container (healthy, nicht root, CORS,
   Dev-Login aus, ein Konto bleibt nach dem Ersetzen des Containers angemeldet, rasches Ende auf SIGTERM) – grün.
-- [ ] Fotos auf Cloud-Diensten ohne dauerhafte Dateien (z. B. Render gratis): eine zweite Fassung von `ImageStore`
+- [x] Fotos auf Cloud-Diensten ohne dauerhafte Dateien (z. B. Render gratis): eine zweite Fassung von `ImageStore`
   (`storage/images.ts`) für einen Objektspeicher mit S3-Schnittstelle – aktuelle Gratis-Angebote per Websuche prüfen
   (wo eine Kreditkarte verlangt wird, ehrlich sagen); ohne neue native Pakete, Tests ohne echten Dienst. In
   `SERVER-HOSTING.md`: beim Umzug des Servers den Ordner `data/photos/` mitnehmen bzw. in den Objektspeicher kopieren.
+  – erledigt 27.11.2026: `storage/objectStorage.ts` (`ObjectImageStore`) mit `S3_ENDPOINT`, `S3_BUCKET`,
+  `S3_ACCESS_KEY_ID` und `S3_SECRET_ACCESS_KEY`, dazu `S3_REGION` (bei R2, Backblaze, Neon und AWS aus der Adresse) und
+  `S3_PREFIX`. Ohne AWS-SDK und ohne neue Pakete: Signatur nach AWS Signature Version 4 selbst gerechnet
+  (`storage/sigv4.ts`, geprüft mit den vier Beispielen der AWS-Doku), Adressen im Pfad-Stil (Neon und Supabase können
+  nur den), bis zu zwei Wiederholungen bei Netzfehlern und HTTP 429/5xx. Beim Start eine Probe speichern, lesen und
+  löschen und ein fehlendes Foto lesen (403 statt 404 heißt: Schlüssel ohne Recht zum Auflisten); scheitert das,
+  startet der Server nicht und nennt die vermutlich falsche Variable, die Startmeldung zeigt Bucket und Adresse ohne
+  Schlüssel. Der Ordner prüft beim Start, ob er beschreibbar ist. Neu `ImageStore.list()` und `npm run photos:copy --
+  in-objektspeicher` bzw. `in-ordner` (kopiert nur Fehlendes, löscht nichts) – damit ist der Umzug der Fotos gelöst,
+  die Anleitung dazu kommt in `SERVER-HOSTING.md`. Gratis-Angebote mit „Kreditkarte ja/nein“ im README („Fotos im
+  Objektspeicher“): Neon 5 GB, Cloudflare R2 10 GB (Zahlungsmethode nötig), Backblaze B2 10 GB, Supabase 1 GB.
+  Datenschutz B1 mit Platzhalter für den Ort der Fotos. 21 Server-Tests (282) gegen einen nachgebauten Objektspeicher
+  über HTTP, der jede Signatur nachrechnet; zusätzlich gegen moto (Nachbau von S3 in Python, prüft Signaturen wie AWS)
+  und als Docker-Container geprüft, `npm run docker:smoke` grün.
 - [ ] `docs/SERVER-HOSTING.md` auf Deutsch, Schritt für Schritt, zwei kostenlose Wege mit ehrlichen Grenzen:
   (a) Laptop plus Cloudflare Tunnel (KI kostenlos über Ollama auf der GPU, aber nur erreichbar, solange der Laptop
   läuft); (b) kostenloser Cloud-Dienst mit kostenloser Postgres-Datenbank (aktuelle Gratis-Angebote per Websuche prüfen,
@@ -563,6 +579,19 @@ veröffentlichen, nur vorbereiten; einschalten und mergen macht Benjamin.
 Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Bedienbarkeit vor neuen Funktionen.
 
 ## Ideen und Erkenntnisse
+
+- **Datenbank vom Laptop zu Postgres umziehen:** Die Fotos zieht `npm run photos:copy` um, die Datenbank nichts. Wer vom
+  Laptop (SQLite) zu einem Server mit Neon wechselt, beginnt mit einer leeren Datenbank: Konten müssen neu registriert
+  werden (danach laden die Geräte Tagebuch, Plan, Rezepte und Fotos von selbst hoch, „Kennung der Datenbank“), Community,
+  Galerie und Sterne bleiben auf dem Laptop. Für `SERVER-HOSTING.md` (9.3): ehrlich so sagen oder ein `npm run db:copy`
+  (SQLite → Postgres mit denselben Tabellen und der Kennung). (27.11.2026)
+- **Objektspeicher mit echtem Anbieter ungeprüft:** Geprüft gegen den Nachbau in den Tests, gegen moto (prüft Signaturen
+  wie AWS) und im Container – mit Neon, R2, Backblaze oder Supabase selbst erst, wenn Benjamin dort einen Bucket anlegt
+  (9.5). Weicht ein Anbieter ab, zeigt es die Probe beim Start mit seinem Fehlercode. (27.11.2026)
+- **Fotos laufen über den Server:** Jedes Foto, das die App anzeigt, holt der Server einmal aus dem Bucket (danach
+  speichern App und Browser es lange zwischen). Bei Neon zählt das zum gemeinsamen Datentransfer von 5 GB im Monat. Wird
+  es eng: R2 (Abruf kostenlos) oder vorab signierte Adressen direkt zum Bucket – dann aber mit Ablaufzeit statt festem
+  Pfad, auch für „Nur ich“-Fotos. (27.11.2026)
 
 - **`CF-Connecting-IP` mit `TRUST_PROXY=1`:** `clientIp` (`http/rateLimit.ts`) traut zuerst diesem Header. Steht kein
   Cloudflare vor dem Server (Cloudflare Tunnel setzt ihn selbst), kann jede:r ihn mitschicken und so das Rate-Limit pro
