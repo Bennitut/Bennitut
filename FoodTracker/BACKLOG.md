@@ -14,7 +14,7 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 17 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 18 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
@@ -30,8 +30,10 @@ Kennung der Datenbank gebunden) – damit ist 9.2 fertig. Seit 16 Uhr gibt es da
 Internet (9.3 Teil 1: Health-Check `/api/health/live`, Web-Version auf GitHub Pages per CORS voreingestellt, Dev-Login im
 Betrieb aus; `npm run docker:smoke`), seit 17 Uhr den **Objektspeicher für Fotos** (9.3 Teil 2: Bucket mit
 S3-Schnittstelle über `S3_*`, z. B. bei Neon, Cloudflare R2, Backblaze B2 oder Supabase; Umzug mit `npm run
-photos:copy`). Als Nächstes in 9.3 `docs/SERVER-HOSTING.md`, dann die Sicherheitspunkte und „Neuere App, älterer
-Server“. Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
+photos:copy`), seit 18 Uhr die **Anleitung `docs/SERVER-HOSTING.md`** (9.3 Teil 3: Weg (a) Laptop mit Cloudflare
+Tunnel, Weg (b) Render mit Neon, „KI vom Laptop“ über die neue Weiterleitung `npm run ollama:relay` mit Schlüssel; kein
+Dev-Login über Tunnel oder Proxy). Als Nächstes in 9.3 die Sicherheitspunkte, dann „Neuere App, älterer Server“.
+Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
 1–7, Benjamins Entscheidungen vom 24.11. (PR-Grenze aufgehoben, Rezeptfotos geprüft, Vorrat Variante (b)), Expo SDK 58,
@@ -243,16 +245,33 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   Datenschutz B1 mit Platzhalter für den Ort der Fotos. 21 Server-Tests (282) gegen einen nachgebauten Objektspeicher
   über HTTP, der jede Signatur nachrechnet; zusätzlich gegen moto (Nachbau von S3 in Python, prüft Signaturen wie AWS)
   und als Docker-Container geprüft, `npm run docker:smoke` grün.
-- [ ] `docs/SERVER-HOSTING.md` auf Deutsch, Schritt für Schritt, zwei kostenlose Wege mit ehrlichen Grenzen:
+- [x] `docs/SERVER-HOSTING.md` auf Deutsch, Schritt für Schritt, zwei kostenlose Wege mit ehrlichen Grenzen:
   (a) Laptop plus Cloudflare Tunnel (KI kostenlos über Ollama auf der GPU, aber nur erreichbar, solange der Laptop
   läuft); (b) kostenloser Cloud-Dienst mit kostenloser Postgres-Datenbank (aktuelle Gratis-Angebote per Websuche prüfen,
   z. B. Render plus Neon; Schlafmodus, Speicher- und Rechenlimits, wo eine Kreditkarte verlangt wird). Ehrlich: Ohne GPU
   braucht die KI dort die Claude-API (kostet API-Geld) oder eine Weiterleitung an Ollama auf dem Laptop (`OLLAMA_URL` auf
   die Tunnel-Adresse, mit geheimem Schlüssel) – als Option vorsehen. Klar abgrenzen, was Benjamin selbst tun muss.
+  – erledigt 27.11.2026: Anleitung mit Vergleichstabelle, Schritten mit 👤 für das, was nur Benjamin tun kann, und
+  ehrlichen Grenzen (Stand laut den Seiten der Dienste): Quick Tunnel ohne Konto, aber neue Adresse bei jedem Start,
+  höchstens 200 Anfragen gleichzeitig, Cloudflare bricht nach 125 s ohne Antwort ab (524); feste Adresse mit eigener
+  Domain (kostet) oder Tailscale Funnel (gratis, Beta, ungeprüft). Render gratis ohne Zahlungsmethode: Schlaf nach
+  15 min (rund 1 min Aufwachen), 750 h im Monat, 512 MB, Dateien flüchtig, Mail-Ports 25/465/587 gesperrt (Ausweg Port
+  2525, z. B. Brevo); Neon gratis ohne Kreditkarte: 1 GB, 100 CU-Stunden, 5 GB Datentransfer zusammen mit den Fotos,
+  Schlaf nach 5 min. Dazu Umzug (ehrlich: Konten neu registrieren), Sichern (auch `pg_dump` und `photos:copy`), Kennung
+  nach einer älteren Sicherung löschen, Prüfliste und Kosten. „KI vom Laptop“: `npm run ollama:relay`
+  (`server/src/ai/relay.ts`, nur 127.0.0.1:11435, nur `GET /api/tags`, `GET /api/version`, `POST /api/chat`, Schlüssel
+  als Bearer-Token mit 256 Bit, beim ersten Start in `server/.env`), beim Server `OLLAMA_API_KEY` – nur über https bzw.
+  im eigenen Netz, sonst startet er nicht; abgelehnter Schlüssel in Startmeldung und `/api/health`. Dev-Login gibt es
+  über Tunnel oder Proxy nie (Header wie `CF-Connecting-IP`, `X-Forwarded-For`), auch mit `ALLOW_DEV_LOGIN=1`.
+  17 Server-Tests (299); Weiterleitung und Server mit richtigem und falschem Schlüssel von Hand gegen ein nachgebautes
+  Ollama geprüft.
 - [ ] Sicherheit: nur über HTTPS, Rate-Limits, Größenbegrenzung für Uploads, keine Geheimnisse im Repo, Logs ohne
-  Passwörter, Tokens oder E-Mail-Adressen (auch ohne `OLLAMA_URL` mit Schlüssel) und `TRUST_PROXY` ohne fälschbares
-  `CF-Connecting-IP` (beides unter „Ideen und Erkenntnisse“); Datenschutz-Entwurf um Konten, Speicherung,
-  Hosting-Anbieter und Reel-Import ergänzen. B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand
+  Passwörter, Tokens oder E-Mail-Adressen (`OLLAMA_URL` ist seit 27.11. erledigt: Schlüssel im Header, Adressen in
+  Meldungen ohne Pfad) und `TRUST_PROXY` ohne fälschbares `CF-Connecting-IP` (unter „Ideen und Erkenntnisse“; dabei
+  prüfen, welche Header Render und Tailscale Funnel setzen); Datenschutz-Entwurf um Konten, Speicherung,
+  Hosting-Anbieter und Reel-Import ergänzen – dazu B1 und B3 für die Wege aus `SERVER-HOSTING.md` (Cloudflare als
+  Tunnel bei Weg a und bei „KI vom Laptop“; KI dann auf dem Laptop des Betreibers statt „auf dem Server“, womöglich
+  „Fassung der Einwilligung erhöhen“). B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand
   (E-Mail und Passwort mit scrypt-Prüfwert, Code per Mail-Dienst, Sitzung im Schlüsselbund bzw. in localStorage,
   Übernahme der Gerätedaten beim Anmelden, Export und Löschen im Profil).
 
@@ -583,8 +602,26 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Datenbank vom Laptop zu Postgres umziehen:** Die Fotos zieht `npm run photos:copy` um, die Datenbank nichts. Wer vom
   Laptop (SQLite) zu einem Server mit Neon wechselt, beginnt mit einer leeren Datenbank: Konten müssen neu registriert
   werden (danach laden die Geräte Tagebuch, Plan, Rezepte und Fotos von selbst hoch, „Kennung der Datenbank“), Community,
-  Galerie und Sterne bleiben auf dem Laptop. Für `SERVER-HOSTING.md` (9.3): ehrlich so sagen oder ein `npm run db:copy`
-  (SQLite → Postgres mit denselben Tabellen und der Kennung). (27.11.2026)
+  Galerie und Sterne bleiben auf dem Laptop. Steht seit 27.11. so in `SERVER-HOSTING.md` („Wechsel und Umzug“); falls
+  Benjamin umziehen will, ohne neu zu registrieren: ein `npm run db:copy` (SQLite → Postgres mit denselben Tabellen und
+  der Kennung). (27.11.2026)
+- **KI-Aufträge ohne Tunnel:** Bei „KI vom Laptop“ (`SERVER-HOSTING.md`) ändert der Quick Tunnel bei jedem Start seine
+  Adresse (dann `OLLAMA_URL` bei Render neu eintragen), und Cloudflare bricht nach 125 Sekunden ohne Antwort ab. Robuster:
+  Der Laptop holt sich KI-Aufträge selbst beim Server ab (ausgehende Verbindung mit Schlüssel, wie ein Arbeiter) und
+  schickt das Ergebnis zurück – keine Adresse, kein Tunnel, keine Zeitgrenze. Passt zu den Hintergrundaufträgen mit
+  Statusabfrage, die der Video-Import (9.4) ohnehin braucht. (27.11.2026)
+- **„Passwort vergessen?“ auf Render gratis:** Render sperrt dort die Mail-Ports 25, 465 und 587, Gmail geht nicht.
+  `SERVER-HOSTING.md` nennt Port 2525 (z. B. Brevo) – ungeprüft, und der Server verlangt dort STARTTLS (`requireTLS`).
+  Sicherer Ausweg: Versand über die HTTP-Schnittstelle eines Mail-Dienstes als zweite Art von `Mailer`. (27.11.2026)
+- **KI-Fehlertexte nennen den Laptop:** „Läuft Ollama auf dem Server-Rechner?“ (`errors.ai_unavailable`) und „Anleitung
+  im README“ (`errors.ai_not_configured`) passen für Tester:innen eines Servers im Internet nicht. Vor 9.5 allgemeiner
+  formulieren (fünf Sprachen), z. B. „Die KI ist gerade nicht erreichbar. Bitte später noch einmal versuchen.“
+  (27.11.2026)
+- **Wege aus `SERVER-HOSTING.md` mit echten Diensten ungeprüft:** Weiterleitung, Schlüssel und Dev-Login-Sperre sind mit
+  Tests und einem nachgebauten Ollama geprüft; Cloudflare Tunnel, Tailscale Funnel, Render und Neon selbst erst, wenn
+  Benjamin dort einrichtet (9.5). Dabei prüfen: Sieht das Rate-Limit hinter Render und Tailscale Funnel die echten
+  Adressen? Kommen KI-Antworten über den Tunnel unter 125 Sekunden? Stimmen die Namen der Felder bei Render und Neon
+  noch? (27.11.2026)
 - **Objektspeicher mit echtem Anbieter ungeprüft:** Geprüft gegen den Nachbau in den Tests, gegen moto (prüft Signaturen
   wie AWS) und im Container – mit Neon, R2, Backblaze oder Supabase selbst erst, wenn Benjamin dort einen Bucket anlegt
   (9.5). Weicht ein Anbieter ab, zeigt es die Probe beim Start mit seinem Fehlercode. (27.11.2026)
@@ -597,10 +634,12 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Cloudflare vor dem Server (Cloudflare Tunnel setzt ihn selbst), kann jede:r ihn mitschicken und so das Rate-Limit pro
   IP-Adresse umgehen; das pro E-Mail-Adresse bleibt. Für 9.3 „Sicherheit“: z. B. `TRUST_PROXY=cloudflare` (nur dieser
   Header) getrennt von `TRUST_PROXY=1` (nur der letzte Eintrag in `X-Forwarded-For`). (27.11.2026)
-- **`OLLAMA_URL` in Warnungen:** Scheitert eine Anfrage an Ollama, schreibt der Server „Ollama unter <OLLAMA_URL> nicht
+- ✅ **`OLLAMA_URL` in Warnungen:** Scheitert eine Anfrage an Ollama, schreibt der Server „Ollama unter <OLLAMA_URL> nicht
   erreichbar“ ins Protokoll (`ai/ollama.ts`, `ai/provider.ts`). Steht in der Adresse ein Schlüssel (Weiterleitung an
   Ollama auf dem Laptop, 9.3), landete er im Protokoll des Hosters. Die Startmeldung kürzt die Adresse schon
-  (`displayUrl` in `startInfo.ts`); in 9.3 „Sicherheit“ auch dort. (27.11.2026)
+  (`displayUrl` in `startInfo.ts`); in 9.3 „Sicherheit“ auch dort. (27.11.2026) Erledigt 27.11.2026 mit 9.3 Teil 3: Der
+  Schlüssel steht in `OLLAMA_API_KEY` und geht im Header mit; eine `OLLAMA_URL` mit Zugangsdaten lässt den Server nicht
+  starten (fetch schickte sie ohnehin nicht), alle Meldungen zeigen die Adresse ohne Pfad und Parameter (`src/urls.ts`).
 - **ffmpeg im Docker-Image (für 9.4):** Der Import hochgeladener Videos braucht ffmpeg – dann im Dockerfile
   `apt-get install --no-install-recommends ffmpeg` (das Image wird deutlich größer) und `npm run docker:smoke` um einen
   Import mit Testvideo ergänzen. (27.11.2026)
@@ -613,14 +652,17 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   Cloudflare Tunnel), wird abgemeldet und meldet sich neu an; ohne Konto gilt unter der eingetragenen Adresse eine
   eigene Geräte-ID (die Sicherung des Tagebuchs liegt dann zweimal auf dem Server). Bewusst so: Ein Server kann nicht
   beweisen, dass er derselbe ist (die Kennung der Datenbank kann jeder abfragen), und Token bzw. Geräte-ID sollen nie an
-  einen fremden gehen. Falls es stört: Sitzungen je Adresse merken, statt abzumelden. (27.11.2026)
-- **Was nur der alte Server kennt:** Nach einem Wechsel des Servers zeigen geteilte Rezepte (Community-ID), öffentliche
+  einen fremden gehen. Falls es stört: Sitzungen je Adresse merken, statt abzumelden. Mit einem Quick Tunnel (neue
+  Adresse bei jedem Start, `SERVER-HOSTING.md`) heißt das: nach jedem Neustart des Tunnels neu anmelden. (27.11.2026)
+- ✅ **Was nur der alte Server kennt:** Nach einem Wechsel des Servers zeigen geteilte Rezepte (Community-ID), öffentliche
   Fotos der Galerie und Sterne noch auf den alten; mit Konto kommen eigene Rezepte und Fotos beim Abgleich mit,
   Community, Galerie und Sterne nicht (die liegen in den Tabellen des alten Servers). Beim Umzug deshalb Datenbank und
-  `data/photos/` mitnehmen – für `SERVER-HOSTING.md` (9.3). (27.11.2026)
-- **Ältere Sicherung einspielen:** Behält die Kennung der Datenbank, die Revisionen gehen aber zurück – Geräten, die
+  `data/photos/` mitnehmen – für `SERVER-HOSTING.md` (9.3). (27.11.2026) Erledigt 27.11.2026: steht so in
+  `SERVER-HOSTING.md` unter „Wechsel und Umzug“.
+- ✅ **Ältere Sicherung einspielen:** Behält die Kennung der Datenbank, die Revisionen gehen aber zurück – Geräten, die
   schon weiter waren, fehlte dann ein Teil. Deshalb nach dem Einspielen die Kennung löschen (`DELETE FROM storage_meta
   WHERE key = 'database_id'`, steht im README unter „Datenbank“); in `SERVER-HOSTING.md` aufnehmen (9.3). (27.11.2026)
+  Erledigt 27.11.2026: in `SERVER-HOSTING.md` unter „Sichern“.
 - **„Bald verfügbar“ kennt die Server-Adresse nicht:** In der Web-Version ohne Server sagen die Hinweise „kommt bald“,
   obwohl man jetzt unter 👤 Profil → Server einen eintragen kann. Für Tester passt das (sie bekommen eine Web-Version mit
   fester Adresse); falls nötig, im Hinweis auf Profil → Server verweisen. (27.11.2026)
