@@ -14,7 +14,7 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 7 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 11 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
@@ -24,7 +24,8 @@ Abgleich), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und Admin-Änd
 im Bildspeicher (`data/photos/`). Seit 27.11., 6 Uhr gleicht die App mit Konto auch **Plan mit Einkaufsliste, Vorrat und
 Essgewohnheiten** zwischen den Geräten ab (9.2 Teil 4), seit 7 Uhr auch **eigene und importierte Rezepte mit Fotos,
 Favoriten und Rezepttexte** (Teil 5; die Fotos legt der Server in den Bildspeicher des Kontos, auf dem Gerät bleiben sie
-offline sichtbar). Als Nächstes 9.2 Teil 6: eigene Fotos der Galerie mit „Nur ich“, dann die Server-Adresse. Danach
+offline sichtbar), seit 11 Uhr auch **eigene Fotos der Galerie** („Nur ich“ und öffentliche, Teil 6). Als Nächstes 9.2
+Teil 7: die Server-Adresse (`EXPO_PUBLIC_API_URL`, im Profil änderbar), damit ist 9.2 fertig; dann 9.3. Danach
 Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
@@ -170,13 +171,24 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   mit `Cache-Control: private`; Datenschutz B7. „Vorher verkleinern“: Fotos verkleinert die App schon beim Aufnehmen
   (800 px), Vorschaubilder von Importen siehe „Ideen und Erkenntnisse“. 8 Server-Tests (234), 10 App-Tests (210),
   `npm run web:account` mit einer Kopie samt eigenem Foto und einem Favoriten in einem frischen Browser.
-- [ ] Eigene Fotos der Galerie (`myPhotos`) abgleichen (Teil 6): private („Nur ich“) mit dem Foto im Bildspeicher wie
+- [x] Eigene Fotos der Galerie (`myPhotos`) abgleichen (Teil 6): private („Nur ich“) mit dem Foto im Bildspeicher wie
   bei eigenen Rezepten (`prepare`, eigene Datei je Eintrag, offline sichtbar mit `server`), öffentliche nur als Eintrag
   mit `remoteId` (das Foto liegt schon in der Galerie) – dann kann man ein eigenes öffentliches Foto auch auf einem
   anderen Gerät löschen. Im Rezept und in `imageFor` ein eigenes Foto ohne Datei auf dem Gerät über die Galerie bzw. den
-  Pfad zeigen.
-- [ ] Server-Adresse: `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie bisher der
-  Laptop im WLAN. Dabei die Abgleich-Marken an die Datenbank binden (unter „Ideen und Erkenntnisse“: „Neuer Server,
+  Pfad zeigen. – erledigt 27.11.2026: Art `photos` in `POST /api/sync` (je Foto `{ recipeId, createdAt, public,
+  remoteId?, uri? }`, höchstens 2000). Private wie Fotos eigener Rezepte (gemeinsame Stelle `storeImage`: data-URI
+  einmal, dann Pfad, eigene Datei je Eintrag, Kopie bei fremdem Pfad). Von öffentlichen schickt die App nur `remoteId`;
+  der Server schlägt das Foto vor der Transaktion in der Galerie nach (`FeedbackStore.galleryPhotos`) und trägt deren
+  Pfad ein, wenn es dort zum selben Rezept gehört – eigene Datei keine, die der Galerie löscht er nie (gehört ihr).
+  „Öffentlich machen“ löscht die private Datei. App: `lib/dataSync.ts` (`photoRecord` nur aus einfachen Werten, damit
+  große Fotos nicht als JSON verglichen werden; `readPhoto`/`mergePhoto` wie bei Rezepten: auf dem aufnehmenden Gerät
+  bleibt die data-URI, daneben `server`; ohne Bild vom Server erscheint ein neues Foto nicht). `imageFor` und die
+  Galerie zeigen Pfade über `imageUrl` (ohne Server ein Platzhalter bzw. das nächste Bild); „Öffentlich machen“ nur, wo
+  das Foto liegt (Ideen). Export mit `myPhotos` (private als data-URI), „Konto löschen“ samt Dateien, Datenschutz B7,
+  Abgleich-Zeile im Profil nennt die Fotos (fünf Sprachen). 7 Server-Tests (241, SQLite und pg-mem), 5 App-Tests
+  (215, gegen den echten Abgleich), `npm run web:account` mit einem „Nur ich“-Foto im frischen Browser.
+- [ ] Server-Adresse (Teil 7): `EXPO_PUBLIC_API_URL` beim Start bzw. Bauen, dazu im Profil änderbar; ohne Angabe wie
+  bisher der Laptop im WLAN. Dabei die Abgleich-Marken an die Datenbank binden (unter „Ideen und Erkenntnisse“: „Neuer Server,
   alte Abgleich-Marken“).
 
 **9.3 Bereit fürs Internet (vorbereiten, nicht deployen)**
@@ -519,6 +531,20 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
+- **Neuere App, älterer Server:** Kennt der Server eine Art des Abgleichs nicht (z. B. `photos` mit einem noch laufenden
+  älteren Server-Fenster), lehnt er die ganze Anfrage mit 400 ab (`UserDataSyncBody` ist `strict`) – dann gleicht gar
+  nichts ab, die App versucht es jede Minute. Nur den Server nachsichtig zu machen, reicht nicht: Die App zählt eine Art
+  ohne Antwort als „nicht abgeglichen“ und finge sofort wieder an (`syncedWith` bliebe falsch). Vor dem Server im
+  Internet (9.3) beides zusammen: Server übergeht unbekannte Arten, die App merkt sich je Sitzung, welche Arten der
+  Server kennt, und wartet bei den anderen. Bis dahin: Server-Fenster schließen, bevor `start-test.cmd` neu startet.
+  (27.11.2026)
+- **Privates Foto der Galerie nur am aufnehmenden Gerät öffentlich machen:** Auf anderen Geräten des Kontos liegt nur der
+  Pfad, `POST /api/recipes/:id/photos` will eine data-URI – deshalb fehlt dort „Öffentlich machen“. Lösung: Der Server
+  nimmt auch den Pfad eines eigenen Fotos (Eintrag `photos` des Kontos mit diesem Schlüssel) und legt eine Kopie in die
+  Galerie. (27.11.2026)
+- **Admin löscht ein öffentliches Foto:** Der Eintrag `photos` des Kontos zeigt dann noch auf die gelöschte Datei – auf
+  den anderen Geräten bleibt ein leeres Bild (auf dem aufnehmenden das Foto), bis man es dort löscht. Beim Löschen durch
+  einen Admin auch die Einträge der Konten anpassen oder in der App fehlende Galerie-Fotos ausblenden. (27.11.2026)
 - ✅ **Test der Meldungen manchmal rot:** „übernimmt beim Anmelden Fotos, Sterne und Meldungen des Geräts“ schlug
   zufällig fehl – zwei Meldungen in derselben Millisekunde hatten denselben Zeitpunkt, dann entschied die zufällige ID.
   (27.11.2026) Erledigt 27.11.2026: `server/src/storage/clock.ts` vergibt streng steigende Zeitpunkte für neue Zeilen.
