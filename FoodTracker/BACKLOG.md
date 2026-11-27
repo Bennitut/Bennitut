@@ -14,7 +14,7 @@ heißt hier immer „✅ … erledigt TT.MM.JJJJ“, neue Punkte unter „Ideen 
 Der Nachtschicht-PR hat keine Größengrenze mehr (Benjamins Entscheidung vom 24.11.2026): Neue Funktionen kommen in den
 offenen PR, Benjamin mergt, wann er Zeit hat. Die PR-Beschreibung trotzdem kurz halten.
 
-**Stand 27.11.2026, 18 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
+**Stand 27.11.2026, 22 Uhr:** Seit Benjamins Wunsch vom 24.11.2026, 23:22 Uhr, ist der **Server im Internet mit
 Konten, dauerhafter Speicherung und Reel-Import Vorrang 1** (Abschnitt gleich unten): pro Lauf ein abgeschlossener, grüner
 Teilschritt in der Reihenfolge 9.1 bis 9.5. 9.1 ist seit 26.11. fertig (Konten mit E-Mail und Passwort in Server und App,
 Übernahme der Gerätedaten beim Anmelden, Einwilligung vor der ersten KI-Funktion mit Eltern-Hinweis, kein Mindestalter).
@@ -34,9 +34,10 @@ photos:copy`), seit 18 Uhr die **Anleitung `docs/SERVER-HOSTING.md`** (9.3 Teil 
 Tunnel, Weg (b) Render mit Neon, „KI vom Laptop“ über die neue Weiterleitung `npm run ollama:relay` mit Schlüssel; kein
 Dev-Login über Tunnel oder Proxy), seit 21 Uhr die **Sicherheit im Server** (9.3 Teil 4: nur über https,
 Rate-Limits für alle Anfragen, KI und Uploads, Größengrenzen je Schnittstelle, Protokolle ohne Geheimnisse,
-`TRUST_PROXY=cloudflare`; die App nimmt kein `http://` ins Internet mehr an). Als Nächstes in 9.3 der
-Datenschutz-Entwurf für Konten, Speicherung, Hosting-Anbieter und die Wege aus `SERVER-HOSTING.md`, dann „Neuere App,
-älterer Server“.
+`TRUST_PROXY=cloudflare`; die App nimmt kein `http://` ins Internet mehr an), seit 22 Uhr **Teil B der
+Datenschutzerklärung für beide Wege** (9.3 Teil 5: `BETRIEB` in `app/src/legal/angaben.ts` wählt Weg a oder b und die
+KI, Texte zu Cloudflare, Render, Neon und Anthropic nach deren Verträgen; Einwilligung in Fassung 2 mit „KI vom
+Laptop“). Als Nächstes in 9.3 „Neuere App, älterer Server“, dann der Reel-Import (9.4).
 Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
@@ -290,12 +291,26 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   Tailscale nicht (vermutlich `1`, ungeprüft). **Repository**: `.gitignore` mit `.env.*` und Datenbanken,
   `test/repoSecrets.test.ts` prüft alle eingecheckten Dateien. Datenschutz B1 um die Zähler ergänzt. 29 Server-Tests
   (328), 1 App-Test (233), Web-Rauchtest und `npm run web:account` grün, übersetzter Server von Hand geprüft.
-- [ ] Datenschutz-Entwurf um Konten, Speicherung, Hosting-Anbieter und Reel-Import ergänzen – dazu B1 und B3 für die
+- [x] Datenschutz-Entwurf um Konten, Speicherung, Hosting-Anbieter und Reel-Import ergänzen – dazu B1 und B3 für die
   Wege aus `SERVER-HOSTING.md` (Cloudflare als Tunnel bei Weg a und bei „KI vom Laptop“; KI dann auf dem Laptop des
   Betreibers statt „auf dem Server“, womöglich „Fassung der Einwilligung erhöhen“). B2 („Konto“) in
   `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand (E-Mail und Passwort mit
   scrypt-Prüfwert, Code per Mail-Dienst, Sitzung im Schlüsselbund bzw. in localStorage, Übernahme der Gerätedaten beim
-  Anmelden, Export und Löschen im Profil), B1 nennt seit 27.11.2026 die Zähler gegen Missbrauch.
+  Anmelden, Export und Löschen im Profil), B1 nennt seit 27.11.2026 die Zähler gegen Missbrauch. – erledigt
+  27.11.2026: Neu in `app/src/legal/angaben.ts` `BETRIEB` (keine persönlichen Angaben): `weg` „a“ (Laptop mit
+  Cloudflare Tunnel) oder „b“ (Render mit Neon), `ki` „claude“, „ollama“, „ollama-laptop“ (KI vom Laptop, nur Weg b)
+  oder „keine“; leer = `[[ENTSCHEIDUNG]]`, Teil B bleibt Entwurf. Danach richten sich „Kurz gesagt“ mit Server
+  (Sicherung, Abgleich, Einwilligung, Betrieb – der alte Prüfpunkt dazu ist weg), B1 und B3 in `texte.ts`;
+  `docs/recht/datenschutz.md` zeigt beide Wege und alle KI-Varianten, ein Test hält die Absätze gleich. Angaben laut
+  den Seiten der Dienste (abgerufen am 27.11.2026, Quellen in `docs/recht/README.md`): Cloudflare (DPA Fassung 6.4,
+  Data Privacy Framework und Standardvertragsklauseln; https endet bei Cloudflare), Render (DPA Teil der
+  Nutzungsbedingungen, Verarbeitung „hauptsächlich in den USA“, zertifiziert seit 06.01.2025), Neon (inzwischen
+  Verträge der Databricks, Inc.), Anthropic (im EWR die Anthropic Ireland, Limited; DPA Teil der Commercial Terms,
+  Standardvertragsklauseln, kein Training) – damit ist der Prüfpunkt zu Anthropic erledigt. Neue `[[PRÜFEN]]`: Vertrag
+  mit Cloudflare (nur mit Konto, ein Quick Tunnel ist laut Cloudflare nur zum Testen), Vertrag und
+  Unterauftragsverarbeiter bei Neon bzw. Databricks, Protokolle bei Render. Einwilligung in **Fassung 2** (App und
+  Server): Der Dialog nennt „KI vom Laptop“ als dritte Möglichkeit (fünf Sprachen), die App fragt einmal neu. Der
+  Reel-Import kommt mit 9.4 in B3 (dort schon vorgesehen). 10 App-Tests (243), `npm run web:account` mit Fassung 2 grün.
 
 - [ ] Abgleich über verschiedene Fassungen von App und Server (unter „Ideen und Erkenntnisse“: „Neuere App, älterer
   Server“ – dort steht, dass es vor dem Server im Internet erledigt sein soll): Der Server übergeht unbekannte Arten,
@@ -1045,7 +1060,12 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Fassung der Einwilligung erhöhen:** Ändert sich, was an wen geht (z. B. ein neuer KI-Anbieter, der Reel-Import aus
   9.4 mit Ton und Standbildern), `AI_CONSENT_VERSION` in `app/src/lib/aiConsent.ts` und `server/src/ai/consent.ts`
   gemeinsam erhöhen und die Texte im Dialog (`aiConsent.*`, fünf Sprachen) und in B3 anpassen – dann fragt die App neu.
-  Eine ältere App bekommt vom Server dann 403 mit „Bitte FoodTracker neu laden bzw. aktualisieren“. (26.11.2026)
+  Eine ältere App bekommt vom Server dann 403 mit „Bitte FoodTracker neu laden bzw. aktualisieren“. Am 27.11.2026 auf 2
+  erhöht („KI vom Laptop“ als dritte Möglichkeit im Dialog); der Reel-Import (9.4) erhöht auf 3. (26.11.2026)
+- **Datenschutzerklärung passt zum Server?** `BETRIEB.ki` in `app/src/legal/angaben.ts` bestimmt, welche KI die
+  Datenschutzerklärung nennt; welche der Server wirklich nutzt, meldet `/api/health`. Weichen beide ab (z. B. „claude“
+  eingetragen, der Server läuft mit Ollama), könnte die App im Bildschirm „Impressum & Datenschutz“ einen Hinweis für den
+  Betreiber zeigen. (27.11.2026)
 - **„Passwort vergessen?“ braucht einen Mail-Dienst:** Ohne `SMTP_HOST` und `SMTP_FROM` in `server/.env` gibt es keinen
   Code per E-Mail, die App blendet den Knopf dann aus (seit dem App-Teil von 9.1). Wer dann sein Passwort vergisst,
   kommt nicht mehr ins Konto – ein Admin kann kein Passwort setzen. Kostenlos geht es z. B. mit Gmail und einem
