@@ -186,8 +186,8 @@ Datenbank (Konten, Sitzungen, Sicherungen und Abgleich, Community) und die Fotos
 eigene Rezepte) liegen bei Neon (Neon, LLC, ein Unternehmen der Databricks, Inc., USA), ebenfalls in der Region
 Frankfurt am Main. Beide verarbeiten die Daten in meinem Auftrag (Art. 28 DSGVO).
 
-Mit Render gilt dessen [Auftragsverarbeitungsvertrag](https://render.com/dpa) (Stand 19. Dezember 2024) als Teil der
-Nutzungsbedingungen. Laut diesem Vertrag verarbeitet Render Daten hauptsächlich in den USA; Übermittlungen dorthin
+Mit Render gilt dessen [Auftragsverarbeitungsvertrag](https://render.com/dpa) (Stand 19. Dezember 2024) als
+Ergänzung der Nutzungsbedingungen. Laut diesem Vertrag verarbeitet Render Daten hauptsächlich in den USA; Übermittlungen dorthin
 stützt Render auf das EU-U.S. Data Privacy Framework (Render ist seit 6. Jänner 2025 zertifiziert), andernfalls auf die
 Standardvertragsklauseln der EU-Kommission.
 
@@ -290,7 +290,7 @@ Dublin 4, D04 TR29, Irland (laut den Commercial Terms von Anthropic für Kund:in
 Stand 17. Juni 2025). Sie verarbeitet die Daten als Auftragsverarbeiter nach dem
 [Auftragsverarbeitungsvertrag von Anthropic](https://www.anthropic.com/legal/data-processing-addendum) (Stand
 24. Februar 2025), der Teil dieser Bedingungen ist, und darf sie laut den Bedingungen nicht zum Training ihrer Modelle
-verwenden. Dabei können Daten auch in den USA verarbeitet werden (bei Anthropic, PBC oder Unterauftragsverarbeitern);
+verwenden. Dabei können Daten auch in den USA verarbeitet werden (bei Unterauftragsverarbeitern von Anthropic);
 dafür sieht der Vertrag die Standardvertragsklauseln der EU-Kommission vor. Laut Anthropic (Stand 1. Juli 2026) werden
 Eingaben und Ausgaben über die API nach spätestens 30 Tagen gelöscht – außer z. B. bei Verstößen gegen die
 Nutzungsrichtlinien oder wenn das Gesetz eine längere Speicherung verlangt. Fotos für die Erkennung speichert der
