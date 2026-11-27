@@ -102,7 +102,8 @@ export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN):
           "Aktivität), Personen, Mahlzeiten, Kochzeit, Lieblingsküchen, Budget und Abwechslung,",
         "- Monatsplan, Einkaufsliste mit Abgehaktem, Vorrat und Tagebuch (gegessene Mahlzeiten mit Nährwerten),",
         "- eigene Rezepte und Fotos, Favoriten, Sprache, Region und einen selbst gewählten Anzeigenamen,",
-        "- eine zufällig erzeugte Geräte-Kennung (ohne Server wird sie nirgendwohin geschickt) und",
+        "- eine zufällig erzeugte Geräte-Kennung (ohne Server wird sie nirgendwohin geschickt), eine unter Profil → " +
+          "Server eingetragene Server-Adresse mit einer eigenen Geräte-Kennung je Adresse und",
         "- in der Web-Version, ob du den Hinweis „Als App nutzen“ mit „Später“ ausgeblendet hast.",
         "Im Profil kannst du deine Ernährungshistorie als Datei speichern („Als Tabelle (CSV)“ oder „Als Sicherung " +
           "(JSON)“) und eine solche Sicherung wieder importieren. Die Datei landet dort, wo du sie speicherst oder hin " +
@@ -234,6 +235,12 @@ function partB(): LegalSection[] {
         "Für den Monatsplan mit Wünschen schickt FoodTracker deine Planungsangaben an den Server (Ernährungsweise, " +
           "Unverträglichkeiten, Speiseregeln, Abneigungen, Kalorien pro Person, Mahlzeiten, Vorrat, Favoriten); der " +
           "Server rechnet den Plan und speichert diese Angaben nicht.",
+        "Unter 👤 Profil → Server kannst du eine andere Server-Adresse eintragen. Dann gehen die Daten aus Teil B an den " +
+          "Server unter dieser Adresse; verantwortlich dafür ist, wer ihn betreibt – diese Datenschutzerklärung gilt " +
+          "dafür nicht. Vor dem Wechsel fragt FoodTracker dort nur, ob ein FoodTracker-Server antwortet (ohne " +
+          "Geräte-Kennung und ohne Anmeldung). Beim Wechsel meldet dich FoodTracker ab und nutzt dort eine eigene " +
+          "Geräte-Kennung, damit der andere Server die für diesen Server nicht erfährt. Die eingetragene Adresse bleibt " +
+          "auf deinem Gerät.",
       ],
     },
     {

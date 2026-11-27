@@ -45,7 +45,7 @@ Kreislauf: **Plan → Einkaufsliste → Abhaken oder Bestellung → Vorrat → K
 FoodTracker/
 ├── app/      Expo / React Native App (iOS, Android und Web, TypeScript, Expo Router)
 │   ├── src/app/(tabs)/   Heute, Erfassen, Plan, Rezepte, Vorrat, Einkauf
-│   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region
+│   ├── src/app/          Profil, Fragebogen (onboarding), Sprache & Region, Server (Adresse eintragen)
 │   ├── src/app/recipe/   Rezept-Detail, Editor, Import
 │   ├── src/i18n/         Übersetzungen (de, en, fr, it, es)
 │   ├── src/legal/        Impressum und Datenschutzerklärung: angaben.ts (eigene Angaben, nur hier eintragen), texte.ts
@@ -148,8 +148,38 @@ npx expo start
 Optional für Instagram: `META_OEMBED_TOKEN` (APP_ID|CLIENT_TOKEN einer Meta-App) in `server/.env`.
 
 QR-Code mit der Kamera (iOS) bzw. Expo Go (Android) scannen. Handy und Rechner müssen im selben WLAN sein.
-Die App findet den Server automatisch (gleicher Rechner, Port 3000). Für einen anderen Server:
-`EXPO_PUBLIC_API_URL=http://<adresse>:3000 npx expo start`.
+Die App findet den Server automatisch (gleicher Rechner, Port 3000); einen anderen nennt man ihr wie unter
+„Server-Adresse“ beschrieben.
+
+### Server-Adresse
+
+Mit welchem Server die App spricht, steht unter 👤 Profil → **🖥️ Server**. Reihenfolge:
+
+1. **Im Profil eingetragen:** Adresse eingeben (z. B. `https://foodtracker.onrender.com` oder `192.168.1.20:3000` –
+   ohne `http://` nimmt die App für Adressen im eigenen Netz http, sonst https; eine kopierte Test-Adresse
+   `…/api/health` wird gekürzt), **„Prüfen und verwenden“**. Geprüft wird mit `GET /api/health` ohne Geräte-ID und
+   ohne Anmeldung; antwortet dort kein FoodTracker-Server (Gratis-Server schlafen manchmal bis zu einer Minute), bietet
+   die App „Trotzdem verwenden“ an. „Zurück zur Standard-Adresse“ nimmt den Eintrag wieder heraus. Gespeichert wird
+   die Adresse auf dem Gerät unter einem eigenen Schlüssel – nie im Abgleich mit dem Konto.
+2. **`EXPO_PUBLIC_API_URL` beim Start bzw. Bauen:** am einfachsten eine Datei `app/.env.local` mit der Zeile
+   `EXPO_PUBLIC_API_URL=https://foodtracker.onrender.com` (Expo liest sie bei `npx expo start` und `npx expo export`;
+   `.env*.local` wird nicht eingecheckt) oder in PowerShell `$env:EXPO_PUBLIC_API_URL="https://…"; npx expo start
+   --clear` bzw. in bash `EXPO_PUBLIC_API_URL=https://… npx expo start --clear`. Nach einer Änderung mit `--clear`
+   starten, sonst nimmt Metro den alten Wert aus dem Zwischenspeicher. `EXPO_PUBLIC_API_URL=off` heißt „ohne Server“
+   (so sieht man den Offline-Modus auch in Expo Go).
+3. **Sonst** beim Entwickeln der Rechner, auf dem Expo läuft (Port 3000; der Laptop im WLAN), in der exportierten
+   Web-Version keiner.
+
+Für die Web-Version auf GitHub Pages: im Repository unter Settings → Secrets and variables → Actions → **Variables**
+die Variable `FOODTRACKER_API_URL` mit der Adresse des Servers anlegen – der Pages-Workflow baut dann mit
+`EXPO_PUBLIC_API_URL`. Der Server braucht dafür https und `CORS_ORIGINS=https://bennitut.github.io` (eine Seite über
+https darf keinen Server ohne https fragen; die App sagt das auch, wenn man so eine Adresse einträgt).
+
+Beim Wechsel meldet die App beim bisherigen Server ab (das Token gehört ihm und geht nie an einen anderen Server) und
+nutzt beim neuen eine eigene Geräte-ID – ein anderer Server erfährt so nie die Geräte-ID, mit der das Gerät beim
+Standard-Server ohne Konto seine Daten verwaltet; beim Zurückwechseln gilt die alte wieder. Tagebuch, Plan, Vorrat und
+Rezepte bleiben auf dem Gerät und gleichen sich mit dem neuen Server ab (mit Konto nach dem Anmelden dort). Hat der
+Server eine andere Datenbank als beim letzten Abgleich, gleicht die App von vorn ab (siehe „Datenbank“, Kennung).
 
 **Ohne Server** funktionieren Rezepte, Ernährungsplan, Tauschen/Fixieren, Vorrat und Tagebuch trotzdem:
 Katalog und Zero-Waste-Planer sind in die App eingebaut. Den Server braucht man nur für Foto-/Bon-Erkennung,
@@ -216,7 +246,11 @@ den echten Abgleich des Servers mit derselben Prüfung der Anfrage) und von eige
 Foto auf einem anderen Gerät → das neue gilt, Kopie eines geteilten Rezepts bekommt ein eigenes Foto, erneuter erster
 Abgleich ohne doppelte Dateien, große Fotos auf mehrere Anfragen verteilt) und von eigenen Fotos der Galerie („Nur ich“
 mit Foto bzw. Pfad, öffentliche nur mit der ID in der Galerie, öffentlich machen und löschen auf einem Gerät kommt auf dem
-anderen an, Fotos ohne Bild vom Server werden nicht gezeigt).
+anderen an, Fotos ohne Bild vom Server werden nicht gezeigt) sowie die Kennung der Datenbank (Umzug des Servers auf eine
+leere Datenbank: von vorn, danach fehlt dort nichts – auch die Fotos eigener Rezepte nicht; Marken einer älteren Fassung
+einmal von vorn; ein älterer Server ohne Kennung bekommt weiter nur Neues) und die Server-Adresse (Standard aus
+`EXPO_PUBLIC_API_URL` bzw. dem Rechner mit Expo, „off“, Eingaben prüfen und vereinheitlichen, kein http aus einer
+https-Seite, eigene Geräte-ID je Server, Anmeldung nur beim Server, bei dem sie entstand).
 Die Server-Tests (`server/test/`, Vitest) prüfen unter anderem die Speicherschicht mit SQLite und mit Postgres (pg-mem,
 eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig: Migrationen, Konten und Sitzungen,
 gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und
@@ -251,7 +285,10 @@ Daten exportieren“ (mit Tagebuch) und Konto löschen (danach ist auch das Tage
 gebuchte Zeilen, die in einem frischen Browser (Hinweis „Anmelden“ im Plan) mit dem Konto zurückkommen, und eine dort
 abgehakte Zeile, die im ersten Browser ankommt; danach die Einwilligung vor der KI („Nicht jetzt“ schickt nichts, „Einverstanden“
 schickt mit Einwilligung, danach keine Frage mehr, der Server lehnt Anfragen ohne ab, Widerruf im Profil, Abschnitt
-„Mindestalter“ in der Datenschutzerklärung).
+„Mindestalter“ in der Datenschutzerklärung) und zuletzt Profil → Server mit einem zweiten Test-Server (leere
+Datenbank): falsche Adresse, Adresse ohne Server („Trotzdem verwenden“), Wechsel – abgemeldet auch beim bisherigen
+Server, eigene Geräte-ID, das Tagebuch kommt beim neuen an; dann zieht dieser Server auf eine leere Datenbank um und die
+App gleicht von vorn ab; zurück zur Standard-Adresse gilt die alte Geräte-ID.
 Offene Aufgaben und Ideen stehen in [BACKLOG.md](BACKLOG.md).
 
 ## Wie der Zero-Waste-Planer arbeitet
@@ -399,6 +436,16 @@ Favoriten, Rezepttexte und eigene Fotos der Galerie – nur die Fotos selbst nic
   (Admin-Änderungen): mit denselben IDs, die Fotos daraus als Dateien in den Bildspeicher; was die Datenbank schon
   hat, bleibt; eine unlesbare Datei bleibt liegen (anderer Ort mit `COMMUNITY_FILE`, `FEEDBACK_FILE`,
   `OVERRIDES_FILE`).
+- **Kennung der Datenbank:** Beim ersten Abgleich legt der Server in `storage_meta` eine zufällige Kennung an
+  (`database_id`, `src/storage/identity.ts`) und nennt sie in jeder Antwort von `/api/diary/sync` und `/api/sync`. Die
+  App merkt sie sich mit ihren Abgleich-Marken und schickt sie mit. Passt sie nicht – der Server ist auf eine neue,
+  leere Datenbank umgezogen (z. B. vom Laptop zu Render mit Neon) oder die App hat eine andere Adresse –, übernimmt der
+  Server nichts und antwortet mit `reset`; die App gleicht dann von vorn ab: alles hoch (eigene Fotos als Bild, nicht
+  als Pfad), alles zurück. Ohne Kennung schickten Geräte, die schon abgeglichen hatten, nur noch ihre neuen Änderungen,
+  und die neue Datenbank hätte nur einen Teil der Daten. Eine kopierte Datenbank behält die Kennung (die Revisionen
+  stimmen dann auch). Wer eine **ältere Sicherung** einspielt, löscht die Kennung, damit alle Geräte einmal von vorn
+  abgleichen: bei Postgres `DELETE FROM storage_meta WHERE key = 'database_id';`, bei der SQLite-Datei dasselbe mit
+  einem SQLite-Werkzeug (der Server legt beim nächsten Abgleich eine neue an).
 - **Grenze:** Eine SQLite-Datei gehört genau einem laufenden Server.
 
 ## Instagram und TikTok
