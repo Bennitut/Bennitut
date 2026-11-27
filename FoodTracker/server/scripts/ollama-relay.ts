@@ -68,7 +68,7 @@ const server = serve({ fetch: app.fetch, port, hostname: "127.0.0.1" }, async ()
       "  Beim Server im Internet (z. B. Render → Environment) eintragen:",
       "    OLLAMA_URL      = die https-Adresse, die cloudflared anzeigt",
       "    OLLAMA_API_KEY  = der Schlüssel (OLLAMA_RELAY_KEY)",
-      "  Beenden mit Strg+C – dann meldet der Server im Internet „KI nicht erreichbar“, alles andere geht weiter.",
+      "  Beenden mit Strg+C – dann meldet die App bei KI-Funktionen „Die KI ist gerade nicht erreichbar“, alles andere geht.",
       "",
     ].join("\n"),
   );

@@ -155,8 +155,8 @@ Die App findet den Server automatisch (gleicher Rechner, Port 3000); einen ander
 
 Für einen Server, den auch andere erreichen, liegt in `server/` ein **Dockerfile**: Node.js 26 mit dem fertig
 übersetzten JavaScript (`npm run build` → `dist/`), ohne Quelltext und Werkzeuge zum Bauen, läuft nicht als root.
-Zum Testen auf dem Laptop braucht es Docker nicht (`start-test.cmd`). Eine Schritt-für-Schritt-Anleitung für kostenlose
-Hoster kommt mit `docs/SERVER-HOSTING.md` (9.3 in `BACKLOG.md`).
+Zum Testen auf dem Laptop braucht es Docker nicht (`start-test.cmd`). **Schritt für Schritt** für zwei kostenlose Wege –
+Laptop mit Cloudflare Tunnel oder Render mit Neon, samt KI vom Laptop: [`docs/SERVER-HOSTING.md`](docs/SERVER-HOSTING.md).
 
 ```bash
 cd server
@@ -177,8 +177,10 @@ docker run -d --name foodtracker -p 3000:3000 -v foodtracker-data:/app/data food
   „Browser (CORS)“, was gilt; `localhost` und Adressen im eigenen Netz sind immer erlaubt.
 - **Betrieb:** Das Image setzt `NODE_ENV=production` – `ALLOW_DEV_LOGIN` wirkt dann nicht (sonst könnte sich jede:r
   unter jedem Namen anmelden; die Startmeldung sagt es). Hinter dem HTTPS-Proxy des Hosters `TRUST_PROXY=1` setzen,
-  damit das Rate-Limit die echten Adressen sieht. KI: `ANTHROPIC_API_KEY` (kostet API-Guthaben) oder `OLLAMA_URL` auf
-  einen Rechner mit Ollama.
+  damit das Rate-Limit die echten Adressen sieht. KI: `ANTHROPIC_API_KEY` (kostet API-Guthaben) oder `OLLAMA_URL` und
+  `OLLAMA_API_KEY` auf die Weiterleitung zu Ollama auf einem Rechner mit Grafikkarte (`npm run ollama:relay`,
+  „KI vom Laptop“ unten); den Schlüssel schickt der Server nur über https (im eigenen Netz auch http), sonst startet er
+  nicht.
 - **Health-Check:** `GET /api/health/live` antwortet mit `{"ok":true}`, sobald der Server bereit ist – ohne Datenbank
   und KI zu fragen (eine kostenlose Datenbank wie Neon darf schlafen, solange niemand die App nutzt, und Ollama hinter
   einem Tunnel bekommt keine Anfragen). Docker prüft ihn alle 30 Sekunden (`docker ps` zeigt „healthy“), beim Hoster
@@ -224,6 +226,25 @@ Kostenlose Anbieter (Stand 27.11.2026 laut ihren Seiten – Angebote ändern sic
 | [Cloudflare R2](https://developers.cloudflare.com/r2/pricing/) | 10 GB, 1 Mio. Schreib- und 10 Mio. Lese-Anfragen im Monat, Abruf kostenlos | laut Anleitungen zum Einschalten eine Zahlungsmethode (Kreditkarte oder PayPal), auch im Gratis-Rahmen | Schlüssel: R2-API-Token „Object Read & Write“ nur für diesen Bucket. Daten in der EU: Bucket mit EU-Jurisdiktion, Adresse dann `https://<Konto-ID>.eu.r2.cloudflarestorage.com`. |
 | [Backblaze B2](https://www.backblaze.com/cloud-storage/pricing) | 10 GB, Abruf bis zum Dreifachen der gespeicherten Menge kostenlos | auf der Preisseite nicht erwähnt – beim Anmelden prüfen | Region wird beim Anmelden gewählt (EU: `eu-central-003`), Adresse `https://s3.<Region>.backblazeb2.com`. „Application Key“ nur für diesen Bucket. |
 | [Supabase](https://supabase.com/pricing) Storage | 1 GB, 5 GB Datentransfer | auf der Preisseite nicht erwähnt | Passt zur Datenbank bei Supabase. Gratis-Projekte pausieren nach einer Woche ohne Nutzung. Adresse, Region und Schlüssel in den Storage-Einstellungen unter „S3 Connection“. |
+
+### KI vom Laptop für den Server im Internet
+
+Ein Cloud-Server ohne Grafikkarte kann die KI auf dem Laptop nutzen – kostenlos, solange der Laptop läuft. Ollama selbst
+kennt keine Schlüssel und darf nie direkt ins Internet; davor sitzt deshalb eine kleine Weiterleitung
+(`src/ai/relay.ts`):
+
+```bash
+cd server
+npm run ollama:relay                                # nur auf 127.0.0.1:11435, legt beim ersten Start OLLAMA_RELAY_KEY in server/.env an
+cloudflared tunnel --url http://127.0.0.1:11435     # zweites Fenster: https-Adresse für den Server im Internet
+```
+
+Beim Server im Internet `OLLAMA_URL` (Adresse des Tunnels), `OLLAMA_API_KEY` (= `OLLAMA_RELAY_KEY`) und
+`AI_PROVIDER=ollama` setzen. Die Weiterleitung lässt nur `GET /api/tags`, `GET /api/version` und `POST /api/chat` durch
+(kein Herunterladen oder Löschen von Modellen), nur mit `Authorization: Bearer <Schlüssel>`, bis 32 MB pro Anfrage, und
+gibt weder den Schlüssel noch andere Header an Ollama weiter. Lehnt sie den Schlüssel ab, sagen es die Startmeldung und
+`/api/health` (`reason: "unauthorized"`). Einzelheiten und Grenzen (wechselnde Adresse beim Quick Tunnel, Cloudflare
+bricht nach 125 Sekunden ohne Antwort ab): [`docs/SERVER-HOSTING.md`](docs/SERVER-HOSTING.md), „KI vom Laptop“.
 
 ### Server-Adresse
 
@@ -332,8 +353,10 @@ eine nachgebaute Postgres-Datenbank im Speicher – kein Datenbank-Server nötig
 gleichzeitige Versuche mit dem Code, Umzug aus `users.json`), Community-Rezepte, Favoriten, Fotos, Sterne, Meldungen und
 Admin-Änderungen auf beiden Datenbanken (Fotos als Dateien, nur echte Bilder, Bilddateien verschwinden mit dem Foto,
 dem Rezept bzw. dem Konto, Übernahme ins Konto ohne Doppeltes, Umzug aus `community.json`, `feedback.json` und
-`recipe-overrides.json`), die Auslieferung der Bilder, Planer, KI-Anbieter mit nachgebautem Ollama, CORS, den Betrieb
-im Container (Lebenszeichen ohne KI, Health-Check samt Zeitlimit gegen den echten Server, Dev-Login nur zum Testen,
+`recipe-overrides.json`), die Auslieferung der Bilder, Planer, KI-Anbieter mit nachgebautem Ollama (auch mit Schlüssel
+über die Weiterleitung `ollama:relay`: nur drei Pfade, nur mit Schlüssel, nichts davon an Ollama, Größengrenze, Ollama
+aus oder zu langsam, kein Schlüssel über http ins Internet), CORS, den Dev-Login (nie über einen Proxy oder Tunnel),
+den Betrieb im Container (Lebenszeichen ohne KI, Health-Check samt Zeitlimit gegen den echten Server, Dev-Login nur zum Testen,
 Startmeldung ohne WLAN und ohne Zugangsdaten aus `OLLAMA_URL`, Dockerfile und `.dockerignore`), den Objektspeicher für
 Fotos (Signatur mit den Beispielen der AWS-Doku; Speichern, Lesen, Löschen und seitenweises Auflisten gegen einen
 nachgebauten Objektspeicher über HTTP, der jede Signatur nachrechnet – auch mit Ordner im Bucket und Adresse mit Pfad
@@ -433,7 +456,7 @@ Der Server liest außerdem diese Umgebungsvariablen:
 | `ADMIN_EMAILS` | Kommagetrennte E-Mail-Adressen, die bei der Anmeldung automatisch Admin werden (z. B. deine eigene). Konten mit Passwort erst mit bestätigter Adresse (bisher durch einmal „Passwort vergessen?“), sonst könnte sich jede:r mit dieser Adresse registrieren. Weitere Admins vergibst du danach im Admin-Bereich. |
 | `APPLE_BUNDLE_IDS` | Bundle-IDs für „Mit Apple anmelden“. Standard `host.exp.Exponent` (Expo Go); für die eigene App `com.bennitut.foodtracker` ergänzen. |
 | `GOOGLE_CLIENT_IDS` | OAuth-Client-IDs aus der Google Cloud Console (iOS, Android, Web), kommagetrennt. |
-| `ALLOW_DEV_LOGIN` | `1` erlaubt eine Test-Anmeldung nur mit Name/E-Mail – **nur zum Ausprobieren, nie auf einem öffentlichen Server**. |
+| `ALLOW_DEV_LOGIN` | `1` erlaubt eine Test-Anmeldung nur mit Name/E-Mail – **nur zum Ausprobieren, nie auf einem öffentlichen Server**. Anfragen über einen Tunnel oder Proxy (Header wie `CF-Connecting-IP` oder `X-Forwarded-For`) lehnt der Server dafür ab, im Betrieb (`NODE_ENV=production`) wirkt die Variable gar nicht. |
 
 In der App kommen die Google-Client-IDs aus `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
 und `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (z. B. in `app/.env`).
@@ -561,7 +584,7 @@ Bis dahin simuliert der **Demo-Lieferdienst** Bestellung und Lieferung.
 ## Grenzen dieser Version
 
 - Alles, was der Server speichert, liegt in der Datenbank (SQLite oder Postgres), Fotos als Dateien in
-  `data/photos/` – auf Cloud-Diensten ohne dauerhafte Dateien braucht es dafür noch einen Objektspeicher (9.3). Plan,
+  `data/photos/` bzw. auf Cloud-Diensten ohne dauerhafte Dateien in einem Objektspeicher (`S3_*`). Plan,
   Einkaufsliste, Vorrat, eigene Rezepte (mit Foto), Favoriten, Rezepttexte, eigene Fotos der Galerie und
   Essgewohnheiten gleicht die App mit Konto ab. Ohne Anmeldung zählt weiter eine anonyme Geräte-ID.
 - Ein privates Foto der Galerie lässt sich nur auf dem Gerät öffentlich machen, auf dem es aufgenommen wurde.
