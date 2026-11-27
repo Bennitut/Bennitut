@@ -32,7 +32,11 @@ Betrieb aus; `npm run docker:smoke`), seit 17 Uhr den **Objektspeicher für Foto
 S3-Schnittstelle über `S3_*`, z. B. bei Neon, Cloudflare R2, Backblaze B2 oder Supabase; Umzug mit `npm run
 photos:copy`), seit 18 Uhr die **Anleitung `docs/SERVER-HOSTING.md`** (9.3 Teil 3: Weg (a) Laptop mit Cloudflare
 Tunnel, Weg (b) Render mit Neon, „KI vom Laptop“ über die neue Weiterleitung `npm run ollama:relay` mit Schlüssel; kein
-Dev-Login über Tunnel oder Proxy). Als Nächstes in 9.3 die Sicherheitspunkte, dann „Neuere App, älterer Server“.
+Dev-Login über Tunnel oder Proxy), seit 21 Uhr die **Sicherheit im Server** (9.3 Teil 4: nur über https,
+Rate-Limits für alle Anfragen, KI und Uploads, Größengrenzen je Schnittstelle, Protokolle ohne Geheimnisse,
+`TRUST_PROXY=cloudflare`; die App nimmt kein `http://` ins Internet mehr an). Als Nächstes in 9.3 der
+Datenschutz-Entwurf für Konten, Speicherung, Hosting-Anbieter und die Wege aus `SERVER-HOSTING.md`, dann „Neuere App,
+älterer Server“.
 Danach Vorrang 2 (Benjamins Antworten vom 24.11.2026 gegen 23:30 Uhr, mit
 „Rezeptfotos selbst ausliefern“), dann die Daueraufgabe „Videos je Sprache“ (der Rest von 8.3), dann die Punkte 8–10.
 Der Tagesbericht kommt jeden Tag nach dem Teilschritt von Vorrang 1. Schon erledigt (Abschnitte weiter unten): Punkte
@@ -265,15 +269,33 @@ Datenbank), dazu Konten und Sitzungen (auf kostenlosen Cloud-Diensten gehen Date
   über Tunnel oder Proxy nie (Header wie `CF-Connecting-IP`, `X-Forwarded-For`), auch mit `ALLOW_DEV_LOGIN=1`.
   17 Server-Tests (299); Weiterleitung und Server mit richtigem und falschem Schlüssel von Hand gegen ein nachgebautes
   Ollama geprüft.
-- [ ] Sicherheit: nur über HTTPS, Rate-Limits, Größenbegrenzung für Uploads, keine Geheimnisse im Repo, Logs ohne
-  Passwörter, Tokens oder E-Mail-Adressen (`OLLAMA_URL` ist seit 27.11. erledigt: Schlüssel im Header, Adressen in
-  Meldungen ohne Pfad) und `TRUST_PROXY` ohne fälschbares `CF-Connecting-IP` (unter „Ideen und Erkenntnisse“; dabei
-  prüfen, welche Header Render und Tailscale Funnel setzen); Datenschutz-Entwurf um Konten, Speicherung,
-  Hosting-Anbieter und Reel-Import ergänzen – dazu B1 und B3 für die Wege aus `SERVER-HOSTING.md` (Cloudflare als
-  Tunnel bei Weg a und bei „KI vom Laptop“; KI dann auf dem Laptop des Betreibers statt „auf dem Server“, womöglich
-  „Fassung der Einwilligung erhöhen“). B2 („Konto“) in `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand
-  (E-Mail und Passwort mit scrypt-Prüfwert, Code per Mail-Dienst, Sitzung im Schlüsselbund bzw. in localStorage,
-  Übernahme der Gerätedaten beim Anmelden, Export und Löschen im Profil).
+- [x] Sicherheit im Server: nur über HTTPS, Rate-Limits, Größenbegrenzung für Uploads, keine Geheimnisse im Repo, Logs
+  ohne Passwörter, Tokens oder E-Mail-Adressen (`OLLAMA_URL` ist seit 27.11. erledigt: Schlüssel im Header, Adressen in
+  Meldungen ohne Pfad) und `TRUST_PROXY` ohne fälschbares `CF-Connecting-IP` (dabei prüfen, welche Header Render und
+  Tailscale Funnel setzen). – erledigt 27.11.2026: **https** (`http/security.ts`): Meldet ein Proxy „http“
+  (`X-Forwarded-Proto`, `Forwarded`, `CF-Visitor`) bei einer öffentlichen Adresse oder über Cloudflare, leitet der
+  Server GET/HEAD mit 308 um, sonst 403 `https_required`; über https HSTS (ein Jahr); im eigenen Netz ohne Proxy wie
+  bisher. Die App nimmt unter Profil → Server kein `http://` ins Internet an (neuer Fehler `https`; Namen ohne Punkt,
+  `.local`, `.lan`, `.fritz.box` und private IPv6 zählen als eigenes Netz). **Header** jeder Antwort (nosniff,
+  no-referrer, `X-Frame-Options: DENY`, CSP `default-src 'none'`). **Rate-Limits** (`http/rateLimit.ts`): alle
+  Anfragen je Adresse als Token-Eimer (600, dann 2/s; nicht `/api/health/live`), KI und Plan je Adresse und Konto
+  (`AI_REQUESTS_PER_HOUR`, Standard 40), Fotos/geteilte Rezepte/Meldungen 60 pro Stunde, Tagebuch-Sicherung ohne Konto
+  20 000 Einträge pro Stunde; IPv6 je /64; Zähler höchstens Zeitfenster plus eine Minute im Speicher. **Größengrenzen**
+  je Schnittstelle (32 MB Abgleich … 512 KB sonst, 413 `payload_too_large` statt bisher 500). **Protokolle**
+  (`log.ts`): unerwartete Fehler geschwärzt und nur mit dem Muster der Route, kaputtes JSON als 400 ohne Protokoll
+  (`JSON.parse` zitiert sonst z. B. das Passwort). **`TRUST_PROXY`** (`http/proxy.ts`): `cloudflare` = nur
+  `CF-Connecting-IP`, Zahl n = n-ter Eintrag von hinten in `X-Forwarded-For`, Unbekanntes startet nicht; einmal ein
+  Hinweis ohne Adressen, wenn der Wert nicht zum Weg passt. Render läuft laut Berichten von Nutzer:innen hinter
+  Cloudflare (`X-Forwarded-For` hängt dort nur an) → `cloudflare`; welche Header Tailscale Funnel setzt, dokumentiert
+  Tailscale nicht (vermutlich `1`, ungeprüft). **Repository**: `.gitignore` mit `.env.*` und Datenbanken,
+  `test/repoSecrets.test.ts` prüft alle eingecheckten Dateien. Datenschutz B1 um die Zähler ergänzt. 29 Server-Tests
+  (328), 1 App-Test (233), Web-Rauchtest und `npm run web:account` grün, übersetzter Server von Hand geprüft.
+- [ ] Datenschutz-Entwurf um Konten, Speicherung, Hosting-Anbieter und Reel-Import ergänzen – dazu B1 und B3 für die
+  Wege aus `SERVER-HOSTING.md` (Cloudflare als Tunnel bei Weg a und bei „KI vom Laptop“; KI dann auf dem Laptop des
+  Betreibers statt „auf dem Server“, womöglich „Fassung der Einwilligung erhöhen“). B2 („Konto“) in
+  `app/src/legal/texte.ts` und `docs/recht/datenschutz.md` ist seit 26.11.2026 auf dem Stand (E-Mail und Passwort mit
+  scrypt-Prüfwert, Code per Mail-Dienst, Sitzung im Schlüsselbund bzw. in localStorage, Übernahme der Gerätedaten beim
+  Anmelden, Export und Löschen im Profil), B1 nennt seit 27.11.2026 die Zähler gegen Missbrauch.
 
 - [ ] Abgleich über verschiedene Fassungen von App und Server (unter „Ideen und Erkenntnisse“: „Neuere App, älterer
   Server“ – dort steht, dass es vor dem Server im Internet erledigt sein soll): Der Server übergeht unbekannte Arten,
@@ -599,6 +621,25 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 
 ## Ideen und Erkenntnisse
 
+- **Speicherplatz je Konto begrenzen:** Ein Konto darf heute bis zu 3000 eigene Rezepte mit Foto (je bis rund 1,5 MB)
+  und 2000 „Nur ich“-Fotos speichern – mehrere GB; Konten sind kostenlos (10 pro Stunde und Adresse). Bei Neon gratis
+  (5 GB Fotos, 1 GB Datenbank) könnte so jemand den Speicher füllen. Vor dem Start für andere eine Grenze in Bytes je
+  Konto (z. B. 200 MB Fotos) im Bildspeicher mitzählen und mit `413 sync_full` melden. (27.11.2026)
+- **Fotos ohne Konto:** Fotos für die Galerie gehen auch ohne Konto (5 je Gerät und Rezept, Geräte-IDs frei erfindbar);
+  seit 9.3 bremst nur noch die Grenze von 60 Uploads pro Stunde und Adresse. Für einen Server für andere überlegen,
+  öffentliche Fotos und geteilte Rezepte nur mit Konto anzunehmen (Moderation und Löschen hängen dann an einem Konto).
+  (27.11.2026)
+- **KI-Kosten für alle zusammen:** `AI_REQUESTS_PER_HOUR` bremst je Adresse und Konto. Eine Obergrenze für alle zusammen
+  (z. B. pro Tag, `AI_REQUESTS_PER_DAY`) gegen eine überraschende Rechnung mit der Claude-API, dazu Kosten je Anfrage im
+  Protokoll – gehört zu Punkt 9 („KI-Kosten im Server begrenzen“). (27.11.2026)
+- **Rate-Limits nur im Speicher:** Zählt jede Instanz für sich und beginnt nach einem Neustart von vorn – bei Render
+  gratis (eine Instanz, Neustart nach dem Schlafen) reicht das. Mit mehreren Instanzen die Zähler in die Datenbank
+  legen. (27.11.2026)
+- **Fotos für die Erkennung verkleinern:** „Mahlzeit fotografieren“ und „Kassenbon“ schicken das Foto mit Qualität 0,5,
+  aber in voller Größe (bis rund 5 MB als Base64; Claude nimmt höchstens 5 MB je Bild und rechnet ohnehin auf etwa
+  1600 px herunter). Vorher auf etwa 1600 px verkleinern (`expo-image-manipulator`, wie bei eigenen Fotos) – schneller,
+  billiger, weniger Daten. (27.11.2026)
+
 - **Datenbank vom Laptop zu Postgres umziehen:** Die Fotos zieht `npm run photos:copy` um, die Datenbank nichts. Wer vom
   Laptop (SQLite) zu einem Server mit Neon wechselt, beginnt mit einer leeren Datenbank: Konten müssen neu registriert
   werden (danach laden die Geräte Tagebuch, Plan, Rezepte und Fotos von selbst hoch, „Kennung der Datenbank“), Community,
@@ -620,8 +661,10 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
 - **Wege aus `SERVER-HOSTING.md` mit echten Diensten ungeprüft:** Weiterleitung, Schlüssel und Dev-Login-Sperre sind mit
   Tests und einem nachgebauten Ollama geprüft; Cloudflare Tunnel, Tailscale Funnel, Render und Neon selbst erst, wenn
   Benjamin dort einrichtet (9.5). Dabei prüfen: Sieht das Rate-Limit hinter Render und Tailscale Funnel die echten
-  Adressen? Kommen KI-Antworten über den Tunnel unter 125 Sekunden? Stimmen die Namen der Felder bei Render und Neon
-  noch? (27.11.2026)
+  Adressen (`TRUST_PROXY=cloudflare` bzw. `1` – steht kein „Hinweis: … TRUST_PROXY“ im Log, passt es)? Leiten Render
+  und der Quick Tunnel http selbst auf https um (sonst macht es der Server)? Kommt der Host-Header beim Quick Tunnel
+  als `….trycloudflare.com` an (sonst lehnt der Server http mit 403 ab, statt umzuleiten)? Kommen KI-Antworten über den
+  Tunnel unter 125 Sekunden? Stimmen die Namen der Felder bei Render und Neon noch? (27.11.2026)
 - **Objektspeicher mit echtem Anbieter ungeprüft:** Geprüft gegen den Nachbau in den Tests, gegen moto (prüft Signaturen
   wie AWS) und im Container – mit Neon, R2, Backblaze oder Supabase selbst erst, wenn Benjamin dort einen Bucket anlegt
   (9.5). Weicht ein Anbieter ab, zeigt es die Probe beim Start mit seinem Fehlercode. (27.11.2026)
@@ -630,10 +673,12 @@ Danach: Punkte aus „Ideen und Erkenntnisse“ priorisieren, Stabilität und Be
   es eng: R2 (Abruf kostenlos) oder vorab signierte Adressen direkt zum Bucket – dann aber mit Ablaufzeit statt festem
   Pfad, auch für „Nur ich“-Fotos. (27.11.2026)
 
-- **`CF-Connecting-IP` mit `TRUST_PROXY=1`:** `clientIp` (`http/rateLimit.ts`) traut zuerst diesem Header. Steht kein
+- ✅ **`CF-Connecting-IP` mit `TRUST_PROXY=1`:** `clientIp` (`http/rateLimit.ts`) traut zuerst diesem Header. Steht kein
   Cloudflare vor dem Server (Cloudflare Tunnel setzt ihn selbst), kann jede:r ihn mitschicken und so das Rate-Limit pro
   IP-Adresse umgehen; das pro E-Mail-Adresse bleibt. Für 9.3 „Sicherheit“: z. B. `TRUST_PROXY=cloudflare` (nur dieser
-  Header) getrennt von `TRUST_PROXY=1` (nur der letzte Eintrag in `X-Forwarded-For`). (27.11.2026)
+  Header) getrennt von `TRUST_PROXY=1` (nur der letzte Eintrag in `X-Forwarded-For`). (27.11.2026) Erledigt 27.11.2026
+  mit 9.3 Teil 4: genau so (`http/proxy.ts`), dazu eine Zahl n für mehrere Proxys; `SERVER-HOSTING.md` nennt jetzt
+  `TRUST_PROXY=cloudflare` für Weg (a) und Render.
 - ✅ **`OLLAMA_URL` in Warnungen:** Scheitert eine Anfrage an Ollama, schreibt der Server „Ollama unter <OLLAMA_URL> nicht
   erreichbar“ ins Protokoll (`ai/ollama.ts`, `ai/provider.ts`). Steht in der Adresse ein Schlüssel (Weiterleitung an
   Ollama auf dem Laptop, 9.3), landete er im Protokoll des Hosters. Die Startmeldung kürzt die Adresse schon
