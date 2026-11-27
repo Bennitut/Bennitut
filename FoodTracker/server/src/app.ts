@@ -16,6 +16,7 @@ import { findProvider, linesFromShoppingList, pantryFromOrder, providers } from 
 import { MONTH_DAYS, planMonth } from "./planner/monthPlanner.js";
 import { PlanError, matchesPreferences, recipeDiet } from "./planner/zeroWastePlanner.js";
 import { corsMiddleware } from "./http/cors.js";
+import { LIVE_PATH } from "./http/health.js";
 import { RateLimiter, clientIp } from "./http/rateLimit.js";
 import { resetMail, type Mailer } from "./mail/mailer.js";
 import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetchPost.js";
@@ -317,6 +318,12 @@ export function createApp({
 
   /** Lebenszeichen und welche KI gerade nutzbar ist (Profilzeile in der App). */
   app.get("/api/health", async (c) => c.json({ ok: true, ai: await ai.status() }));
+  /**
+   * Nur das Lebenszeichen – für den Health-Check von Docker (http/health.ts) und den des Hosters. Fragt weder KI noch
+   * Datenbank: Ollama hinter einem Tunnel bekäme sonst alle paar Sekunden eine Anfrage, und eine kostenlose Datenbank
+   * wie Neon soll schlafen dürfen, solange niemand die App nutzt. Antwortet erst, wenn die Migrationen durch sind.
+   */
+  app.get(LIVE_PATH, (c) => c.json({ ok: true }));
 
   app.get("/api/catalog", async (c) =>
     c.json({

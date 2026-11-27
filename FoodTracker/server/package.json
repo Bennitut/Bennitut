@@ -8,10 +8,13 @@
   "scripts": {
     "dev": "tsx watch --disable-warning=ExperimentalWarning src/index.ts",
     "start": "tsx --disable-warning=ExperimentalWarning src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start:prod": "node --disable-warning=ExperimentalWarning dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "translate-ui": "tsx scripts/translate-ui.ts",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "docker:smoke": "bash scripts/docker-smoke.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

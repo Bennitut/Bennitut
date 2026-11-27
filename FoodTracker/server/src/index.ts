@@ -3,7 +3,9 @@ import { ENV_FILE, envFileLoaded } from "./env.js";
 import { serve } from "@hono/node-server";
 import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
 import { createApp } from "./app.js";
+import { normalizeOrigins } from "./http/cors.js";
 import { mailerFromEnv } from "./mail/mailer.js";
+import { devLoginSetting, runtimeFromEnv } from "./runtime.js";
 import { lanAddresses, startupMessage } from "./startInfo.js";
 import { openDatabase, type Db } from "./storage/db.js";
 import { DirectoryImageStore } from "./storage/images.js";
@@ -14,6 +16,12 @@ import { migrate } from "./storage/migrations.js";
 const list = (value: string | undefined) => (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 const port = Number(process.env.PORT ?? 3000);
+// Zum Testen auf dem eigenen Rechner oder als Server für andere (im Container: NODE_ENV=production, siehe runtime.ts).
+const runtime = runtimeFromEnv();
+const devLogin = devLoginSetting(process.env, runtime);
+// Websites, die den Server aus dem Browser nutzen dürfen (CORS) – im Container standardmäßig die Web-Version auf
+// GitHub Pages (Dockerfile). Einmal vereinheitlichen, damit Warnungen zu ungültigen Einträgen nur einmal kommen.
+const corsOrigins = normalizeOrigins(list(process.env.CORS_ORIGINS));
 
 // Datenbank (storage/db.ts): mit DATABASE_URL Postgres, sonst die SQLite-Datei. Lieber gar nicht starten als ohne
 // Konten – die Meldung sagt, was zu tun ist (die Adresse selbst nie ausgeben, sie enthält das Passwort).
@@ -109,10 +117,10 @@ const app = createApp({
     appleAudiences: list(process.env.APPLE_BUNDLE_IDS ?? "host.exp.Exponent"),
     googleAudiences: list(process.env.GOOGLE_CLIENT_IDS),
     adminEmails: list(process.env.ADMIN_EMAILS),
-    allowDevLogin: process.env.ALLOW_DEV_LOGIN === "1",
+    allowDevLogin: devLogin.allowed,
   },
   ai,
-  corsOrigins: list(process.env.CORS_ORIGINS),
+  corsOrigins,
   mailer,
   trustProxy: process.env.TRUST_PROXY === "1",
 });
@@ -121,7 +129,7 @@ const server = serve({ fetch: app.fetch, port }, async () => {
   console.log(
     startupMessage({
       port,
-      addresses: lanAddresses(),
+      addresses: runtime.container ? [] : lanAddresses(),
       ai: status,
       ollama: ai.settings.ollama,
       envFile: envFileLoaded ? ENV_FILE : null,
@@ -129,9 +137,17 @@ const server = serve({ fetch: app.fetch, port }, async () => {
       mail: mailer !== null,
       storage: db.description,
       photos: images.description,
+      corsOrigins,
+      container: runtime.container,
     }),
   );
-  if (process.env.ALLOW_DEV_LOGIN === "1") console.log("\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN.");
+  if (devLogin.allowed) console.log("\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN.");
+  if (devLogin.ignored) {
+    console.warn(
+      "\n  ALLOW_DEV_LOGIN=1 gilt hier nicht: NODE_ENV=production heißt Server für andere, und dort könnte sich damit jede:r\n" +
+        "  unter jedem Namen anmelden. Anmelden geht mit E-Mail und Passwort, Apple oder Google.",
+    );
+  }
   console.log("");
 });
 server.on("error", (err: NodeJS.ErrnoException) => {

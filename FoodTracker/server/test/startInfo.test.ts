@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiLine, lanAddresses, startupMessage } from "../src/startInfo.js";
+import { aiLine, corsLine, displayUrl, lanAddresses, startupMessage } from "../src/startInfo.js";
 
 const OLLAMA = { url: "http://127.0.0.1:11434", model: "gemma4:e4b" };
 const nic = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: null });
@@ -33,5 +33,45 @@ describe("Startmeldung des Servers", () => {
     expect(text).toContain("Fotos:               Ordner data/photos");
     expect(startupMessage(base)).not.toContain("Daten:");
     expect(startupMessage(base)).not.toContain("Fotos:");
+  });
+
+  it("nennt, welche Websites den Server aus dem Browser nutzen dürfen", () => {
+    const base = { port: 3000, addresses: [], ai: { provider: null, model: null, state: "not_configured" } as const, ollama: OLLAMA, envFile: null, platform: "linux" as const };
+    expect(startupMessage({ ...base, corsOrigins: ["https://bennitut.github.io"] })).toContain(
+      "Browser (CORS):      localhost und eigenes Netz, dazu https://bennitut.github.io",
+    );
+    expect(corsLine([])).toContain("weitere Websites mit CORS_ORIGINS");
+    expect(corsLine(["https://bennitut.github.io", "https://www.example.org"])).toBe("localhost und eigenes Netz, dazu https://bennitut.github.io, https://www.example.org");
+    expect(startupMessage(base)).not.toContain("CORS");
+  });
+
+  it("zeigt im Container den Port statt WLAN, Firewall und Test am iPhone", () => {
+    const text = startupMessage({
+      port: 10000,
+      addresses: ["172.17.0.2"],
+      ai: { provider: null, model: null, state: "not_configured" },
+      ollama: OLLAMA,
+      envFile: null,
+      platform: "win32",
+      mail: false,
+      container: true,
+    });
+    expect(text).toContain("Im Container:        Port 10000");
+    expect(text).toContain("docker run -p 10000:10000");
+    expect(text).toContain("Einstellungen:       Umgebungsvariablen (alle erklärt in .env.example)");
+    expect(text).toContain("SMTP_* als Umgebungsvariablen");
+    expect(text).toContain("ANTHROPIC_API_KEY setzen");
+    for (const laptop of ["Im WLAN", "172.17.0.2", "localhost:10000", "Firewall", "iPhone", "winget", "server/.env"]) expect(text).not.toContain(laptop);
+  });
+
+  it("nennt im Container, wo Ollama läuft – ohne Zugangsdaten aus OLLAMA_URL", () => {
+    const remote = { url: "https://nutzer:geheim@ollama.example.org/pfad?key=geheim", model: "gemma4:e4b" };
+    const ready = aiLine({ provider: "ollama", model: "gemma4:e4b", state: "ready" }, remote, true);
+    expect(ready).toBe("KI: Ollama mit gemma4:e4b unter https://ollama.example.org – kostenlos.");
+    expect(aiLine({ provider: "ollama", model: "gemma4:e4b", state: "unreachable" }, remote, true)).not.toContain("geheim");
+    expect(aiLine({ provider: "ollama", model: "gemma4:e4b", state: "model_missing" }, remote, true)).toContain("auf dem Rechner mit Ollama ausführen");
+    expect(aiLine({ provider: "claude", model: "claude-opus-5-5", state: "not_configured" }, remote, true)).toContain("Umgebungsvariable ANTHROPIC_API_KEY");
+    expect(displayUrl("kein url")).toBe("(keine gültige Adresse)");
+    expect(displayUrl("http://127.0.0.1:11434")).toBe("http://127.0.0.1:11434");
   });
 });
