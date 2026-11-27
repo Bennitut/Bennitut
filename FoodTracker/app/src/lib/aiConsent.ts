@@ -9,8 +9,10 @@
  * Fassung des Einwilligungstexts. Erhöhen, wenn sich wesentlich ändert, was an wen geht (ein neuer KI-Anbieter, eine
  * Funktion, die andere Daten schickt) – dann fragt die App beim nächsten Mal neu. Muss zu `AI_CONSENT_VERSION` im
  * Server passen (ein Test prüft das).
+ * 1 (26.11.2026): Claude von Anthropic oder ein Modell auf dem Server. 2 (27.11.2026): dazu „KI vom Laptop“ – ein
+ * Modell auf einem Rechner des Betreibers, den der Server über Cloudflare erreicht (docs/SERVER-HOSTING.md).
  */
-export const AI_CONSENT_VERSION = 1;
+export const AI_CONSENT_VERSION = 2;
 
 /** Header, mit dem die App bei KI-Anfragen die Fassung nennt, der zugestimmt wurde. */
 export const AI_CONSENT_HEADER = "X-AI-Consent";

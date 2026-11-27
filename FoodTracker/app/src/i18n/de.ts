@@ -672,7 +672,7 @@ export const de = {
     sendsTranslate: "Zum Übersetzen schickt FoodTracker Name, Schritte und Gewürze des Rezepts über den Server an eine KI.",
     sendsImprove: "Zum Verbessern schickt FoodTracker Name, Zutaten mit Mengen, Schritte, Kochzeit und deine Notiz über den Server an eine KI.",
     sendsWishes: "Für neue Rezeptvorschläge schickt FoodTracker den Text aus deinem Wunschfeld über den Server an eine KI.",
-    recipient: "Je nach Einrichtung des Servers ist das Claude von Anthropic (USA) oder ein KI-Modell auf dem Server selbst. Einzelheiten stehen in der Datenschutzerklärung.",
+    recipient: "Je nach Einrichtung des Servers ist das Claude von Anthropic (USA), ein KI-Modell auf dem Server selbst oder ein KI-Modell auf einem Rechner des Betreibers, den der Server über Cloudflare (USA) erreicht. Was davon gilt, steht in der Datenschutzerklärung.",
     scope: "Die Erlaubnis gilt für alle KI-Funktionen: Mahlzeit und Kassenbon erkennen, Rezepte importieren, übersetzen und mit KI verbessern sowie Wünsche im Plan.",
     health: "Enthält, was du schickst, Gesundheitsangaben – etwa eine Allergie in deinem Wunsch –, willigst du ausdrücklich ein, dass die KI sie dafür verarbeitet.",
     parental: "Ein Mindestalter gibt es nicht. Bist du unter 14, brauchst du dafür die Zustimmung eines Elternteils – bei Gesundheitsangaben wie Allergien bis 18.",

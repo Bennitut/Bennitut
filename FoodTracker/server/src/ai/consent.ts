@@ -5,8 +5,12 @@ import { AiError } from "./types.js";
 // älteren App, nach dem Widerruf im Profil oder bei einer Anfrage an der App vorbei –, gibt der Server nichts an die KI
 // weiter und antwortet mit 403 `ai_consent_required`.
 
-/** Fassung des Einwilligungstexts in der App; mindestens diese verlangt der Server. */
-export const AI_CONSENT_VERSION = 1;
+/**
+ * Fassung des Einwilligungstexts in der App; mindestens diese verlangt der Server. 2 seit 27.11.2026: Der Dialog nennt
+ * „KI vom Laptop“ (Weiterleitung über Cloudflare, ai/relay.ts) als dritte Möglichkeit – eine ältere Zustimmung deckt
+ * diesen Empfänger nicht, die App fragt neu.
+ */
+export const AI_CONSENT_VERSION = 2;
 
 /** Header der App mit der Fassung, der zugestimmt wurde (z. B. „1“). */
 export const AI_CONSENT_HEADER = "X-AI-Consent";

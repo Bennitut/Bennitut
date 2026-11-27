@@ -40,6 +40,9 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
+// Fassung der Einwilligung vor den KI-Funktionen, wie die App sie speichert und im Header schickt (lib/aiConsent.ts).
+const { AI_CONSENT_VERSION } = require("tsx/cjs/api").require("../src/lib/aiConsent.ts", __filename);
+
 const APP = path.resolve(__dirname, "..");
 const SERVER = path.resolve(APP, "../server");
 const DIST = path.join(APP, "dist-account");
@@ -664,9 +667,9 @@ async function main() {
     await button("Einverstanden").click();
     // Der Testserver hat keine KI: Die Anfrage kommt an (mit Einwilligung) und meldet das.
     await see("Auf dem Server ist keine KI eingerichtet", "KI-Anfrage nach der Einwilligung");
-    if (improveRequests.length !== 1 || improveRequests[0] !== "1") failures.push(`Nach „Einverstanden“: ${JSON.stringify(improveRequests)}`);
+    if (improveRequests.length !== 1 || improveRequests[0] !== String(AI_CONSENT_VERSION)) failures.push(`Nach „Einverstanden“: ${JSON.stringify(improveRequests)}`);
     const consent = await page.evaluate(() => JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}").aiConsent);
-    if (consent?.version !== 1 || Number.isNaN(Date.parse(consent?.at))) failures.push(`Einwilligung nicht gespeichert: ${JSON.stringify(consent)}`);
+    if (consent?.version !== AI_CONSENT_VERSION || Number.isNaN(Date.parse(consent?.at))) failures.push(`Einwilligung nicht gespeichert: ${JSON.stringify(consent)}`);
     await improveButton().click();
     await page.waitForTimeout(500);
     if (await dialogTitle().isVisible()) failures.push("Nach der Einwilligung wird trotzdem wieder gefragt");

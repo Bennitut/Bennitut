@@ -672,7 +672,7 @@ export const en: Dictionary = {
     sendsTranslate: "To translate, FoodTracker sends the recipe's name, steps and seasonings via the server to an AI.",
     sendsImprove: "To improve the recipe, FoodTracker sends its name, ingredients with amounts, steps, cooking time and your note via the server to an AI.",
     sendsWishes: "For new recipe suggestions, FoodTracker sends the text from your wishes field via the server to an AI.",
-    recipient: "Depending on how the server is set up, this is Claude by Anthropic (USA) or an AI model running on the server itself. Details are in the privacy policy.",
+    recipient: "Depending on how the server is set up, this is Claude by Anthropic (USA), an AI model running on the server itself, or an AI model on a computer of the operator that the server reaches through Cloudflare (USA). The privacy policy says which one applies.",
     scope: "Your permission covers all AI features: recognising meals and receipts, importing, translating and improving recipes with AI, and wishes in the plan.",
     health: "If what you send contains health information – such as an allergy in your wishes – you explicitly consent to the AI processing it for this.",
     parental: "There is no minimum age. If you are under 14, you need a parent's consent for this – for health information such as allergies, until 18.",

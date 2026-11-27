@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AI_CONSENT_HEADER } from "../src/ai/consent.js";
+import { AI_CONSENT_HEADER, AI_CONSENT_VERSION } from "../src/ai/consent.js";
 import { Ai } from "../src/ai/provider.js";
 import { createApp, defaultAuthLimits } from "../src/app.js";
 import { ClientAddresses, addressKey, normalizeIp, parseTrustProxy, trustProxyLine, type TrustProxy } from "../src/http/proxy.js";
@@ -348,7 +348,7 @@ describe("Rate-Limits", () => {
       app.request("/api/recipes/translate", {
         method: "POST",
         body: JSON.stringify({ text: { name: "Gulasch" }, targetLanguage: "en" }),
-        headers: { ...json, [AI_CONSENT_HEADER]: "1", "X-Forwarded-For": ip, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { ...json, [AI_CONSENT_HEADER]: String(AI_CONSENT_VERSION), "X-Forwarded-For": ip, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
     // Ohne KI auf dem Server zählt der Versuch trotzdem (die Anfrage hätte die KI erreicht).
     expect((await translate("203.0.113.1")).status).toBe(503);

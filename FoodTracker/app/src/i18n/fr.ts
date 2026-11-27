@@ -672,7 +672,7 @@ export const fr: Dictionary = {
     sendsTranslate: "Pour traduire, FoodTracker envoie le nom, les étapes et les épices de la recette à une IA via le serveur.",
     sendsImprove: "Pour améliorer la recette, FoodTracker envoie son nom, les ingrédients avec leurs quantités, les étapes, le temps de cuisson et votre note à une IA via le serveur.",
     sendsWishes: "Pour de nouvelles suggestions de recettes, FoodTracker envoie le texte de votre champ de souhaits à une IA via le serveur.",
-    recipient: "Selon la configuration du serveur, il s'agit de Claude d'Anthropic (États-Unis) ou d'un modèle d'IA qui tourne sur le serveur lui-même. Les détails figurent dans la politique de confidentialité.",
+    recipient: "Selon la configuration du serveur, il s'agit de Claude d'Anthropic (États-Unis), d'un modèle d'IA qui tourne sur le serveur lui-même ou d'un modèle d'IA sur un ordinateur de l'exploitant, que le serveur joint via Cloudflare (États-Unis). La politique de confidentialité précise lequel s'applique.",
     scope: "L'autorisation vaut pour toutes les fonctions IA : reconnaître repas et tickets, importer, traduire et améliorer des recettes avec l'IA, ainsi que les souhaits dans le menu.",
     health: "Si ce que vous envoyez contient des données de santé – par exemple une allergie dans vos souhaits –, vous consentez expressément à ce que l'IA les traite à cette fin.",
     parental: "Il n'y a pas d'âge minimum. Si vous avez moins de 14 ans, il vous faut l'accord d'un parent – pour les données de santé comme les allergies, jusqu'à 18 ans.",

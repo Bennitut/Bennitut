@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AI_CONSENT_VERSION } from "../src/ai/consent.js";
 import { Ai } from "../src/ai/provider.js";
 import { createApp } from "../src/app.js";
 import { isAllowedOrigin, normalizeOrigins } from "../src/http/cors.js";
@@ -87,7 +88,7 @@ describe("CORS-Header", () => {
     expect(invalid.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:8081");
     const noKi = await app.request("/api/recipes/translate", {
       method: "POST",
-      headers: { ...headers, "X-AI-Consent": "1" },
+      headers: { ...headers, "X-AI-Consent": String(AI_CONSENT_VERSION) },
       body: JSON.stringify({ text: { name: "Suppe" }, targetLanguage: "en" }),
     });
     expect(noKi.status).toBe(503);
