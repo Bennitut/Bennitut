@@ -133,6 +133,13 @@ Der Server läuft bei [[ANGABE: Hoster, Sitz, Standort der Server]]. [[ANGABE: V
 Auftragsverarbeitung (Art. 28 DSGVO) mit dem Hoster]]. Er protokolliert [[ANGABE: welche Daten, z. B. IP-Adresse,
 Zeitpunkt, aufgerufene Adresse, Fehlermeldungen]] und löscht die Protokolle nach [[ANGABE: Frist]].
 
+Fotos (Galerie der Rezepte, geteilte und eigene Rezepte) speichert der Server [[ANGABE: auf dem Server selbst oder bei
+einem Objektspeicher-Anbieter – Name, Sitz, Standort der Server, Vertrag zur Auftragsverarbeitung]].
+
+> Technisch geht beides: ein Ordner auf dem Server (`PHOTOS_DIR`) oder ein Bucket mit S3-Schnittstelle (`S3_*`, z. B.
+> Neon, Cloudflare R2, Backblaze B2, Supabase – README, „Fotos im Objektspeicher“). Die App holt die Fotos in jedem Fall
+> beim Server ab, nie direkt beim Anbieter.
+
 Mit jeder Anfrage schickt FoodTracker die zufällige Geräte-Kennung aus Abschnitt 2. Sie enthält keinen Namen und
 dient dazu, Favoriten, Bewertungen, eigene Fotos und geteilte Rezepte deinem Gerät zuzuordnen – bis du dich anmeldest,
 dann gehören sie deinem Konto (B2).

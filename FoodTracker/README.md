@@ -169,7 +169,7 @@ docker run -d --name foodtracker -p 3000:3000 -v foodtracker-data:/app/data food
   `tsconfig*.json` und `src/` hinein.
 - **Daten:** Ohne `DATABASE_URL` liegen SQLite-Datei und Fotos in `/app/data` – dafür das Volume (`-v`), sonst sind sie
   weg, sobald der Container ersetzt wird. Hoster ohne dauerhafte Dateien brauchen `DATABASE_URL` (Postgres) und für die
-  Fotos einen Objektspeicher (kommt mit 9.3).
+  Fotos einen Objektspeicher (`S3_*`, nächster Abschnitt).
 - **Web-Version (CORS):** Im Image ist `CORS_ORIGINS=https://bennitut.github.io` voreingestellt – die Web-Version auf
   GitHub Pages darf den Server aus dem Browser nutzen. Für eigene Domains die Variable setzen und die Pages-Adresse mit
   aufzählen, jede Domain einzeln (mit und ohne `www`), z. B.
@@ -185,6 +185,45 @@ docker run -d --name foodtracker -p 3000:3000 -v foodtracker-data:/app/data food
   denselben Pfad als Health-Check eintragen. `/api/health` sagt zusätzlich, welche KI nutzbar ist (Profilzeile der App).
 - **Ohne Docker** (Hoster mit Node.js): `npm ci --include=dev && npm run build`, gestartet mit `npm run start:prod`
   (Node mit `dist/index.js`, ohne `tsx`); `NODE_ENV=production` dann selbst setzen.
+
+### Fotos im Objektspeicher
+
+Kostenlose Cloud-Dienste wie Render verlieren Dateien bei jedem Neustart – bei Render gratis auch, wenn der Server nach
+15 Minuten ohne Anfrage schläft. Dort liegen die Daten in Postgres (`DATABASE_URL`) und die Fotos in einem
+**Objektspeicher mit S3-Schnittstelle** (`src/storage/objectStorage.ts`), eingestellt mit vier Variablen (Vorlage mit
+Erklärungen in `server/.env.example`):
+
+```env
+S3_ENDPOINT=https://<Konto-ID>.r2.cloudflarestorage.com
+S3_BUCKET=foodtracker-fotos
+S3_ACCESS_KEY_ID=…
+S3_SECRET_ACCESS_KEY=…
+```
+
+- **Region:** steht bei Cloudflare R2 (`auto`), Backblaze B2 und Neon in der Adresse, sonst `S3_REGION` (z. B.
+  `eu-central-1`). Mit `S3_PREFIX=fotos/` liegen die Fotos in einem Ordner im Bucket. Adressen immer im Pfad-Stil
+  (`https://<Endpoint>/<Bucket>/<Schlüssel>`) – das können alle hier genannten Anbieter, Neon und Supabase nur so.
+- **Privat:** Die App holt jedes Foto weiter beim Server (`GET /api/images/<Schlüssel>`), der Bucket muss nicht
+  öffentlich sein. Der Schlüssel braucht in diesem Bucket Lesen, Schreiben, Löschen und Auflisten, mehr nicht.
+- **Beim Start** speichert, liest und löscht der Server eine kleine Probe und liest ein Foto, das es nicht gibt (muss
+  als „gibt es nicht“ kommen, nicht als „Zugriff verweigert“). Stimmt etwas nicht, startet er nicht und sagt, welche
+  Variable vermutlich falsch ist. Die Startmeldung zeigt „Fotos: Objektspeicher (S3) <Bucket> bei <Adresse>“, nie die
+  Schlüssel. Netzfehler und HTTP 429/5xx wiederholt er bis zu zweimal.
+- **Umzug:** Server beenden, dann in `server/` mit den S3-Variablen in `server/.env`:
+  `npm run photos:copy -- in-objektspeicher` kopiert die Fotos aus `data/photos/` (bzw. `PHOTOS_DIR`) in den Bucket,
+  `npm run photos:copy -- in-ordner` zurück. Kopiert nur, was im Ziel fehlt, löscht nichts, darf beliebig oft laufen.
+  Fotos und Datenbank gehören zusammen: Die Datenbank kennt nur die Schlüssel der Fotos.
+- **Ohne AWS-SDK:** Die Signatur (AWS Signature Version 4, `src/storage/sigv4.ts`) rechnet der Server selbst – geprüft
+  mit den Beispielen der AWS-Doku und gegen einen nachgebauten Objektspeicher, der jede Signatur nachrechnet.
+
+Kostenlose Anbieter (Stand 27.11.2026 laut ihren Seiten – Angebote ändern sich, vor dem Anlegen nachsehen):
+
+| Anbieter | Gratis | Kreditkarte | Gut zu wissen |
+|---|---|---|---|
+| [Neon](https://neon.com/docs/storage/overview) Object Storage | 5 GB pro Projekt | laut Doku nur fürs AI Gateway, nicht für Object Storage | Ein Konto für Datenbank und Fotos (Weg b mit Neon). Datentransfer 5 GB im Monat zusammen mit der Datenbank – auch jedes Foto, das der Server abholt. Bucket gehört zu einem Branch (den Haupt-Branch nehmen), Region z. B. Frankfurt. Adresse in der Konsole, Schlüssel mit `neon credentials create --scope storage:read --scope storage:write`. |
+| [Cloudflare R2](https://developers.cloudflare.com/r2/pricing/) | 10 GB, 1 Mio. Schreib- und 10 Mio. Lese-Anfragen im Monat, Abruf kostenlos | laut Anleitungen zum Einschalten eine Zahlungsmethode (Kreditkarte oder PayPal), auch im Gratis-Rahmen | Schlüssel: R2-API-Token „Object Read & Write“ nur für diesen Bucket. Daten in der EU: Bucket mit EU-Jurisdiktion, Adresse dann `https://<Konto-ID>.eu.r2.cloudflarestorage.com`. |
+| [Backblaze B2](https://www.backblaze.com/cloud-storage/pricing) | 10 GB, Abruf bis zum Dreifachen der gespeicherten Menge kostenlos | auf der Preisseite nicht erwähnt – beim Anmelden prüfen | Region wird beim Anmelden gewählt (EU: `eu-central-003`), Adresse `https://s3.<Region>.backblazeb2.com`. „Application Key“ nur für diesen Bucket. |
+| [Supabase](https://supabase.com/pricing) Storage | 1 GB, 5 GB Datentransfer | auf der Preisseite nicht erwähnt | Passt zur Datenbank bei Supabase. Gratis-Projekte pausieren nach einer Woche ohne Nutzung. Adresse, Region und Schlüssel in den Storage-Einstellungen unter „S3 Connection“. |
 
 ### Server-Adresse
 
@@ -295,7 +334,11 @@ Admin-Änderungen auf beiden Datenbanken (Fotos als Dateien, nur echte Bilder, B
 dem Rezept bzw. dem Konto, Übernahme ins Konto ohne Doppeltes, Umzug aus `community.json`, `feedback.json` und
 `recipe-overrides.json`), die Auslieferung der Bilder, Planer, KI-Anbieter mit nachgebautem Ollama, CORS, den Betrieb
 im Container (Lebenszeichen ohne KI, Health-Check samt Zeitlimit gegen den echten Server, Dev-Login nur zum Testen,
-Startmeldung ohne WLAN und ohne Zugangsdaten aus `OLLAMA_URL`, Dockerfile und `.dockerignore`),
+Startmeldung ohne WLAN und ohne Zugangsdaten aus `OLLAMA_URL`, Dockerfile und `.dockerignore`), den Objektspeicher für
+Fotos (Signatur mit den Beispielen der AWS-Doku; Speichern, Lesen, Löschen und seitenweises Auflisten gegen einen
+nachgebauten Objektspeicher über HTTP, der jede Signatur nachrechnet – auch mit Ordner im Bucket und Adresse mit Pfad
+wie bei Supabase; Wiederholen bei 503, verständliche Fehler mit Hinweis, Probe beim Start, Einstellungen aus der
+Umgebung, Auslieferung über `/api/images/`, Umzug mit `photos:copy` in beide Richtungen),
 die Sicherung des Tagebuchs (ebenfalls auf beiden Datenbanken: Seiten, neuere Fassung gewinnt, Grenze ohne halbe
 Änderungen, viele Einträge in Paketen, gleichzeitige Abgleiche, Übernahme ins Konto, Umzug aus `data/diary/` mit
 denselben Revisionen), der Abgleich von Einstellungen, Plan und Vorrat (`POST /api/sync`: nur mit Konto, zwei Geräte,
@@ -470,7 +513,8 @@ Favoriten, Rezepttexte und eigene Fotos der Galerie – nur die Fotos selbst nic
   Angenommen werden nur JPEG, PNG und WebP – erkannt an den ersten Bytes, nicht an der Angabe des Absenders (sonst `400
   invalid_image`). Löschen eines Fotos, eines geteilten Rezepts oder des Kontos löscht auch die Bilddateien; „Meine
   Daten exportieren“ enthält die eigenen Fotos wieder als data-URI. Sichern: den Ordner zusammen mit der Datenbank
-  kopieren. Auf Cloud-Diensten, die Dateien beim Neustart verlieren, braucht es dafür einen Objektspeicher (9.3).
+  kopieren. Auf Cloud-Diensten, die Dateien beim Neustart verlieren, liegen sie in einem Objektspeicher (`S3_*`, siehe
+  „Fotos im Objektspeicher“).
 - **Umzug:** Liegt noch die Konten-Datei älterer Fassungen (`data/users.json`) da, übernimmt der Server sie beim Start
   einmal – mit denselben Konto-IDs (daran hängen Tagebuch-Sicherung und Fotos) und den noch gültigen Anmeldungen – und
   löscht sie danach. Ebenso die Sicherung der Ernährungshistorie aus `data/diary/` (eine Datei pro Konto bzw. Gerät,
