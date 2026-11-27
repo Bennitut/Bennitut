@@ -1,5 +1,8 @@
 import { networkInterfaces } from "node:os";
 import type { AiStatus } from "./ai/provider.js";
+import { displayUrl } from "./urls.js";
+
+export { displayUrl };
 
 // Was der Server beim Start ins Fenster schreibt: Adressen, aktive KI und die Firewall-Regel fürs iPhone.
 
@@ -12,16 +15,6 @@ export function lanAddresses(interfaces: ReturnType<typeof networkInterfaces> = 
     .filter((i) => (i.family === "IPv4" || (i.family as unknown) === 4) && !i.internal && !i.address.startsWith("169.254."))
     .map((i) => i.address);
   return [...new Set([...all.filter(isPrivate), ...all.filter((a) => !isPrivate(a))])];
-}
-
-/** Adresse fürs Fenster bzw. Protokoll ohne Zugangsdaten, Pfad und Parameter (OLLAMA_URL kann einen Schlüssel enthalten). */
-export function displayUrl(url: string): string {
-  try {
-    const { protocol, host } = new URL(url);
-    return `${protocol}//${host}`;
-  } catch {
-    return "(keine gültige Adresse)";
-  }
 }
 
 /**
@@ -40,12 +33,16 @@ export function aiLine(status: AiStatus, ollama: { url: string; model: string },
     if (status.state === "model_missing") {
       return `KI: Ollama läuft, aber das Modell fehlt. Einmal ${container ? "auf dem Rechner mit Ollama " : ""}ausführen: ollama pull ${status.model}`;
     }
-    return `KI: Ollama gewählt, antwortet aber nicht unter ${displayUrl(ollama.url)}. Läuft Ollama?`;
+    if (status.reason === "unauthorized") {
+      return `KI: Ollama unter ${displayUrl(ollama.url)} lehnt den Schlüssel ab – OLLAMA_API_KEY muss gleich OLLAMA_RELAY_KEY der Weiterleitung sein.`;
+    }
+    return `KI: Ollama gewählt, antwortet aber nicht unter ${displayUrl(ollama.url)}. Läuft Ollama${container ? " (bzw. die Weiterleitung und der Tunnel auf dem Rechner mit Ollama)" : ""}?`;
   }
   return (
     "KI: keine – Foto, Kassenbon, Import, Übersetzen und KI-Wünsche melden „KI nicht eingerichtet“.\n" +
     (container
-      ? "    Im Container: ANTHROPIC_API_KEY setzen (kostet API-Guthaben) oder OLLAMA_URL auf einen Rechner mit Ollama."
+      ? "    Im Container: ANTHROPIC_API_KEY setzen (kostet API-Guthaben) oder OLLAMA_URL und OLLAMA_API_KEY auf die Weiterleitung\n" +
+        "    zu Ollama auf einem anderen Rechner (docs/SERVER-HOSTING.md)."
       : `    Kostenlos: winget install Ollama.Ollama, dann ollama pull ${ollama.model} – der Server merkt es ohne Neustart.`)
   );
 }

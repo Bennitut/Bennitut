@@ -171,6 +171,16 @@ function deviceId(c: Context): string {
   return DeviceId.parse(c.req.header("X-Device-Id"));
 }
 
+/** Header, die ein Proxy oder Tunnel selbst setzt (Cloudflare Tunnel, Render, Tailscale Funnel, nginx …). */
+const PROXY_HEADERS = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded", "x-real-ip", "true-client-ip", "tailscale-funnel-request"];
+
+/**
+ * Kam die Anfrage über einen Proxy oder Tunnel, also aus dem Internet? Dann gibt es keinen Dev-Login, auch wenn
+ * ALLOW_DEV_LOGIN=1 in server/.env steht – etwa auf dem Laptop, den ein Tunnel erreichbar macht (Weg a in
+ * docs/SERVER-HOSTING.md). Cloudflare setzt seine Header bei jeder Anfrage selbst, wegnehmen kann sie niemand.
+ */
+export const viaProxy = (c: Context) => PROXY_HEADERS.some((name) => c.req.header(name) !== undefined);
+
 export interface AuthConfig {
   /** Bundle-IDs für „Mit Apple anmelden“ (in Expo Go: host.exp.Exponent). */
   appleAudiences: string[];
@@ -517,8 +527,11 @@ export function createApp({
     return c.json({ token, user: me(user) });
   });
 
+  // Dev-Login nur zum Testen im eigenen Netz: nie über einen Tunnel oder Proxy (viaProxy), im Betrieb gar nicht (runtime.ts).
+  const devLoginFor = (c: Context) => auth.allowDevLogin && !viaProxy(c);
+
   app.post("/api/auth/dev", async (c) => {
-    if (!auth.allowDevLogin) return c.json({ error: "not_found" }, 404);
+    if (!devLoginFor(c)) return c.json({ error: "not_found" }, 404);
     const body = z.object({ name: z.string().trim().min(1).max(40), email: z.string().email().optional() }).parse(await c.req.json());
     const { token, user } = await users.login({ provider: "dev", sub: (body.email ?? body.name).toLowerCase(), email: body.email ?? null, name: body.name });
     return c.json({ token, user: me(user) });
@@ -677,7 +690,7 @@ export function createApp({
     c.json({
       apple: auth.appleAudiences.length > 0,
       google: auth.googleAudiences.length > 0,
-      dev: auth.allowDevLogin,
+      dev: devLoginFor(c),
       password: true,
       passwordReset: mailer !== null,
       passwordMinLength: PASSWORD_MIN_LENGTH,

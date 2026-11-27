@@ -37,14 +37,15 @@ function setup(options: { mailer?: Mailer | null; limits?: Partial<AuthLimits>; 
     authLimits: { ...defaultAuthLimits(), ...options.limits },
     trustProxy: true,
   });
-  const call = (method: string, path: string, body?: unknown, extra: { token?: string; ip?: string } = {}) =>
+  // Wie hinter einem Proxy (TRUST_PROXY): die Adresse fürs Rate-Limit im Header – außer `direct` (eigenes Netz, Dev-Login).
+  const call = (method: string, path: string, body?: unknown, extra: { token?: string; ip?: string; direct?: boolean } = {}) =>
     app.request(path, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
       headers: {
         "Content-Type": "application/json",
         "X-Device-Id": "device-konten-1",
-        "X-Forwarded-For": extra.ip ?? "203.0.113.1",
+        ...(extra.direct ? {} : { "X-Forwarded-For": extra.ip ?? "203.0.113.1" }),
         ...(extra.token ? { Authorization: `Bearer ${extra.token}` } : {}),
       },
     });
@@ -221,9 +222,29 @@ describe("Passwort ändern und zurücksetzen", () => {
     expect((await login("ben@example.com", "Neues Passwort 1")).status).toBe(200);
   });
 
+  it("lässt den Dev-Login nur im eigenen Netz zu, nie über einen Proxy oder Tunnel", async () => {
+    const { app, call } = setup();
+    // Im eigenen Netz (ohne Header eines Proxys): wie bisher.
+    expect((await call("POST", "/api/auth/dev", { name: "Nah" }, { direct: true })).status).toBe(200);
+    expect(await (await call("GET", "/api/auth/config", undefined, { direct: true })).json()).toMatchObject({ dev: true });
+    // Über einen Proxy (X-Forwarded-For) bzw. Cloudflare Tunnel (CF-Connecting-IP, CF-Ray): als gäbe es ihn nicht –
+    // auch wenn ALLOW_DEV_LOGIN=1 in server/.env steht (Laptop mit Tunnel, Weg a in docs/SERVER-HOSTING.md).
+    expect((await call("POST", "/api/auth/dev", { name: "Fern" })).status).toBe(404);
+    expect(await (await call("GET", "/api/auth/config")).json()).toMatchObject({ dev: false });
+    const proxied: Record<string, string>[] = [{ "CF-Connecting-IP": "198.51.100.7" }, { "CF-Ray": "8c1f2a3b4d5e6f70-FRA" }, { Forwarded: "for=198.51.100.7" }];
+    for (const header of proxied) {
+      const res = await app.request("/api/auth/dev", {
+        method: "POST",
+        body: JSON.stringify({ name: "Tunnel" }),
+        headers: { "Content-Type": "application/json", "X-Device-Id": "device-konten-2", ...header },
+      });
+      expect(res.status).toBe(404);
+    }
+  });
+
   it("meldet Konten ohne Passwort (Apple, Google, Dev-Login)", async () => {
     const { call } = setup();
-    const { token } = (await (await call("POST", "/api/auth/dev", { name: "Mia" })).json()) as { token: string };
+    const { token } = (await (await call("POST", "/api/auth/dev", { name: "Mia" }, { direct: true })).json()) as { token: string };
     const res = await call("POST", "/api/auth/password", { currentPassword: "irgendwas!!", newPassword: "Neues Passwort 1" }, { token });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "auth_no_password" });
@@ -362,7 +383,7 @@ describe("Konto löschen und Daten exportieren", () => {
 
   it("löscht Konten ohne Passwort (Apple, Google, Dev-Login) ohne Rückfrage", async () => {
     const { call } = setup();
-    const { token } = (await (await call("POST", "/api/auth/dev", { name: "Kurz" })).json()) as { token: string };
+    const { token } = (await (await call("POST", "/api/auth/dev", { name: "Kurz" }, { direct: true })).json()) as { token: string };
     expect((await call("DELETE", "/api/auth/me", undefined, { token })).status).toBe(204);
     expect((await call("GET", "/api/auth/me", undefined, { token })).status).toBe(401);
   });

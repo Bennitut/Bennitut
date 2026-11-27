@@ -11,6 +11,14 @@ function isPrivateIPv4(host: string): boolean {
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
+/**
+ * Ob ein Rechnername (`URL.hostname`) dieser Rechner oder einer im eigenen Netz ist: localhost, 127.0.0.1, ::1 und
+ * private IPv4-Adressen. Für Ursprünge im Browser (CORS) und für die Frage, ob ein Schlüssel ohne https gehen darf.
+ */
+export function isLocalHost(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || isPrivateIPv4(host);
+}
+
 /** Einträge aus CORS_ORIGINS vereinheitlichen („https://example.com/pfad/“ → „https://example.com“), Ungültiges weglassen. */
 export function normalizeOrigins(origins: readonly string[]): string[] {
   return origins.flatMap((entry) => {
@@ -37,8 +45,7 @@ export function isAllowedOrigin(origin: string, extra: readonly string[] = []): 
   }
   if (url.origin !== "null" && extra.includes(url.origin)) return true;
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-  const host = url.hostname;
-  return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || isPrivateIPv4(host);
+  return isLocalHost(url.hostname);
 }
 
 /** CORS für /api/*; `extraOrigins` kommt aus CORS_ORIGINS (kommagetrennt). */

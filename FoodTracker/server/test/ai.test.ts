@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { AI_CONSENT_HEADER, AI_CONSENT_VERSION, hasAiConsent } from "../src/ai/consent.js";
 import { jsonSchemaFor, sameModel, type FetchLike } from "../src/ai/ollama.js";
-import { Ai, aiSettingsFromEnv, type AiSettings } from "../src/ai/provider.js";
+import { Ai, aiConfigProblem, aiSettingsFromEnv, type AiSettings } from "../src/ai/provider.js";
 import { analyzeMealPhoto, translateRecipe } from "../src/ai/tasks.js";
 import { AiError, AnalysisError } from "../src/ai/types.js";
 import { createApp } from "../src/app.js";
@@ -79,6 +79,31 @@ describe("KI-Einstellungen aus der Umgebung", () => {
     expect(s.ollama.timeoutMs).toBe(240_000);
     expect(s.ollama.numCtx).toBe(16384);
     expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("liest den Schlüssel für Ollama auf einem anderen Rechner (OLLAMA_API_KEY)", () => {
+    expect(aiSettingsFromEnv({ OLLAMA_URL: "https://ki.example.org", OLLAMA_API_KEY: "  geheim-123  " }).ollama.apiKey).toBe("geheim-123");
+    expect(aiSettingsFromEnv({ OLLAMA_API_KEY: "   " }).ollama.apiKey).toBeUndefined();
+  });
+
+  it("startet lieber nicht, als einen Schlüssel unverschlüsselt durchs Internet zu schicken", () => {
+    const problem = (env: NodeJS.ProcessEnv) => aiConfigProblem(aiSettingsFromEnv(env));
+    expect(problem({})).toBeNull();
+    expect(problem({ OLLAMA_URL: "https://beispiel.trycloudflare.com", OLLAMA_API_KEY: "geheim" })).toBeNull();
+    // Im eigenen Netz bzw. in Docker Compose darf es http sein.
+    expect(problem({ OLLAMA_URL: "http://192.168.1.5:11434", OLLAMA_API_KEY: "geheim" })).toBeNull();
+    expect(problem({ OLLAMA_URL: "http://ollama:11434", OLLAMA_API_KEY: "geheim" })).toBeNull();
+    expect(problem({ OLLAMA_URL: "http://ki.example.org", OLLAMA_API_KEY: "geheim" })).toMatch(/unverschlüsselt über http an http:\/\/ki\.example\.org/);
+    // Ohne Schlüssel gibt es nichts zu verraten.
+    expect(problem({ OLLAMA_URL: "http://ki.example.org" })).toBeNull();
+    const withCredentials = problem({ OLLAMA_URL: "https://ben:geheim@ki.example.org" });
+    expect(withCredentials).toMatch(/Zugangsdaten.*OLLAMA_API_KEY/);
+    expect(withCredentials).not.toContain("geheim");
+    expect(problem({ OLLAMA_URL: "ki.example.org" })).toMatch(/keine gültige Adresse/);
+    expect(problem({ OLLAMA_URL: "ftp://ki.example.org" })).toMatch(/http:\/\/ oder https:\/\//);
+    // Mit Claude fragt der Server Ollama gar nicht – dann stört OLLAMA_URL nicht, außer Ollama ist fest gewählt.
+    expect(problem({ ANTHROPIC_API_KEY: "sk-test", OLLAMA_URL: "http://ki.example.org", OLLAMA_API_KEY: "geheim" })).toBeNull();
+    expect(problem({ AI_PROVIDER: "ollama", ANTHROPIC_API_KEY: "sk-test", OLLAMA_URL: "http://ki.example.org", OLLAMA_API_KEY: "geheim" })).not.toBeNull();
   });
 
   it("erkennt dasselbe Modell mit und ohne :latest", () => {
@@ -183,6 +208,37 @@ describe("Ollama", () => {
     const err = await run(hang, 30).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(AiError);
     expect(err).toMatchObject({ code: "timeout" });
+  });
+
+  it("schickt OLLAMA_API_KEY als Bearer-Token mit – ohne Schlüssel keinen", async () => {
+    quiet();
+    const seen: (string | null)[] = [];
+    const fetchFn: FetchLike = async (url, init) => {
+      seen.push(new Headers(init?.headers).get("Authorization"));
+      return url.endsWith("/api/tags") ? Response.json({ models: [{ name: "gemma4:e4b" }] }) : reply(TRANSLATED);
+    };
+    await translateRecipe(new Ai(settings({ ollama: { ...OLLAMA, url: "https://ki.example.org", apiKey: "geheim-123" } }), fetchFn), TEXT, "en");
+    expect(seen).toEqual(["Bearer geheim-123", "Bearer geheim-123"]);
+    seen.length = 0;
+    await translateRecipe(new Ai(settings(), fetchFn), TEXT, "en");
+    expect(seen).toEqual([null, null]);
+  });
+
+  it("erkennt einen abgelehnten Schlüssel und den Abbruch durch den Tunnel (524)", async () => {
+    quiet();
+    const run = (chat: NonNullable<Parameters<typeof fakeOllama>[0]>["chat"]) =>
+      translateRecipe(new Ai(settings(), fakeOllama({ chat }).fetchFn), TEXT, "en");
+    const denied = await run(() => Response.json({ error: "unauthorized" }, { status: 401 })).catch((e: unknown) => e);
+    expect(denied).toMatchObject({ code: "unavailable" });
+    expect((denied as AiError).message).toContain("lehnt den Schlüssel ab");
+    await expect(run(() => new Response("<html>A timeout occurred</html>", { status: 524 }))).rejects.toMatchObject({ code: "timeout" });
+  });
+
+  it("schreibt Pfad und Parameter der Adresse nie in Meldungen (dort könnte ein Schlüssel stehen)", async () => {
+    const ai = new Ai(settings({ provider: "ollama", ollama: { ...OLLAMA, url: "https://ki.example.org/geheimer-pfad?token=abc" } }), fakeOllama({ models: null }).fetchFn);
+    const err = await ai.require().catch((e: unknown) => e);
+    expect((err as AiError).message).toContain("https://ki.example.org");
+    expect((err as AiError).message).not.toMatch(/geheimer-pfad|token=abc/);
   });
 
   it("fragt noch einmal ohne `think`, wenn das Modell keinen Denk-Modus hat", async () => {

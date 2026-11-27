@@ -1,7 +1,7 @@
 // Zuerst server/.env lesen, damit alle anderen Module die Einstellungen schon sehen.
 import { ENV_FILE, envFileLoaded } from "./env.js";
 import { serve } from "@hono/node-server";
-import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
+import { Ai, aiConfigProblem, aiSettingsFromEnv } from "./ai/provider.js";
 import { createApp } from "./app.js";
 import { normalizeOrigins } from "./http/cors.js";
 import { mailerFromEnv } from "./mail/mailer.js";
@@ -23,6 +23,13 @@ const devLogin = devLoginSetting(process.env, runtime);
 // Websites, die den Server aus dem Browser nutzen dürfen (CORS) – im Container standardmäßig die Web-Version auf
 // GitHub Pages (Dockerfile). Einmal vereinheitlichen, damit Warnungen zu ungültigen Einträgen nur einmal kommen.
 const corsOrigins = normalizeOrigins(list(process.env.CORS_ORIGINS));
+// KI (ai/provider.ts): Lieber nicht starten, als einen Schlüssel für Ollama unverschlüsselt durchs Internet zu schicken.
+const aiSettings = aiSettingsFromEnv();
+const aiProblem = aiConfigProblem(aiSettings);
+if (aiProblem) {
+  console.error(`\nDie Einstellungen für die KI stimmen nicht: ${aiProblem}\n`);
+  process.exit(1);
+}
 
 // Datenbank (storage/db.ts): mit DATABASE_URL Postgres, sonst die SQLite-Datei. Lieber gar nicht starten als ohne
 // Konten – die Meldung sagt, was zu tun ist (die Adresse selbst nie ausgeben, sie enthält das Passwort).
@@ -122,7 +129,7 @@ try {
   console.error(`Admin-Änderungen aus ${overridesFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
 }
 
-const ai = new Ai(aiSettingsFromEnv());
+const ai = new Ai(aiSettings);
 const mailer = mailerFromEnv();
 const app = createApp({
   db,
@@ -155,7 +162,12 @@ const server = serve({ fetch: app.fetch, port }, async () => {
       container: runtime.container,
     }),
   );
-  if (devLogin.allowed) console.log("\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN.");
+  if (devLogin.allowed) {
+    console.log(
+      "\n  Achtung: ALLOW_DEV_LOGIN=1 – Anmeldung nur mit Namen, nur zum Testen im eigenen WLAN. Über einen Tunnel oder Proxy\n" +
+        "  (Anfragen aus dem Internet) lehnt der Server ihn ab; für einen Tunnel die Zeile in server/.env trotzdem löschen.",
+    );
+  }
   if (devLogin.ignored) {
     console.warn(
       "\n  ALLOW_DEV_LOGIN=1 gilt hier nicht: NODE_ENV=production heißt Server für andere, und dort könnte sich damit jede:r\n" +
