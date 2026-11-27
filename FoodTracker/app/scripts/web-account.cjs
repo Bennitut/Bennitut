@@ -10,10 +10,11 @@
 //                                     # Abmelden, Anmelden mit altem und neuem Passwort, „Passwort vergessen?“ bis zum
 //                                     # falschen Code; Fragebogen, Monatsplan und zwei gebuchte Zeilen kommen in einem
 //                                     # frischen Browser (Hinweis „Anmelden“ im Plan) mit dem Konto zurück, eine dort
-//                                     # abgehakte Zeile kommt im ersten an; ein Favorit und eine Kopie mit eigenem
-//                                     # Foto kommen ebenso mit (das Foto im zweiten vom Server, im ersten bleibt es
-//                                     # auf dem Gerät); „Meine Daten exportieren“ (mit Plan, Vorrat, Rezept samt
-//                                     # Foto und Favorit), Konto löschen (falsch/richtig, Foto danach weg);
+//                                     # abgehakte Zeile kommt im ersten an; ein Favorit, eine Kopie mit eigenem
+//                                     # Foto und ein „Nur ich“-Foto der Galerie kommen ebenso mit (die Fotos im
+//                                     # zweiten vom Server, im ersten bleiben sie auf dem Gerät); „Meine Daten
+//                                     # exportieren“ (mit Plan, Vorrat, Rezept samt Foto, Favorit und „Nur ich“-
+//                                     # Foto), Konto löschen (falsch/richtig, Fotos danach weg);
 //                                     # dabei die Sicherung des Tagebuchs in der Datenbank (Umzug einer Datei aus
 //                                     # data/diary/ beim Start, Eintrag vom Gerät landet im Konto, im Export und ist
 //                                     # nach dem Löschen weg); vorher der Umzug von Community-Rezepten, Fotos mit
@@ -423,7 +424,7 @@ async function main() {
       const res = await fetch(`${API}/api/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${bearerToken}` },
-        body: JSON.stringify({ kinds: { settings: { since: 0 }, plan: { since: 0 }, pantry: { since: 0 }, recipes: { since: 0 }, favorites: { since: 0 }, texts: { since: 0 } } }),
+        body: JSON.stringify({ kinds: { settings: { since: 0 }, plan: { since: 0 }, pantry: { since: 0 }, recipes: { since: 0 }, favorites: { since: 0 }, texts: { since: 0 }, photos: { since: 0 } } }),
       });
       return res.ok ? (await res.json()).kinds : {};
     };
@@ -525,6 +526,28 @@ async function main() {
     }
     if (!here?.uri?.startsWith("data:image/") || here.server !== ownPath) failures.push(`Im ersten Browser nicht Foto plus Pfad: ${JSON.stringify(here && { uri: here.uri.slice(0, 30), server: here.server })}`);
 
+    // Eigenes Foto in der Galerie eines Rezepts mit „Nur ich“ (9.2 Teil 6): danach als Datei im Bildspeicher des Kontos,
+    // hier weiter auf dem Gerät (mit Pfad daneben); der frische Browser zeigt es vom Server.
+    await page.goto(`${site}/recipe/kaiserschmarrn`, { waitUntil: "networkidle" });
+    const [galleryChooser] = await Promise.all([page.waitForEvent("filechooser"), button("🖼️ Galerie").click()]);
+    await galleryChooser.setFiles(photoFile);
+    await button("🔒 Nur ich").click();
+    await button("Speichern").last().click();
+    const galleryOnServer = (k) => (k.photos?.changes ?? []).find((r) => r.data?.recipeId === "kaiserschmarrn");
+    const withGallery = await waitForServer((k) => galleryOnServer(k)?.data.uri?.startsWith("/api/images/"));
+    const galleryPath = galleryOnServer(withGallery)?.data.uri;
+    if (!galleryPath?.startsWith("/api/images/") || galleryOnServer(withGallery)?.data.public !== false) failures.push(`Privates Galerie-Foto nicht im Konto: ${JSON.stringify(galleryOnServer(withGallery))}`);
+    if (JSON.stringify(withGallery.photos ?? {}).includes("base64")) failures.push("Galerie-Foto als data-URI in der Datenbank");
+    const galleryHere = async () => page.evaluate(() => (JSON.parse(localStorage.getItem("foodtracker/state/v2") ?? "{}").myPhotos ?? [])[0] ?? null);
+    let photoHere = await galleryHere();
+    for (let i = 0; i < 40 && photoHere?.server !== galleryPath; i++) {
+      await page.waitForTimeout(250);
+      photoHere = await galleryHere();
+    }
+    if (!photoHere?.uri?.startsWith("data:image/") || photoHere.server !== galleryPath) failures.push(`Galerie-Foto im ersten Browser nicht Foto plus Pfad: ${JSON.stringify(photoHere && { uri: photoHere.uri.slice(0, 30), server: photoHere.server })}`);
+    const publicGallery = await (await fetch(`${API}/api/recipes/kaiserschmarrn/photos`, { headers: { Authorization: `Bearer ${await currentToken()}` } })).json();
+    if (publicGallery.some((p) => p.mine)) failures.push("„Nur ich“-Foto in der öffentlichen Galerie");
+
     const recipeContext = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT" });
     const third = await recipeContext.newPage();
     third.on("pageerror", (e) => failures.push(`JavaScript-Fehler (dritter Browser): ${e.message}`));
@@ -549,8 +572,14 @@ async function main() {
     await third.getByRole("button", { name: "♥ Favorit", exact: true }).waitFor({ timeout: 5_000 }).catch(() => undefined);
     await third.goto(`${site}/recipe/kaiserschmarrn`, { waitUntil: "networkidle" });
     await third.getByRole("button", { name: "♥ Favorit", exact: true }).waitFor({ timeout: 10_000 }).catch(() => failures.push("Favorit im dritten Browser nicht markiert"));
+    // Das „Nur ich“-Foto der Galerie: als eigenes Foto da, Bild vom Server; öffentlich machen geht nur, wo es liegt.
+    for (let i = 0; i < 50 && galleryPath && !thirdImages.has(galleryPath); i++) await third.waitForTimeout(200);
+    const galleryShown = await third.evaluate((src) => [...document.querySelectorAll("img")].some((img) => img.src === src && img.complete && img.naturalWidth > 0), `${API}${galleryPath}`);
+    if (!galleryPath || !thirdImages.has(galleryPath) || !galleryShown) failures.push(`„Nur ich“-Foto im dritten Browser nicht vom Server angezeigt (geladen: ${JSON.stringify([...thirdImages])})`);
+    await third.getByText("🔒 Nur ich", { exact: true }).first().waitFor({ timeout: 5_000 }).catch(() => failures.push("„Nur ich“-Abzeichen fehlt im dritten Browser"));
+    if ((await third.getByRole("button", { name: "Öffentlich machen", exact: true }).count()) !== 0) failures.push("„Öffentlich machen“ für ein Foto, das nicht auf diesem Gerät liegt");
     await recipeContext.close();
-    step("Favorit und Kopie mit eigenem Foto: im frischen Browser da, Foto dort vom Server, im ersten auf dem Gerät mit Pfad");
+    step("Favorit, Kopie mit eigenem Foto und „Nur ich“-Foto der Galerie: im frischen Browser da, Fotos dort vom Server, im ersten auf dem Gerät mit Pfad");
     await page.goto(`${site}/profile`, { waitUntil: "networkidle" });
     await see("Angemeldet als Nachtschicht", "zurück im Profil");
 
@@ -566,8 +595,10 @@ async function main() {
     const exportedOwn = (exported.recipes ?? []).find((r) => r.id === ownId);
     if (exportedOwn?.name !== "Nachtschicht-Schmarrn" || !exportedOwn.media?.image?.uri?.startsWith("data:image/")) failures.push(`Export ohne eigenes Rezept samt Foto: ${JSON.stringify(exportedOwn && { name: exportedOwn.name, image: exportedOwn.media?.image?.uri?.slice(0, 30) })}`);
     if (!(exported.favorites ?? []).some((f) => f.recipeId === "kaiserschmarrn")) failures.push(`Export ohne Favorit: ${JSON.stringify(exported.favorites)}`);
+    const exportedPhoto = (exported.myPhotos ?? []).find((p) => p.recipeId === "kaiserschmarrn");
+    if (exportedPhoto?.public !== false || !exportedPhoto.uri?.startsWith("data:image/")) failures.push(`Export ohne „Nur ich“-Foto: ${JSON.stringify(exportedPhoto && { ...exportedPhoto, uri: exportedPhoto.uri?.slice(0, 30) })}`);
     await see("gespeichert (Downloads)", "Export");
-    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash, mit Tagebuch, Essgewohnheiten, Plan, Vorrat, eigenem Rezept samt Foto und Favorit");
+    step("„Meine Daten exportieren“ als JSON ohne Passwort-Hash, mit Tagebuch, Essgewohnheiten, Plan, Vorrat, eigenem Rezept samt Foto, Favorit und „Nur ich“-Foto");
 
     await button("🗑️ Konto löschen").click();
     await see("Das lässt sich nicht rückgängig machen.", "Rückfrage");
@@ -580,6 +611,7 @@ async function main() {
     if (accountsWith(path.join(dataDir, "foodtracker.db"), email) !== 0) failures.push("Konto steht nach dem Löschen noch auf dem Server");
     if (syncRecordsOf(path.join(dataDir, "foodtracker.db"), `user:${account.id}`) !== 0) failures.push("Tagebuch, Plan, Vorrat oder Rezepte des Kontos stehen nach dem Löschen noch auf dem Server");
     if (ownPath && fs.existsSync(path.join(dataDir, "photos", ownPath.slice("/api/images/".length)))) failures.push("Foto des eigenen Rezepts liegt nach dem Löschen noch im Bildspeicher");
+    if (galleryPath && fs.existsSync(path.join(dataDir, "photos", galleryPath.slice("/api/images/".length)))) failures.push("„Nur ich“-Foto liegt nach dem Löschen noch im Bildspeicher");
     await button("Anmelden oder registrieren").click();
     await field("E-Mail").fill(email);
     await field("Passwort").fill(second);
