@@ -4,6 +4,9 @@ import { serve } from "@hono/node-server";
 import { Ai, aiConfigProblem, aiSettingsFromEnv } from "./ai/provider.js";
 import { createApp } from "./app.js";
 import { normalizeOrigins } from "./http/cors.js";
+import { parseTrustProxy } from "./http/proxy.js";
+import { defaultRequestLimits, parseAiPerHour } from "./http/rateLimit.js";
+import { redact } from "./log.js";
 import { mailerFromEnv } from "./mail/mailer.js";
 import { devLoginSetting, runtimeFromEnv } from "./runtime.js";
 import { lanAddresses, startupMessage } from "./startInfo.js";
@@ -30,6 +33,18 @@ if (aiProblem) {
   console.error(`\nDie Einstellungen für die KI stimmen nicht: ${aiProblem}\n`);
   process.exit(1);
 }
+// Rate-Limits (http/proxy.ts, http/rateLimit.ts): welchem Header die Adresse entnommen wird und wie viele KI-Anfragen
+// pro Stunde gehen. Unklare Werte lassen den Server nicht starten – lieber gar nicht als falsch geschützt.
+const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+const aiPerHour = parseAiPerHour(process.env.AI_REQUESTS_PER_HOUR);
+for (const setting of [trustProxy, aiPerHour]) {
+  if (!setting.ok) {
+    console.error(`\n${setting.problem}\n`);
+    process.exit(1);
+  }
+}
+const trust = trustProxy.ok ? trustProxy.trust : false;
+const perHour = aiPerHour.ok ? aiPerHour.perHour : 0;
 
 // Datenbank (storage/db.ts): mit DATABASE_URL Postgres, sonst die SQLite-Datei. Lieber gar nicht starten als ohne
 // Konten – die Meldung sagt, was zu tun ist (die Adresse selbst nie ausgeben, sie enthält das Passwort).
@@ -40,7 +55,7 @@ try {
   await migrate(db);
 } catch (e) {
   const reason = (e as { code?: string }).code ? `${(e as Error).message} (${(e as { code?: string }).code})` : (e as Error).message;
-  console.error(`\nDie Datenbank lässt sich nicht öffnen: ${reason}`);
+  console.error(`\nDie Datenbank lässt sich nicht öffnen: ${redact(reason)}`);
   if (databaseUrl) console.error("Stimmt DATABASE_URL in server/.env? Ohne DATABASE_URL nimmt der Server eine Datei auf diesem Rechner.");
   console.error("");
   process.exit(1);
@@ -54,7 +69,7 @@ try {
   images = imageStoreFromEnv(process.env);
   await images.check?.();
 } catch (e) {
-  console.error(`\nDer Speicher für Fotos ist nicht bereit: ${(e as Error).message}`);
+  console.error(`\nDer Speicher für Fotos ist nicht bereit: ${redact((e as Error).message)}`);
   const hint = objectStorageHint(e) ?? ((e as NodeJS.ErrnoException).code ? "Darf der Server in den Ordner für Fotos (PHOTOS_DIR, Standard data/photos) schreiben?" : null);
   if (hint) console.error(hint);
   console.error("");
@@ -77,7 +92,7 @@ try {
     );
   }
 } catch (e) {
-  console.error(`Konten aus ${usersFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+  console.error(`Konten aus ${usersFile} konnten nicht übernommen werden (${redact((e as Error).message)}). Die Datei bleibt liegen.`);
 }
 const diaryDir = process.env.DIARY_DIR?.trim() || "data/diary";
 try {
@@ -90,7 +105,7 @@ try {
   }
   if (moved?.unreadable) console.error(`${n(moved.unreadable, "Datei", "Dateien")} in ${diaryDir} unlesbar – bleiben liegen und werden nicht übernommen.`);
 } catch (e) {
-  console.error(`Sicherung der Ernährungshistorie aus ${diaryDir} konnte nicht übernommen werden (${(e as Error).message}). Die Dateien bleiben liegen.`);
+  console.error(`Sicherung der Ernährungshistorie aus ${diaryDir} konnte nicht übernommen werden (${redact((e as Error).message)}). Die Dateien bleiben liegen.`);
 }
 const skipped = (count: number) => (count ? ` (${n(count, "Eintrag", "Einträge")} gab es schon oder war unlesbar)` : "");
 const communityFile = process.env.COMMUNITY_FILE?.trim() || "data/community.json";
@@ -103,7 +118,7 @@ try {
     );
   }
 } catch (e) {
-  console.error(`Community-Rezepte aus ${communityFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+  console.error(`Community-Rezepte aus ${communityFile} konnten nicht übernommen werden (${redact((e as Error).message)}). Die Datei bleibt liegen.`);
 }
 const feedbackFile = process.env.FEEDBACK_FILE?.trim() || "data/feedback.json";
 try {
@@ -115,7 +130,7 @@ try {
     );
   }
 } catch (e) {
-  console.error(`Fotos, Sterne und Meldungen aus ${feedbackFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+  console.error(`Fotos, Sterne und Meldungen aus ${feedbackFile} konnten nicht übernommen werden (${redact((e as Error).message)}). Die Datei bleibt liegen.`);
 }
 const overridesFile = process.env.OVERRIDES_FILE?.trim() || "data/recipe-overrides.json";
 try {
@@ -126,7 +141,7 @@ try {
     );
   }
 } catch (e) {
-  console.error(`Admin-Änderungen aus ${overridesFile} konnten nicht übernommen werden (${(e as Error).message}). Die Datei bleibt liegen.`);
+  console.error(`Admin-Änderungen aus ${overridesFile} konnten nicht übernommen werden (${redact((e as Error).message)}). Die Datei bleibt liegen.`);
 }
 
 const ai = new Ai(aiSettings);
@@ -143,7 +158,8 @@ const app = createApp({
   ai,
   corsOrigins,
   mailer,
-  trustProxy: process.env.TRUST_PROXY === "1",
+  trustProxy: trust,
+  limits: defaultRequestLimits(perHour),
 });
 const server = serve({ fetch: app.fetch, port }, async () => {
   const status = await ai.status();
@@ -160,6 +176,7 @@ const server = serve({ fetch: app.fetch, port }, async () => {
       photos: images.description,
       corsOrigins,
       container: runtime.container,
+      limits: { trustProxy: trust, aiPerHour: perHour },
     }),
   );
   if (devLogin.allowed) {

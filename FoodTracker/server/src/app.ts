@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { AI_CONSENT_HEADER, requireAiConsent } from "./ai/consent.js";
 import { Ai, aiSettingsFromEnv } from "./ai/provider.js";
@@ -17,7 +17,10 @@ import { MONTH_DAYS, planMonth } from "./planner/monthPlanner.js";
 import { PlanError, matchesPreferences, recipeDiet } from "./planner/zeroWastePlanner.js";
 import { corsMiddleware } from "./http/cors.js";
 import { LIVE_PATH } from "./http/health.js";
-import { RateLimiter, clientIp } from "./http/rateLimit.js";
+import { ClientAddresses, viaProxy, type TrustProxy } from "./http/proxy.js";
+import { RateLimiter, TooManyRequestsError, defaultRequestLimits, type RequestLimits } from "./http/rateLimit.js";
+import { bodyLimits, httpsOnly, securityHeaders } from "./http/security.js";
+import { logError } from "./log.js";
 import { resetMail, type Mailer } from "./mail/mailer.js";
 import { SocialFetchError, detectPlatform, fetchSocialPost } from "./social/fetchPost.js";
 import { openSqlite, type Db } from "./storage/db.js";
@@ -171,15 +174,21 @@ function deviceId(c: Context): string {
   return DeviceId.parse(c.req.header("X-Device-Id"));
 }
 
-/** Header, die ein Proxy oder Tunnel selbst setzt (Cloudflare Tunnel, Render, Tailscale Funnel, nginx …). */
-const PROXY_HEADERS = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded", "x-real-ip", "true-client-ip", "tailscale-funnel-request"];
+/** Kein gültiges JSON im Inhalt der Anfrage (400 wie andere ungültige Eingaben). */
+class InvalidJsonError extends Error {}
 
 /**
- * Kam die Anfrage über einen Proxy oder Tunnel, also aus dem Internet? Dann gibt es keinen Dev-Login, auch wenn
- * ALLOW_DEV_LOGIN=1 in server/.env steht – etwa auf dem Laptop, den ein Tunnel erreichbar macht (Weg a in
- * docs/SERVER-HOSTING.md). Cloudflare setzt seine Header bei jeder Anfrage selbst, wegnehmen kann sie niemand.
+ * Inhalt der Anfrage als JSON. Kaputtes JSON wird zu InvalidJsonError: Die Meldung von JSON.parse enthält den Anfang
+ * des Textes – etwa ein Passwort –, und sie soll weder als „internal“ ins Protokoll noch an die App gehen.
  */
-export const viaProxy = (c: Context) => PROXY_HEADERS.some((name) => c.req.header(name) !== undefined);
+async function readJson(c: Context): Promise<unknown> {
+  try {
+    return await c.req.json();
+  } catch (e) {
+    if (e instanceof SyntaxError) throw new InvalidJsonError();
+    throw e;
+  }
+}
 
 export interface AuthConfig {
   /** Bundle-IDs für „Mit Apple anmelden“ (in Expo Go: host.exp.Exponent). */
@@ -226,7 +235,9 @@ export function createApp({
   mailer = null,
   passwordCost,
   authLimits = defaultAuthLimits(),
+  limits: limitOverrides = {},
   trustProxy = false,
+  warn = console.warn,
 }: {
   /**
    * Datenbank für alles, was der Server speichert: Konten, Sitzungen, Sicherung der Ernährungshistorie, Community-Rezepte,
@@ -246,9 +257,18 @@ export function createApp({
   /** Rechenaufwand für Passwörter; Standard siehe auth/password.ts, Tests nehmen weniger. */
   passwordCost?: ScryptCost;
   authLimits?: AuthLimits;
-  /** Hinter einem Proxy (Cloudflare Tunnel, Render …): IP-Adresse aus dessen Header nehmen (TRUST_PROXY=1). */
-  trustProxy?: boolean;
+  /** Grenzen für alle Anfragen, KI, Uploads und die Tagebuch-Sicherung ohne Konto (http/rateLimit.ts); Tests nehmen kleinere. */
+  limits?: Partial<RequestLimits>;
+  /**
+   * Hinter einem Proxy (Cloudflare Tunnel, Render …): welchem Header die Adresse für die Rate-Limits entnommen wird
+   * (TRUST_PROXY, siehe http/proxy.ts); `true` heißt wie TRUST_PROXY=1 der letzte Eintrag in X-Forwarded-For.
+   */
+  trustProxy?: TrustProxy | boolean;
+  /** Hinweise fürs Fenster bzw. Protokoll, z. B. wenn TRUST_PROXY nicht zum Weg der Anfragen passt. */
+  warn?: (message: string) => void;
 } = {}) {
+  const limits: RequestLimits = { ...defaultRequestLimits(), ...limitOverrides };
+  const clients = new ClientAddresses(trustProxy === true ? 1 : trustProxy, warn);
   const community = new CommunityStore(db, images);
   const feedback = new FeedbackStore(db, images);
   const users = new UserStore(db, auth.adminEmails.map((e) => e.toLowerCase()), passwordCost);
@@ -285,6 +305,24 @@ export function createApp({
    * Erst nach dem Prüfen der Eingaben, damit Fehler in der Anfrage wie bisher als 400 bzw. 422 ankommen.
    */
   const requireConsent = (c: Context) => requireAiConsent(c.req.header(AI_CONSENT_HEADER));
+  /**
+   * Vor jeder Anfrage an die KI (und vor jedem Plan, der Planer rechnet lange): höchstens AI_REQUESTS_PER_HOUR je
+   * Adresse und – angemeldet – je Konto. KI kostet Geld (Claude) bzw. blockiert die Grafikkarte (Ollama).
+   */
+  const aiQuota = async (c: Context) => {
+    const limiter = limits.ai;
+    if (!limiter) return;
+    const user = await currentUser(c);
+    const keys = [`ai:${clients.key(c)}`, ...(user ? [`ai:user:${user.id}`] : [])];
+    const wait = Math.max(...keys.map((key) => limiter.wait(key)));
+    if (wait > 0) throw new TooManyRequestsError("ai_rate_limited", wait);
+    for (const key of keys) limiter.hit(key);
+  };
+  /** Neues, das der Server speichert und andere sehen (Fotos, geteilte Rezepte, Meldungen) – auch ohne Konto. */
+  const uploadQuota = (c: Context) => {
+    const wait = limits.uploads.hit(`upload:${clients.key(c)}`);
+    if (wait > 0) throw new TooManyRequestsError("rate_limited", wait);
+  };
   const app = new Hono();
   // Vor der ersten Anfrage den Aufbau der Datenbank auf den Stand bringen (index.ts macht das schon beim Start).
   const ready = migrate(db);
@@ -296,10 +334,25 @@ export function createApp({
 
   // Zuerst CORS, damit auch Vorab-Anfragen (OPTIONS) und Fehlerantworten im Browser ankommen.
   app.use("/api/*", corsMiddleware(corsOrigins));
-  // Bis zu 10 Videobilder plus Vorschaubild.
-  app.use("/api/*", bodyLimit({ maxSize: 30 * 1024 * 1024 }));
+  // Header gegen Einbetten und Umdeuten für jede Antwort, nur über https aus dem Internet (http/security.ts).
+  app.use("*", securityHeaders());
+  app.use("/api/*", httpsOnly());
+  // Alle Anfragen je Adresse – außer dem Lebenszeichen, das Docker und der Hoster alle paar Sekunden abfragen.
+  app.use("/api/*", async (c, next) => {
+    if (c.req.path === LIVE_PATH) return next();
+    const wait = limits.requests.take(`all:${clients.key(c)}`);
+    if (wait > 0) throw new TooManyRequestsError("rate_limited", wait);
+    return next();
+  });
+  // Größengrenze je Schnittstelle (vorher 30 MB für alles).
+  app.use("/api/*", bodyLimits());
 
   app.onError((err, c) => {
+    if (err instanceof TooManyRequestsError) {
+      c.header("Retry-After", String(err.retryAfter));
+      return c.json({ error: err.code, retryAfter: err.retryAfter }, 429);
+    }
+    if (err instanceof InvalidJsonError) return c.json({ error: "invalid_request" }, 400);
     if (err instanceof z.ZodError) return c.json({ error: "invalid_request", details: err.issues }, 400);
     if (err instanceof AnalysisError) return c.json({ error: `analysis_${err.code}` }, 422);
     if (err instanceof AiError) return c.json({ error: `ai_${err.code}` }, AI_ERROR_STATUS[err.code]);
@@ -322,7 +375,10 @@ export function createApp({
       if (err.code === "weak_password") return c.json({ error: "auth_weak_password", minLength: PASSWORD_MIN_LENGTH, maxLength: PASSWORD_MAX_LENGTH }, status);
       return c.json({ error: `auth_${err.code}` }, status);
     }
-    console.error(err);
+    if (err instanceof HTTPException) return err.getResponse();
+    // Ins Protokoll ohne Passwörter, Tokens und E-Mail-Adressen (log.ts) und nur mit dem Muster der Route – im Pfad
+    // bzw. in der Suche könnten Namen stehen.
+    logError(`Fehler bei ${c.req.method} ${c.req.routePath}`, err);
     return c.json({ error: "internal" }, 500);
   });
 
@@ -360,14 +416,16 @@ export function createApp({
   });
 
   app.post("/api/analyze/meal", async (c) => {
-    const body = ImageBody.parse(await c.req.json());
+    const body = ImageBody.parse(await readJson(c));
     requireConsent(c);
+    await aiQuota(c);
     return c.json(await analyzeMealPhoto(ai, { data: body.imageBase64, mediaType: body.mediaType }, body.language));
   });
 
   app.post("/api/analyze/receipt", async (c) => {
-    const body = ImageBody.parse(await c.req.json());
+    const body = ImageBody.parse(await readJson(c));
     requireConsent(c);
+    await aiQuota(c);
     const receipt = await analyzeReceipt(ai, { data: body.imageBase64, mediaType: body.mediaType }, body.language);
     const pantry = receipt.items.flatMap((i) =>
       i.isFood && i.ingredientId ? [{ ingredientId: i.ingredientId, amount: i.quantity }] : [],
@@ -376,9 +434,11 @@ export function createApp({
   });
 
   app.post("/api/plan", async (c) => {
-    const { preferences, language, recipes, startDate, ...request } = PlanBody.parse(await c.req.json());
-    // Nur Wünsche gehen an die KI; ohne Wünsche plant der Server wie die App selbst.
+    const { preferences, language, recipes, startDate, ...request } = PlanBody.parse(await readJson(c));
+    // Nur Wünsche gehen an die KI; ohne Wünsche plant der Server wie die App selbst. Beides zählt zur Grenze für die
+    // KI – der Planer rechnet auch ohne KI ein paar Sekunden.
     if (preferences) requireConsent(c);
+    await aiQuota(c);
     const extraRecipes = preferences ? await generateRecipes(ai, preferences, 8, language) : [];
     const plan = planMonth({
       request,
@@ -392,7 +452,7 @@ export function createApp({
   /** Rezepte, die zu den Präferenzen passen – z. B. als Alternativen beim Tauschen eines Gerichts. */
   app.post("/api/recipes/matching", async (c) => {
     const body = Preferences.extend({ mealType: MealType.optional(), recipes: z.array(RecipeBody).max(500).default([]) }).parse(
-      await c.req.json(),
+      await readJson(c),
     );
     const ids = [...(await catalogRecipes()), ...body.recipes.map(asRecipe)]
       .filter((r) => (!body.mealType || r.mealTypes.includes(body.mealType)) && matchesPreferences(r, body, ingredientById))
@@ -401,11 +461,12 @@ export function createApp({
   });
 
   app.post("/api/recipes/import", async (c) => {
-    const body = ImportBody.parse(await c.req.json());
+    const body = ImportBody.parse(await readJson(c));
     if (body.url && !detectPlatform(body.url)) throw new SocialFetchError("unsupported_url");
     // Ohne Einwilligung bzw. ohne KI gleich abbrechen, bevor der Beitrag geladen wird.
     requireConsent(c);
     await ai.require();
+    await aiQuota(c);
     const post = body.url ? await fetchSocialPost(body.url) : null;
     if (post && !post.caption && !post.thumbnail && !body.caption && body.frames.length === 0) {
       throw new SocialFetchError("fetch_failed");
@@ -415,8 +476,9 @@ export function createApp({
   });
 
   app.post("/api/recipes/translate", async (c) => {
-    const body = z.object({ text: RecipeTextBody, targetLanguage: z.string().min(2).max(10) }).parse(await c.req.json());
+    const body = z.object({ text: RecipeTextBody, targetLanguage: z.string().min(2).max(10) }).parse(await readJson(c));
     requireConsent(c);
+    await aiQuota(c);
     return c.json(await translateRecipe(ai, body.text, body.targetLanguage));
   });
 
@@ -441,20 +503,22 @@ export function createApp({
         problem: z.string().max(500).default(""),
         language: Language,
       })
-      .parse(await c.req.json());
+      .parse(await readJson(c));
     requireConsent(c);
+    await aiQuota(c);
     return c.json(await improveRecipe(ai, body));
   });
 
   app.post("/api/recipes/:id/rating", async (c) => {
-    const { stars } = Stars.parse(await c.req.json());
+    const { stars } = Stars.parse(await readJson(c));
     return c.json(await feedback.rateRecipe(await actorId(c), RecipeIdParam.parse(c.req.param("id")), stars));
   });
 
   app.get("/api/recipes/:id/photos", async (c) => c.json(await feedback.photos(RecipeIdParam.parse(c.req.param("id")), await actorId(c))));
 
   app.post("/api/recipes/:id/photos", async (c) => {
-    const body = PhotoBody.parse(await c.req.json());
+    const body = PhotoBody.parse(await readJson(c));
+    uploadQuota(c);
     const user = await currentUser(c);
     const actor = user ? `user:${user.id}` : deviceId(c);
     const photo = await feedback.addPhoto(actor, RecipeIdParam.parse(c.req.param("id")), user?.name ?? body.authorName, body.uri);
@@ -465,7 +529,7 @@ export function createApp({
   });
 
   app.post("/api/photos/:id/rating", async (c) => {
-    const { stars } = Stars.parse(await c.req.json());
+    const { stars } = Stars.parse(await readJson(c));
     const photo = await feedback.ratePhoto(await actorId(c), c.req.param("id"), stars);
     return photo ? c.json(photo) : c.json({ error: "not_found" }, 404);
   });
@@ -475,7 +539,8 @@ export function createApp({
   );
 
   app.post("/api/recipes/:id/flags", async (c) => {
-    const body = z.object({ reason: z.enum(FLAG_REASONS), note: z.string().trim().max(500).default("") }).parse(await c.req.json());
+    const body = z.object({ reason: z.enum(FLAG_REASONS), note: z.string().trim().max(500).default("") }).parse(await readJson(c));
+    uploadQuota(c);
     await feedback.flag(await actorId(c), RecipeIdParam.parse(c.req.param("id")), body.reason, body.note);
     return c.body(null, 204);
   });
@@ -487,7 +552,13 @@ export function createApp({
     // Abgelaufene Sitzung: nicht still unter der Geräte-ID speichern, sondern melden – die App meldet dann ab.
     if (bearer(c) && !user) throw new AuthError("invalid_token");
     const owner = user ? `user:${user.id}` : `device:${deviceId(c)}`;
-    const body = DiarySyncBody.parse(await c.req.json());
+    const body = DiarySyncBody.parse(await readJson(c));
+    // Ohne Konto: Geräte-IDs kann sich jede:r ausdenken – deshalb höchstens so viele Einträge je Adresse und Stunde,
+    // wie ein Gerät mit jahrelanger Historie beim ersten Abgleich schickt (Konten haben ihre Obergrenze im Speicher).
+    if (!user) {
+      const wait = limits.diary.take(`diary:${clients.key(c)}`, body.changes.length);
+      if (wait > 0) throw new TooManyRequestsError("rate_limited", wait);
+    }
     const changes = body.changes.map((r) => ({ id: r.id, updatedAt: r.updatedAt, entry: r.entry ? { ...r.entry, id: r.id, updatedAt: r.updatedAt } : null }));
     try {
       return c.json({ owner, ...(await diary.sync(owner, body.since, changes, body.database)) });
@@ -503,7 +574,7 @@ export function createApp({
   app.post("/api/sync", async (c) => {
     const user = await currentUser(c);
     if (!user) throw new AuthError(bearer(c) ? "invalid_token" : "unauthorized");
-    const body = UserDataSyncBody.parse(await c.req.json());
+    const body = UserDataSyncBody.parse(await readJson(c));
     try {
       return c.json(await syncUserData(synced, `user:${user.id}`, body, images, (ids) => feedback.galleryPhotos(ids)));
     } catch (e) {
@@ -514,14 +585,14 @@ export function createApp({
 
   // Anmeldung mit Apple oder Google; das Ergebnis ist ein eigenes Sitzungstoken für die App.
   app.post("/api/auth/apple", async (c) => {
-    const body = z.object({ identityToken: z.string().min(10).max(5000), fullName: z.string().trim().max(80).optional() }).parse(await c.req.json());
+    const body = z.object({ identityToken: z.string().min(10).max(5000), fullName: z.string().trim().max(80).optional() }).parse(await readJson(c));
     const identity = await verifyAppleToken(body.identityToken, auth.appleAudiences);
     const { token, user } = await users.login({ provider: "apple", sub: identity.sub, email: identity.email, name: body.fullName ?? null });
     return c.json({ token, user: me(user) });
   });
 
   app.post("/api/auth/google", async (c) => {
-    const body = z.object({ idToken: z.string().min(10).max(5000) }).parse(await c.req.json());
+    const body = z.object({ idToken: z.string().min(10).max(5000) }).parse(await readJson(c));
     const identity = await verifyGoogleToken(body.idToken, auth.googleAudiences);
     const { token, user } = await users.login({ provider: "google", sub: identity.sub, email: identity.email, name: identity.name });
     return c.json({ token, user: me(user) });
@@ -532,7 +603,7 @@ export function createApp({
 
   app.post("/api/auth/dev", async (c) => {
     if (!devLoginFor(c)) return c.json({ error: "not_found" }, 404);
-    const body = z.object({ name: z.string().trim().min(1).max(40), email: z.string().email().optional() }).parse(await c.req.json());
+    const body = z.object({ name: z.string().trim().min(1).max(40), email: z.string().email().optional() }).parse(await readJson(c));
     const { token, user } = await users.login({ provider: "dev", sub: (body.email ?? body.name).toLowerCase(), email: body.email ?? null, name: body.name });
     return c.json({ token, user: me(user) });
   });
@@ -563,9 +634,9 @@ export function createApp({
   app.post("/api/auth/register", async (c) => {
     const body = z
       .object({ email: EmailField.pipe(z.email()), password: PasswordField, name: z.string().trim().max(40).optional() })
-      .parse(await c.req.json());
+      .parse(await readJson(c));
     const email = normalizeEmail(body.email);
-    const wait = authLimits.register.hit(clientIp(c, trustProxy)) || authLimits.failures.wait(email);
+    const wait = authLimits.register.hit(clients.key(c)) || authLimits.failures.wait(email);
     if (wait) return tooMany(c, wait);
     requireStrong(body.password);
     const { token, user, created } = await countingFailures(email, () => users.register({ email, password: body.password, name: body.name ?? null }));
@@ -573,9 +644,9 @@ export function createApp({
   });
 
   app.post("/api/auth/login", async (c) => {
-    const body = z.object({ email: EmailField, password: PasswordField }).parse(await c.req.json());
+    const body = z.object({ email: EmailField, password: PasswordField }).parse(await readJson(c));
     const email = normalizeEmail(body.email);
-    const wait = authLimits.login.hit(clientIp(c, trustProxy)) || authLimits.failures.wait(email);
+    const wait = authLimits.login.hit(clients.key(c)) || authLimits.failures.wait(email);
     if (wait) return tooMany(c, wait);
     const { token, user } = await countingFailures(email, () => users.loginWithPassword(email, body.password));
     return c.json({ token, user: me(user) });
@@ -584,7 +655,7 @@ export function createApp({
   /** Neues Passwort; andere Geräte werden abgemeldet, dieses bleibt angemeldet. */
   app.post("/api/auth/password", async (c) => {
     const user = await requireUser(c);
-    const body = z.object({ currentPassword: PasswordField, newPassword: PasswordField }).parse(await c.req.json());
+    const body = z.object({ currentPassword: PasswordField, newPassword: PasswordField }).parse(await readJson(c));
     const key = `user:${user.id}`;
     const wait = authLimits.failures.wait(key);
     if (wait) return tooMany(c, wait);
@@ -596,9 +667,9 @@ export function createApp({
   /** Code zum Zurücksetzen per E-Mail – nur mit Mail-Dienst; die Antwort ist immer dieselbe. */
   app.post("/api/auth/password/forgot", async (c) => {
     if (!mailer) return c.json({ error: "auth_reset_unavailable" }, 501);
-    const body = z.object({ email: EmailField, language: Language }).parse(await c.req.json());
+    const body = z.object({ email: EmailField, language: Language }).parse(await readJson(c));
     const email = normalizeEmail(body.email);
-    const wait = authLimits.forgot.hit(clientIp(c, trustProxy)) || authLimits.forgot.hit(`email:${email}`);
+    const wait = authLimits.forgot.hit(clients.key(c)) || authLimits.forgot.hit(`email:${email}`);
     if (wait) return tooMany(c, wait);
     const reset = await users.createResetCode(email);
     if (reset) {
@@ -613,10 +684,10 @@ export function createApp({
 
   app.post("/api/auth/password/reset", async (c) => {
     if (!mailer) return c.json({ error: "auth_reset_unavailable" }, 501);
-    const body = z.object({ email: EmailField, code: z.string().trim().max(20), newPassword: PasswordField }).parse(await c.req.json());
+    const body = z.object({ email: EmailField, code: z.string().trim().max(20), newPassword: PasswordField }).parse(await readJson(c));
     const email = normalizeEmail(body.email);
     const key = `reset:${email}`;
-    const wait = authLimits.login.hit(clientIp(c, trustProxy)) || authLimits.failures.wait(key);
+    const wait = authLimits.login.hit(clients.key(c)) || authLimits.failures.wait(key);
     if (wait) return tooMany(c, wait);
     requireStrong(body.newPassword);
     const { token, user } = await countingFailures(key, () => users.resetPassword(email, body.code, body.newPassword));
@@ -651,7 +722,7 @@ export function createApp({
    */
   app.delete("/api/auth/me", async (c) => {
     const user = await requireUser(c);
-    const body = z.object({ password: PasswordField.optional() }).parse(await c.req.json().catch(() => ({})));
+    const body = z.object({ password: PasswordField.optional() }).parse(await readJson(c).catch(() => ({})));
     if (user.passwordHash) {
       const key = `user:${user.id}`;
       const wait = authLimits.failures.wait(key);
@@ -701,7 +772,7 @@ export function createApp({
 
   app.patch("/api/auth/me", async (c) => {
     const user = await requireUser(c);
-    const { name } = z.object({ name: z.string().trim().min(1).max(40) }).parse(await c.req.json());
+    const { name } = z.object({ name: z.string().trim().min(1).max(40) }).parse(await readJson(c));
     return c.json(me((await users.rename(user.id, name))!));
   });
 
@@ -737,7 +808,7 @@ export function createApp({
 
   app.patch("/api/admin/users/:id", async (c) => {
     const admin = await requireAdmin(c);
-    const patch = z.object({ role: z.enum(ROLES).optional(), blocked: z.boolean().optional() }).parse(await c.req.json());
+    const patch = z.object({ role: z.enum(ROLES).optional(), blocked: z.boolean().optional() }).parse(await readJson(c));
     if (c.req.param("id") === admin.id && patch.blocked) return c.json({ error: "cannot_block_self" }, 400);
     const result = await users.update(c.req.param("id"), patch);
     if (result === "last_admin") return c.json({ error: "last_admin" }, 400);
@@ -771,7 +842,7 @@ export function createApp({
     const patch = RecipeBody.pick({ name: true, steps: true, otherIngredients: true, translations: true, mealTypes: true, cookMinutes: true, ingredients: true, media: true })
       .partial()
       .extend({ hidden: z.boolean().optional() })
-      .parse(await c.req.json());
+      .parse(await readJson(c));
     return c.json(await overrides.set(id, patch as Parameters<typeof overrides.set>[1], admin.name));
   });
 
@@ -787,7 +858,8 @@ export function createApp({
 
   /** Ein eigenes Foto des Rezepts (data-URI) kommt in den Bildspeicher; im Rezept steht danach sein Pfad. */
   app.post("/api/community/recipes", async (c) => {
-    const body = z.object({ authorName: z.string().trim().min(1).max(40), recipe: RecipeBody }).parse(await c.req.json());
+    const body = z.object({ authorName: z.string().trim().min(1).max(40), recipe: RecipeBody }).parse(await readJson(c));
+    uploadQuota(c);
     const user = await currentUser(c);
     return c.json(await community.publish(user ? `user:${user.id}` : deviceId(c), user?.name ?? body.authorName, asRecipe(body.recipe)), 201);
   });
@@ -806,7 +878,7 @@ export function createApp({
   );
 
   app.post("/api/delivery/orders", async (c) => {
-    const body = OrderBody.parse(await c.req.json());
+    const body = OrderBody.parse(await readJson(c));
     const provider = findProvider(body.providerId);
     if (!provider) return c.json({ error: "not_found" }, 404);
     return c.json(await provider.createCart(linesFromShoppingList(body.items)), 201);

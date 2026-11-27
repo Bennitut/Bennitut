@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
+import { redact } from "../log.js";
 
 // Speicherschicht (Vorrang 1, 9.2): dieselben SQL-Anweisungen für zwei Datenbanken.
 //  - Ohne DATABASE_URL eine SQLite-Datei unter server/data/ – in Node.js eingebaut (node:sqlite), keine nativen Pakete,
@@ -260,7 +261,7 @@ export async function openPostgres(url: string): Promise<Db> {
   const pool = new pg.Pool({ connectionString: url, max: 5, connectionTimeoutMillis: 15_000, idleTimeoutMillis: 30_000, ...ssl });
   // Kostenlose Anbieter beenden ruhende Verbindungen (Neon nach ein paar Minuten ohne Anfragen); ohne diesen Handler
   // würde der Server dabei abstürzen. Der Pool baut beim nächsten Mal eine neue Verbindung auf.
-  pool.on("error", (e: Error & { code?: string }) => console.error(`Datenbank: Verbindung beendet (${e.code ?? e.message}).`));
+  pool.on("error", (e: Error & { code?: string }) => console.error(`Datenbank: Verbindung beendet (${e.code ?? redact(e.message)}).`));
   const db = new PostgresDb(pool, `Postgres auf ${parsed.hostname}`);
   try {
     await db.get("SELECT 1 AS ok");

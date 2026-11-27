@@ -11,7 +11,9 @@
 #   sobald der Container ersetzt wird. Dienste ohne dauerhafte Dateien brauchen DATABASE_URL (Postgres, z. B. Neon).
 # - CORS_ORIGINS: Vorgabe ist die Web-Version auf GitHub Pages. Wer sie ändert, ersetzt die Vorgabe – also für eigene
 #   Domains die Pages-Adresse mit aufzählen, z. B. CORS_ORIGINS=https://bennitut.github.io,https://www.example.org
-# - Hinter dem HTTPS-Proxy des Hosters zusätzlich TRUST_PROXY=1, damit das Rate-Limit die echten Adressen sieht.
+# - Hinter dem HTTPS-Proxy des Hosters zusätzlich TRUST_PROXY, damit die Rate-Limits die echten Adressen sehen: bei
+#   Render (läuft hinter Cloudflare) TRUST_PROXY=cloudflare, hinter einem anderen Proxy TRUST_PROXY=1 (siehe
+#   .env.example). Passt es nicht zum Weg der Anfragen, sagt der Server es einmal im Protokoll.
 # - ALLOW_DEV_LOGIN wirkt hier nicht (NODE_ENV=production, siehe src/runtime.ts).
 
 # 1. Bauen: TypeScript → JavaScript (dist/), danach nur die Pakete für den Betrieb behalten.

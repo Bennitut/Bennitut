@@ -1,5 +1,6 @@
 import { networkInterfaces } from "node:os";
 import type { AiStatus } from "./ai/provider.js";
+import { trustProxyLine, type TrustProxy } from "./http/proxy.js";
 import { displayUrl } from "./urls.js";
 
 export { displayUrl };
@@ -54,6 +55,12 @@ export function corsLine(extra: readonly string[]): string {
     : "localhost und eigenes Netz (weitere Websites mit CORS_ORIGINS, z. B. https://bennitut.github.io)";
 }
 
+/** Woher die Adresse für die Rate-Limits kommt und wie viele KI-Anfragen gehen (TRUST_PROXY, AI_REQUESTS_PER_HOUR). */
+export function limitsLine({ trustProxy, aiPerHour }: { trustProxy: TrustProxy; aiPerHour: number }): string {
+  const ai = aiPerHour > 0 ? `KI höchstens ${aiPerHour} Anfragen pro Stunde je Adresse bzw. Konto` : "KI ohne Grenze (AI_REQUESTS_PER_HOUR=0)";
+  return `${trustProxyLine(trustProxy)}; ${ai}`;
+}
+
 export function startupMessage(input: {
   port: number;
   addresses: string[];
@@ -71,6 +78,8 @@ export function startupMessage(input: {
   corsOrigins?: readonly string[];
   /** Im Container (Dockerfile): Port statt WLAN-Adressen, Einstellungen als Umgebungsvariablen, kein Test am iPhone. */
   container?: boolean;
+  /** TRUST_PROXY und AI_REQUESTS_PER_HOUR (http/proxy.ts, http/rateLimit.ts); ohne Angabe keine Zeile dazu. */
+  limits?: { trustProxy: TrustProxy; aiPerHour: number };
 }): string {
   const { port, addresses, container = false } = input;
   const lines = [
@@ -95,6 +104,7 @@ export function startupMessage(input: {
     ...(input.storage ? [`  Daten:               ${input.storage}`] : []),
     ...(input.photos ? [`  Fotos:               ${input.photos}`] : []),
     ...(input.corsOrigins ? [`  Browser (CORS):      ${corsLine(input.corsOrigins)}`] : []),
+    ...(input.limits ? [`  Rate-Limit:          ${limitsLine(input.limits)}`] : []),
     `  Einstellungen:       ${input.envFile ?? (container ? "Umgebungsvariablen (alle erklärt in .env.example)" : "keine server/.env (Vorlage: server/.env.example)")}`,
   ];
   if (container) return lines.join("\n");

@@ -2,3 +2,9 @@ node_modules/
 dist/
 .env
 /server/data/
+# Einstellungen mit Schlüsseln (nur die Vorlage .env.example gehört ins Repository) und Datenbanken
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm

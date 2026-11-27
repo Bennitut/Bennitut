@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { displayUrl } from "../urls.js";
+import { redact } from "../log.js";
 import { CLAUDE_MODEL, claudeGenerate } from "./claude.js";
 import { ollamaConfigProblem, ollamaGenerate, probeOllama, type FetchLike, type OllamaSettings } from "./ollama.js";
 import { AiError, type AiRequest, type AiResult } from "./types.js";
@@ -111,7 +112,7 @@ export class Ai {
       console.log(`${label}: ${seconds()} s, ${usage.inputTokens ?? "?"} Tokens rein, ${usage.outputTokens ?? "?"} raus`);
       return data;
     } catch (err) {
-      console.warn(`${label}: fehlgeschlagen nach ${seconds()} s – ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`${label}: fehlgeschlagen nach ${seconds()} s – ${redact(err instanceof Error ? err.message : String(err))}`);
       throw err;
     }
   }
