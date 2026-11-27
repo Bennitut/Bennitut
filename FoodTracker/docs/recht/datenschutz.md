@@ -17,6 +17,27 @@ Stand: [[ANGABE: Datum]]
   technisch bedingt deine IP-Adresse (Abschnitte 3 und 4). [[PRÜFEN: Sobald alle Fotos selbst ausgeliefert werden
   (README, Entscheidung 2, gewählt am 24.11.2026), hier nur noch GitHub nennen und Abschnitt 4 löschen.]]
 
+**Mit Server** (sobald Teil B gilt) stattdessen:
+
+- FoodTracker funktioniert ohne Konto und ohne Anmeldung.
+- Was du eingibst, bleibt auf deinem Gerät – bis auf das, was die Funktionen mit Server brauchen (Teil B): Dein
+  Ernährungstagebuch sichert FoodTracker automatisch auf dem Server (B6), geteilte Rezepte, öffentliche Fotos,
+  Bewertungen und Meldungen liegen dort (B4).
+- Mit einem Konto gleicht FoodTracker deine Daten über den Server zwischen deinen Geräten ab, auch Gesundheitsangaben
+  wie Unverträglichkeiten (B2, B7). Im Profil kannst du sie exportieren und mit dem Konto löschen.
+- KI-Funktionen schicken Daten nur mit deiner Einwilligung an [[ENTSCHEIDUNG: je nach KI des Servers „Claude von
+  Anthropic“, „ein KI-Modell auf dem Server selbst“ oder „ein KI-Modell auf meinem Rechner, das der Server über
+  Cloudflare erreicht“]] (B3). Ohne KI: „Dieser Server hat keine KI-Funktionen (B3).“
+- Den Server betreibe ich [[ENTSCHEIDUNG: Weg (a) „auf meinem eigenen Rechner; aus dem Internet erreichbar ist er über
+  Cloudflare (USA), das dabei die Anfragen und deine IP-Adresse erhält“ oder Weg (b) „bei Render, Datenbank und Fotos
+  liegen bei Neon – beides Unternehmen aus den USA; Server und Datenbank laufen in der Region Frankfurt am Main“]] (B1).
+- Keine Werbung, keine Analyse- oder Tracking-Werkzeuge, keine Cookies.
+- Beim Aufruf der Web-Version und beim Laden der Rezeptfotos erfahren die Server von GitHub, Wikimedia und Flickr
+  technisch bedingt deine IP-Adresse (Abschnitte 3 und 4).
+
+> **Für Benjamin:** In der App stellst du Weg und KI einmal in `app/src/legal/angaben.ts` unter `BETRIEB` ein; dann
+> zeigt sie in „Kurz gesagt“, B1 und B3 nur die passenden Sätze (`app/src/legal/texte.ts`).
+
 ## 1. Verantwortlich
 
 [[ANGABE: Vor- und Nachname]]  
@@ -129,9 +150,62 @@ Datenschutzerklärung des jeweiligen Dienstes).
 
 ### B1. Server
 
-Der Server läuft bei [[ANGABE: Hoster, Sitz, Standort der Server]]. [[ANGABE: Vertrag zur
-Auftragsverarbeitung (Art. 28 DSGVO) mit dem Hoster]]. Er protokolliert [[ANGABE: welche Daten, z. B. IP-Adresse,
-Zeitpunkt, aufgerufene Adresse, Fehlermeldungen]] und löscht die Protokolle nach [[ANGABE: Frist]].
+> **Für Benjamin, vor dem Veröffentlichen löschen:** Welcher Block gilt, hängt vom Weg aus
+> [`../SERVER-HOSTING.md`](../SERVER-HOSTING.md) ab. In der App stellst du ihn in `app/src/legal/angaben.ts` unter
+> `BETRIEB.weg` ein („a“ oder „b“), dann zeigt sie nur den passenden. Angaben zu Cloudflare, Render und Neon laut deren
+> Seiten, abgerufen am 27.11.2026 (Quellen im [README](README.md)). Ein anderer Hoster oder Objektspeicher (z. B.
+> Cloudflare R2, Backblaze B2, Supabase) braucht eigene Angaben.
+
+[[ENTSCHEIDUNG: Weg (a) oder (b) – den anderen Block löschen.]]
+
+**Weg (a) – mein Laptop mit Cloudflare Tunnel:**
+
+Der Server läuft auf meinem eigenen Rechner (einem Laptop); dort liegen auch die Datenbank und die Fotos (Galerie der
+Rezepte, geteilte und eigene Rezepte). Ein Hoster ist nicht beteiligt.
+
+Aus dem Internet erreichbar ist er über Cloudflare Tunnel, einen Dienst der Cloudflare, Inc. (San Francisco, USA): Die
+verschlüsselte Verbindung (https) endet bei Cloudflare, und Cloudflare leitet die Anfragen durch eine eigene
+verschlüsselte Verbindung zu meinem Rechner weiter. Dabei verarbeitet Cloudflare die Anfragen samt Inhalt und deine
+IP-Adresse als Auftragsverarbeiter nach seinem
+[Auftragsverarbeitungsvertrag](https://www.cloudflare.com/cloudflare-customer-dpa/) (Fassung 6.4 vom 3. April 2026).
+Cloudflare betreibt Rechenzentren auf der ganzen Welt; für Übermittlungen in die USA nennt dieser Vertrag das EU-U.S.
+Data Privacy Framework und die Standardvertragsklauseln der EU-Kommission.
+
+[[PRÜFEN: Der Vertrag mit Cloudflare gilt nur mit einem Cloudflare-Konto – ob er mit einem kostenlosen Konto schon über
+die Nutzungsbedingungen zustande kommt, war aus der Cloud nicht lesbar. Ein Quick Tunnel ohne Konto ist laut Cloudflare
+nur zum Testen gedacht: für Tester:innen mit echten Daten einen festen Tunnel mit Konto nehmen.]]
+
+Ein Zugriffsprotokoll führt der Server nicht; er vermerkt nur unerwartete Fehler und bei KI-Anfragen deren Art, Dauer
+und Umfang – ohne Inhalte. Diese Meldungen zeigt er nur in seinem Fenster auf meinem Rechner an und speichert sie
+nicht.
+
+**Weg (b) – Render mit Neon:**
+
+Der Server läuft bei Render (Render Services, Inc., San Francisco, USA) in dessen Region Frankfurt am Main. Die
+Datenbank (Konten, Sitzungen, Sicherungen und Abgleich, Community) und die Fotos (Galerie der Rezepte, geteilte und
+eigene Rezepte) liegen bei Neon (Neon, LLC, ein Unternehmen der Databricks, Inc., USA), ebenfalls in der Region
+Frankfurt am Main. Beide verarbeiten die Daten in meinem Auftrag (Art. 28 DSGVO).
+
+Mit Render gilt dessen [Auftragsverarbeitungsvertrag](https://render.com/dpa) (Stand 19. Dezember 2024) als Teil der
+Nutzungsbedingungen. Laut diesem Vertrag verarbeitet Render Daten hauptsächlich in den USA; Übermittlungen dorthin
+stützt Render auf das EU-U.S. Data Privacy Framework (Render ist seit 6. Jänner 2025 zertifiziert), andernfalls auf die
+Standardvertragsklauseln der EU-Kommission.
+
+[[PRÜFEN: Vertrag zur Auftragsverarbeitung, Unterauftragsverarbeiter und Grundlage der Übermittlung in die USA bei Neon
+– laut den Produktbedingungen von Neon vom 14. Oktober 2026 gelten die Verträge der Databricks, Inc.; deren
+Auftragsverarbeitungsvertrag und Liste der Unterauftragsverarbeiter waren aus der Cloud nicht lesbar.]]
+
+Nur mit „KI vom Laptop“ (B3): Für die KI-Funktionen (B3) erreicht der Server meinen Rechner über Cloudflare Tunnel,
+einen Dienst der Cloudflare, Inc. (San Francisco, USA) – weiter wie bei Weg (a), nur ohne deine IP-Adresse (die
+Anfragen stellt der Server bei Render), samt dem Prüfpunkt zum Vertrag mit Cloudflare.
+
+Ein Zugriffsprotokoll führt der Server nicht; er vermerkt nur unerwartete Fehler und bei KI-Anfragen deren Art, Dauer
+und Umfang – ohne Inhalte. Diese Meldungen landen im Protokoll bei Render. [[PRÜFEN: Wie lange Render das Protokoll
+aufbewahrt und ob Render selbst Zugriffe mit IP-Adressen protokolliert – im Render-Konto bzw. in der Doku nachsehen.]]
+
+> Die App holt Fotos bei beiden Wegen beim Server ab, nie direkt beim Objektspeicher (`GET /api/images/…`).
+
+**Beide Wege:**
 
 Gegen Missbrauch – etwa das Durchprobieren von Passwörtern oder massenhafte KI-Anfragen – zählt der Server Anfragen je
 IP-Adresse (bei Anfragen über Cloudflare die Adresse, die Cloudflare meldet) und je Konto. Diese Zähler liegen nur im
@@ -141,14 +215,8 @@ mein berechtigtes Interesse an einem sicheren Betrieb (Art. 6 Abs. 1 lit. f DSGV
 
 > Rate-Limits und Protokoll: `server/src/http/rateLimit.ts` (Zähler im Speicher, jede Minute aufgeräumt; längstes
 > Zeitfenster eine Stunde) und `server/src/log.ts` (Fehlermeldungen geschwärzt), siehe README, „Sicherheit im
-> Internet“. Was der Hoster selbst protokolliert (z. B. Render), steht oben als `[[ANGABE]]`.
-
-Fotos (Galerie der Rezepte, geteilte und eigene Rezepte) speichert der Server [[ANGABE: auf dem Server selbst oder bei
-einem Objektspeicher-Anbieter – Name, Sitz, Standort der Server, Vertrag zur Auftragsverarbeitung]].
-
-> Technisch geht beides: ein Ordner auf dem Server (`PHOTOS_DIR`) oder ein Bucket mit S3-Schnittstelle (`S3_*`, z. B.
-> Neon, Cloudflare R2, Backblaze B2, Supabase – README, „Fotos im Objektspeicher“). Die App holt die Fotos in jedem Fall
-> beim Server ab, nie direkt beim Anbieter.
+> Internet“. Kein Zugriffsprotokoll: Der Server schreibt nur Startmeldungen, unerwartete Fehler und je KI-Anfrage Art,
+> Dauer und Tokens (`server/src/ai/provider.ts`). Was Render selbst protokolliert, steht bei Weg (b) als `[[PRÜFEN]]`.
 
 Mit jeder Anfrage schickt FoodTracker die zufällige Geräte-Kennung aus Abschnitt 2. Sie enthält keinen Namen und
 dient dazu, Favoriten, Bewertungen, eigene Fotos und geteilte Rezepte deinem Gerät zuzuordnen – bis du dich anmeldest,
@@ -193,8 +261,20 @@ löschst.
 
 ### B3. KI-Funktionen
 
-Diese Funktionen schicken Daten über den Server an den Anbieter des KI-Modells [[ANGABE: Claude von Anthropic oder
-ein Modell auf dem eigenen Server (Ollama) – je nach Einrichtung; mit Ollama verlassen die Daten den Server nicht]]:
+> **Für Benjamin, vor dem Veröffentlichen löschen:** Einleitung und Absatz nach der Tabelle hängen von der KI des
+> Servers ab – in der App `BETRIEB.ki` in `app/src/legal/angaben.ts` („claude“, „ollama“, „ollama-laptop“ oder
+> „keine“). Angaben zu Anthropic laut dessen Seiten, abgerufen am 27.11.2026 (Quellen im [README](README.md)).
+
+[[ENTSCHEIDUNG: Eine Einleitung und den passenden Absatz nach der Tabelle wählen, die anderen löschen.]]
+
+- **Claude:** „Diese Funktionen schicken Daten über den Server an Claude, ein KI-Modell von Anthropic:“
+- **Ollama auf dem Server-Rechner** (bei Weg a der Laptop): „Diese Funktionen schicken Daten an ein KI-Modell
+  (Ollama), das auf demselben Rechner läuft wie der Server (B1):“
+- **KI vom Laptop** (nur Weg b): „Diese Funktionen schicken Daten über den Server und Cloudflare Tunnel (B1) an ein
+  KI-Modell (Ollama) auf meinem eigenen Rechner:“
+- **Ohne KI:** statt des ganzen Abschnitts „Dieser Server bietet keine KI-Funktionen an: Mahlzeit und Kassenbon
+  erkennen, Rezepte importieren, übersetzen, „Text mit KI verbessern“ und Wünsche im Plan melden dann, dass keine KI
+  eingerichtet ist, und FoodTracker schickt dafür nichts an eine KI.“
 
 | Funktion | Was übermittelt wird |
 |---|---|
@@ -205,24 +285,42 @@ ein Modell auf dem eigenen Server (Ollama) – je nach Einrichtung; mit Ollama v
 | „Text mit KI verbessern“ | Name, Zutaten mit Mengen, Schritte, Kochzeit und was du am Rezept bemängelst |
 | Monatsplan mit Wünschen | nur der Text, den du ins Wunschfeld schreibst, und die Sprache |
 
-Vertragspartner ist [[ANGABE: Anthropic-Gesellschaft laut API-Vertrag, Anschrift]]. Laut Anthropic (Stand
-01.07.2026) werden Eingaben und Ausgaben über die API nach spätestens 30 Tagen gelöscht – außer z. B. bei Verstößen
-gegen die Nutzungsrichtlinien oder wenn das Gesetz eine längere Speicherung verlangt; standardmäßig werden sie nicht
-zum Training der Modelle verwendet (Stand 18.08.2026). [[PRÜFEN: Grundlage der Übermittlung in die USA laut
-Vertrag zur Auftragsverarbeitung von Anthropic; aktuelle Fristen.]] Fotos für die Erkennung speichert der Server
-nicht.
+**Nur bei Claude:** Vertragspartner ist die Anthropic Ireland, Limited, 6th Floor, South Bank House, Barrow Street,
+Dublin 4, D04 TR29, Irland (laut den Commercial Terms von Anthropic für Kund:innen im Europäischen Wirtschaftsraum,
+Stand 17. Juni 2025). Sie verarbeitet die Daten als Auftragsverarbeiter nach dem
+[Auftragsverarbeitungsvertrag von Anthropic](https://www.anthropic.com/legal/data-processing-addendum) (Stand
+24. Februar 2025), der Teil dieser Bedingungen ist, und darf sie laut den Bedingungen nicht zum Training ihrer Modelle
+verwenden. Dabei können Daten auch in den USA verarbeitet werden (bei Anthropic, PBC oder Unterauftragsverarbeitern);
+dafür sieht der Vertrag die Standardvertragsklauseln der EU-Kommission vor. Laut Anthropic (Stand 1. Juli 2026) werden
+Eingaben und Ausgaben über die API nach spätestens 30 Tagen gelöscht – außer z. B. bei Verstößen gegen die
+Nutzungsrichtlinien oder wenn das Gesetz eine längere Speicherung verlangt. Fotos für die Erkennung speichert der
+Server nicht.
+
+**Nur bei Ollama auf dem Server-Rechner:** Die Daten gehen dafür an keinen KI-Anbieter. Fotos für die Erkennung
+speichert der Server nicht.
+
+**Nur bei KI vom Laptop:** Cloudflare leitet diese Anfragen samt Inhalt weiter (B1); an einen KI-Anbieter gehen die
+Daten nicht. Fotos für die Erkennung speichert der Server nicht.
+
+> Anthropic nennt in Datenschutzerklärung und Auftragsverarbeitungsvertrag für die USA nur Standardvertragsklauseln,
+> kein EU-U.S. Data Privacy Framework (auf dessen Liste steht Anthropic laut einem Blogbeitrag vom 18.11.2026 nicht –
+> von der Nachtschicht nicht selbst nachgesehen). Die Commercial Terms sagen außerdem: „Services under these Terms are
+> not for consumer use“ – du nutzt die API als Anbieter von FoodTracker, nicht als Verbraucher.
 
 Rechtsgrundlage: deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schreibst du Gesundheitsangaben in ein Wunschfeld
 oder zeigt ein Foto solche, gilt zusätzlich Art. 9 Abs. 2 lit. a DSGVO (ausdrückliche Einwilligung). FoodTracker fragt
-vor der ersten Nutzung einer KI-Funktion danach und schickt ohne deine Zustimmung nichts an die KI. Im Profil unter
-„KI-Funktionen“ kannst du die Einwilligung jederzeit mit Wirkung für die Zukunft widerrufen; vor der nächsten
-KI-Funktion fragt FoodTracker dann wieder. Zum Alter siehe Abschnitt 7 „Mindestalter“.
+vor der ersten Nutzung einer KI-Funktion danach und schickt ohne deine Zustimmung nichts an die KI; ändert sich, was an
+wen geht, fragt FoodTracker erneut. Im Profil unter „KI-Funktionen“ kannst du die Einwilligung jederzeit mit Wirkung
+für die Zukunft widerrufen; vor der nächsten KI-Funktion fragt FoodTracker dann wieder. Zum Alter siehe Abschnitt 7
+„Mindestalter“.
 
 > **Für Benjamin, vor dem Veröffentlichen löschen:** Die App merkt sich die Einwilligung (Fassung und Zeitpunkt) auf
 > dem Gerät und nennt dem Server bei jeder KI-Anfrage die Fassung (Header `X-AI-Consent`); ohne lehnt der Server ab
 > (`server/src/ai/consent.ts`). Ändert sich wesentlich, was an wen geht, die Fassung in `app/src/lib/aiConsent.ts` und
-> im Server erhöhen – dann fragt die App neu. Auf dem Server gespeichert wird die Einwilligung bisher nicht (Nachweis
-> nach Art. 7 Abs. 1 DSGVO, siehe `BACKLOG.md`).
+> im Server erhöhen – dann fragt die App neu. Fassung 2 seit 27.11.2026: Der Dialog nennt „KI vom Laptop“ (ein Modell
+> auf einem Rechner des Betreibers, den der Server über Cloudflare erreicht) als dritte Möglichkeit neben Claude und
+> einem Modell auf dem Server. Auf dem Server gespeichert wird die Einwilligung bisher nicht (Nachweis nach Art. 7
+> Abs. 1 DSGVO, siehe `BACKLOG.md`).
 
 Für den Rezept-Import fragt der Server mit dem Link, den du eingibst, die öffentliche Schnittstelle von TikTok
 (`tiktok.com`) bzw. von Meta für Instagram (`graph.facebook.com`) ab. Deine IP-Adresse erfahren diese Dienste dabei

@@ -43,9 +43,12 @@ die KI über die Weiterleitung vom Laptop („KI vom Laptop“ unten) oder vorer
 - **Datenschutzerklärung Teil B:** Sobald andere ihre Daten an den Server schicken, muss Teil B vollständig sein –
   vor allem B1: wer den Server betreibt, wo er läuft, welche Dienste beteiligt sind (Weg a: dein Laptop und Cloudflare;
   Weg b: Render, Neon und bei „KI vom Laptop“ zusätzlich Cloudflare und dein Laptop), Verträge zur
-  Auftragsverarbeitung (Art. 28 DSGVO) mit diesen Diensten. Platzhalter in `app/src/legal/texte.ts` und
-  `docs/recht/datenschutz.md`. Mit Server-Adresse in der Web-Version (`FOODTRACKER_API_URL`, unten) bricht
-  `npm run web:pages` ab, solange dort Platzhalter stehen – gewollt.
+  Auftragsverarbeitung (Art. 28 DSGVO) mit diesen Diensten. Die Texte für beide Wege und alle KI-Varianten sind fertig
+  (Stand der Dienste 27.11.2026): 👤 in `app/src/legal/angaben.ts` unter `BETRIEB` den Weg (`weg: "a"` oder `"b"`)
+  und die KI (`ki: "claude"`, `"ollama"`, `"ollama-laptop"` oder `"keine"`) eintragen, dann zeigt die App nur die
+  passenden Sätze. Übrig bleiben ein paar `[[PRÜFEN]]` (z. B. der Vertrag mit Cloudflare – nur mit Konto) und die
+  anderen Platzhalter in Teil B (`docs/recht/README.md`). Mit Server-Adresse in der Web-Version (`FOODTRACKER_API_URL`,
+  unten) bricht `npm run web:pages` ab, solange dort Platzhalter stehen – gewollt.
 - **Admin:** `ADMIN_EMAILS=<deine Adresse>`. Ein Konto mit Passwort wird damit erst Admin, wenn die Adresse bestätigt
   ist (einmal „Passwort vergessen?“ – braucht den Mail-Dienst).
 - **Claude-API für andere:** Nur falls du Claude nimmst: Vorher Anthropics Vorgaben für Produkte prüfen, die auch
@@ -298,7 +301,9 @@ Weiterleitung über https erreichbar; der Server bei Render schickt den Schlüss
 Grenzen: Mit einem Quick Tunnel ändert sich die Adresse bei jedem Start – dann `OLLAMA_URL` bei Render jedes Mal neu
 eintragen. Fest wird sie mit einer eigenen Domain oder Tailscale Funnel (`tailscale funnel 11435`), siehe „Feste
 Adresse“ bei Weg (a). Die 125-Sekunden-Grenze von Cloudflare gilt auch hier. Fotos und Texte für die KI gehen dann
-von Render über Cloudflare zu deinem Laptop – das gehört in B1 und B3 der Datenschutzerklärung.
+von Render über Cloudflare zu deinem Laptop – so steht es in B1 und B3 der Datenschutzerklärung, sobald in
+`app/src/legal/angaben.ts` `BETRIEB` auf `weg: "b"` und `ki: "ollama-laptop"` steht. Der Dialog vor der ersten
+KI-Funktion nennt diesen Weg seit 27.11.2026 (Fassung 2 der Einwilligung).
 
 ---
 

@@ -50,3 +50,32 @@ export const ANGABEN: Angaben = {
   stand: "24. November 2026",
   webAdresse: "bennitut.github.io",
 };
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Betrieb des Servers – nur für Teil B der Datenschutzerklärung (erscheint nur, wenn die App einen Server kennt).
+//
+// Keine persönlichen Angaben, nur wie dein Server für andere läuft (docs/SERVER-HOSTING.md). Danach richten sich
+// „Kurz gesagt“, B1 (Server) und B3 (KI-Funktionen) in texte.ts. Leer heißt „noch nicht entschieden“: Dann steht dort
+// ein Platzhalter, und Teil B bleibt ein „Entwurf“ (mit fester Server-Adresse bricht `npm run web:pages` ab).
+// Ändert sich etwas (anderer Weg, andere KI), hier umstellen und `stand` oben neu setzen.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export interface Betrieb {
+  /**
+   * Wo der Server läuft: "a" = auf deinem Laptop, aus dem Internet erreichbar über Cloudflare Tunnel (Weg a);
+   * "b" = bei Render, Datenbank und Fotos bei Neon, beides in Frankfurt (Weg b). Ein anderer Hoster oder
+   * Objektspeicher braucht eigene Texte in texte.ts.
+   */
+  weg: "" | "a" | "b";
+  /**
+   * Welche KI die KI-Funktionen nutzen: "claude" = Claude-API von Anthropic; "ollama" = Ollama auf demselben Rechner
+   * wie der Server (bei Weg a also dein Laptop); "ollama-laptop" = „KI vom Laptop“, nur bei Weg b: Render schickt die
+   * KI-Anfragen über Cloudflare Tunnel an Ollama auf deinem Laptop; "keine" = keine KI-Funktionen.
+   */
+  ki: "" | "claude" | "ollama" | "ollama-laptop" | "keine";
+}
+
+export const BETRIEB: Betrieb = {
+  weg: "",
+  ki: "",
+};

@@ -7,9 +7,12 @@
 // Platzhalter, und die App zeigt „Entwurf“.
 // Rezeptfotos: Benjamin hat am 24.11.2026 „selbst ausliefern“ gewählt (Variante a). Abschnitt 4 beschreibt den Stand,
 // bis alle Fotos aus dem eigenen Projekt kommen; danach anpassen (BACKLOG.md, Vorrang „Rezeptfotos selbst ausliefern“).
-// Deine Angaben kommen aus angaben.ts; fehlt eine, steht dort ein Platzhalter [[ANGABE: …]].
+// Deine Angaben kommen aus angaben.ts; fehlt eine, steht dort ein Platzhalter [[ANGABE: …]]. Wie der Server läuft
+// (Weg a oder b aus docs/SERVER-HOSTING.md, welche KI), steht dort unter BETRIEB – danach richten sich „Kurz gesagt“
+// mit Server, B1 und B3. Angaben zu Cloudflare, Render, Neon und Anthropic: Stand laut deren Seiten, abgerufen am
+// 27.11.2026 (Quellen in docs/recht/README.md).
 import { contactLine, missingIn, orPlaceholder, type LegalSection, type Placeholder } from "../lib/legal";
-import { ANGABEN, type Angaben } from "./angaben";
+import { ANGABEN, BETRIEB, type Angaben, type Betrieb } from "./angaben";
 
 export interface LegalOptions {
   /** Ob die App einen Server nutzt (dann gilt Teil B der Datenschutzerklärung). */
@@ -43,6 +46,160 @@ const PHOTO_CREDIT =
   "(CC BY, CC BY-SA, CC0) oder sind gemeinfrei. Urheber:in und Lizenz stehen jeweils unter dem Foto; ein Tipp darauf " +
   "öffnet die Originalseite.";
 
+const PHOTO_IP_SUMMARY =
+  "- Beim Aufruf der Web-Version und beim Laden der Rezeptfotos erfahren die Server von GitHub, Wikimedia und Flickr " +
+  "technisch bedingt deine IP-Adresse (Abschnitte 3 und 4).";
+
+// ── Betrieb des Servers (BETRIEB in angaben.ts): Platzhalter, solange nichts entschieden ist ─────────────────────────
+
+const WEG_OFFEN =
+  "[[ENTSCHEIDUNG: Weg des Servers aus docs/SERVER-HOSTING.md – in angaben.ts unter BETRIEB.weg eintragen: a = Laptop " +
+  "mit Cloudflare Tunnel, b = Render mit Neon]]";
+const KI_OFFEN =
+  "[[ENTSCHEIDUNG: KI des Servers – in angaben.ts unter BETRIEB.ki eintragen: claude, ollama, ollama-laptop oder keine]]";
+const KI_LAPTOP_NUR_B =
+  "[[ENTSCHEIDUNG: „KI vom Laptop“ gibt es nur bei Weg b – bei Weg a läuft Ollama auf dem Server-Rechner selbst, dann " +
+  "BETRIEB.ki = ollama]]";
+
+/** Ob die KI-Anfragen von Render über Cloudflare Tunnel zu Ollama auf dem Laptop gehen („KI vom Laptop“). */
+const aiViaTunnel = (b: Betrieb) => b.weg === "b" && b.ki === "ollama-laptop";
+
+/**
+ * Cloudflare Tunnel bei Weg a (alle Anfragen, mit der IP-Adresse deines Geräts) und bei „KI vom Laptop“ (nur die
+ * KI-Anfragen, die der Server bei Render stellt).
+ */
+function cloudflareBlocks(what: string, withVisitorIp: boolean): string[] {
+  return [
+    `${what} über Cloudflare Tunnel, einen Dienst der Cloudflare, Inc. (San Francisco, USA): Die verschlüsselte ` +
+      "Verbindung (https) endet bei Cloudflare, und Cloudflare leitet die Anfragen durch eine eigene verschlüsselte " +
+      "Verbindung zu meinem Rechner weiter. Dabei verarbeitet Cloudflare die Anfragen samt Inhalt" +
+      (withVisitorIp ? " und deine IP-Adresse" : "") +
+      " als Auftragsverarbeiter nach seinem " +
+      "[Auftragsverarbeitungsvertrag](https://www.cloudflare.com/cloudflare-customer-dpa/) (Fassung 6.4 vom 3. April " +
+      "2026). Cloudflare betreibt Rechenzentren auf der ganzen Welt; für Übermittlungen in die USA nennt dieser Vertrag " +
+      "das EU-U.S. Data Privacy Framework und die Standardvertragsklauseln der EU-Kommission.",
+    "[[PRÜFEN: Der Vertrag mit Cloudflare gilt nur mit einem Cloudflare-Konto – ob er mit einem kostenlosen Konto schon " +
+      "über die Nutzungsbedingungen zustande kommt, war aus der Cloud nicht lesbar. Ein Quick Tunnel ohne Konto ist laut " +
+      "Cloudflare nur zum Testen gedacht: für Tester:innen mit echten Daten einen festen Tunnel mit Konto nehmen.]]",
+  ];
+}
+
+/** B1: wo der Server läuft und wer daran beteiligt ist. */
+function hostingBlocks(b: Betrieb): string[] {
+  const noAccessLog =
+    "Ein Zugriffsprotokoll führt der Server nicht; er vermerkt nur unerwartete Fehler und bei KI-Anfragen deren Art, " +
+    "Dauer und Umfang – ohne Inhalte.";
+  if (b.weg === "a") {
+    return [
+      "Der Server läuft auf meinem eigenen Rechner (einem Laptop); dort liegen auch die Datenbank und die Fotos (Galerie " +
+        "der Rezepte, geteilte und eigene Rezepte). Ein Hoster ist nicht beteiligt.",
+      ...cloudflareBlocks("Aus dem Internet erreichbar ist er", true),
+      `${noAccessLog} Diese Meldungen zeigt er nur in seinem Fenster auf meinem Rechner an und speichert sie nicht.`,
+    ];
+  }
+  if (b.weg === "b") {
+    return [
+      "Der Server läuft bei Render (Render Services, Inc., San Francisco, USA) in dessen Region Frankfurt am Main. Die " +
+        "Datenbank (Konten, Sitzungen, Sicherungen und Abgleich, Community) und die Fotos (Galerie der Rezepte, geteilte und " +
+        "eigene Rezepte) liegen bei Neon (Neon, LLC, ein Unternehmen der Databricks, Inc., USA), ebenfalls in der Region " +
+        "Frankfurt am Main. Beide verarbeiten die Daten in meinem Auftrag (Art. 28 DSGVO).",
+      "Mit Render gilt dessen [Auftragsverarbeitungsvertrag](https://render.com/dpa) (Stand 19. Dezember 2024) als Teil " +
+        "der Nutzungsbedingungen. Laut diesem Vertrag verarbeitet Render Daten hauptsächlich in den USA; Übermittlungen " +
+        "dorthin stützt Render auf das EU-U.S. Data Privacy Framework (Render ist seit 6. Jänner 2025 zertifiziert), " +
+        "andernfalls auf die Standardvertragsklauseln der EU-Kommission.",
+      "[[PRÜFEN: Vertrag zur Auftragsverarbeitung, Unterauftragsverarbeiter und Grundlage der Übermittlung in die USA bei " +
+        "Neon – laut den Produktbedingungen von Neon vom 14. Oktober 2026 gelten die Verträge der Databricks, Inc.; deren " +
+        "Auftragsverarbeitungsvertrag und Liste der Unterauftragsverarbeiter waren aus der Cloud nicht lesbar.]]",
+      ...(aiViaTunnel(b) ? cloudflareBlocks("Für die KI-Funktionen (B3) erreicht der Server meinen Rechner", false) : []),
+      `${noAccessLog} Diese Meldungen landen im Protokoll bei Render. [[PRÜFEN: Wie lange Render das Protokoll ` +
+        "aufbewahrt und ob Render selbst Zugriffe mit IP-Adressen protokolliert – im Render-Konto bzw. in der Doku " +
+        "nachsehen.]]",
+    ];
+  }
+  return [
+    `Der Server läuft ${WEG_OFFEN}. [[ANGABE: Vertrag zur Auftragsverarbeitung (Art. 28 DSGVO) mit dem Hoster]]. Er ` +
+      "protokolliert [[ANGABE: welche Daten, z. B. IP-Adresse, Zeitpunkt, aufgerufene Adresse, Fehlermeldungen]] und " +
+      "löscht die Protokolle nach [[ANGABE: Frist]].",
+    "Fotos (Galerie der Rezepte, geteilte und eigene Rezepte) speichert der Server [[ANGABE: auf dem Server selbst oder " +
+      "bei einem Objektspeicher-Anbieter – Name, Sitz, Standort der Server, Vertrag zur Auftragsverarbeitung]].",
+  ];
+}
+
+/** Wohin die KI-Funktionen Daten schicken, in wenigen Worten; offen bzw. widersprüchlich als Platzhalter. */
+function aiShort(b: Betrieb): string {
+  if (b.ki === "claude") return "Claude von Anthropic";
+  if (b.ki === "ollama") return "ein KI-Modell auf dem Server selbst";
+  if (aiViaTunnel(b)) return "ein KI-Modell auf meinem Rechner, das der Server über Cloudflare erreicht";
+  return b.ki === "ollama-laptop" ? KI_LAPTOP_NUR_B : KI_OFFEN;
+}
+
+/** „Kurz gesagt“, wenn die App einen Server nutzt (Teil B gilt). */
+function summaryWithServer(b: Betrieb): string[] {
+  const hosting =
+    b.weg === "a"
+      ? "auf meinem eigenen Rechner; aus dem Internet erreichbar ist er über Cloudflare (USA), das dabei die Anfragen und " +
+        "deine IP-Adresse erhält"
+      : b.weg === "b"
+        ? "bei Render, Datenbank und Fotos liegen bei Neon – beides Unternehmen aus den USA; Server und Datenbank laufen in " +
+          "der Region Frankfurt am Main"
+        : WEG_OFFEN;
+  const ai =
+    b.ki === "keine"
+      ? "- Dieser Server hat keine KI-Funktionen (B3)."
+      : `- KI-Funktionen schicken Daten nur mit deiner Einwilligung an ${aiShort(b)} (B3).`;
+  return [
+    "- FoodTracker funktioniert ohne Konto und ohne Anmeldung.",
+    "- Was du eingibst, bleibt auf deinem Gerät – bis auf das, was die Funktionen mit Server brauchen (Teil B): Dein " +
+      "Ernährungstagebuch sichert FoodTracker automatisch auf dem Server (B6), geteilte Rezepte, öffentliche Fotos, " +
+      "Bewertungen und Meldungen liegen dort (B4).",
+    "- Mit einem Konto gleicht FoodTracker deine Daten über den Server zwischen deinen Geräten ab, auch Gesundheitsangaben " +
+      "wie Unverträglichkeiten (B2, B7). Im Profil kannst du sie exportieren und mit dem Konto löschen.",
+    ai,
+    `- Den Server betreibe ich ${hosting} (B1).`,
+    "- Keine Werbung, keine Analyse- oder Tracking-Werkzeuge, keine Cookies.",
+    PHOTO_IP_SUMMARY,
+  ];
+}
+
+/** B3: an wen die KI-Funktionen Daten schicken (Einleitung vor der Liste und Absätze danach). */
+function aiRecipient(b: Betrieb): { intro: string; after: string[] } {
+  if (b.ki === "claude") {
+    return {
+      intro: "Diese Funktionen schicken Daten über den Server an Claude, ein KI-Modell von Anthropic:",
+      after: [
+        "Vertragspartner ist die Anthropic Ireland, Limited, 6th Floor, South Bank House, Barrow Street, Dublin 4, " +
+          "D04 TR29, Irland (laut den Commercial Terms von Anthropic für Kund:innen im Europäischen Wirtschaftsraum, " +
+          "Stand 17. Juni 2025). Sie verarbeitet die Daten als Auftragsverarbeiter nach dem " +
+          "[Auftragsverarbeitungsvertrag von Anthropic](https://www.anthropic.com/legal/data-processing-addendum) (Stand " +
+          "24. Februar 2025), der Teil dieser Bedingungen ist, und darf sie laut den Bedingungen nicht zum Training ihrer " +
+          "Modelle verwenden. Dabei können Daten auch in den USA verarbeitet werden (bei Anthropic, PBC oder " +
+          "Unterauftragsverarbeitern); dafür sieht der Vertrag die Standardvertragsklauseln der EU-Kommission vor. Laut " +
+          "Anthropic (Stand 1. Juli 2026) werden Eingaben und Ausgaben über die API nach spätestens 30 Tagen gelöscht – " +
+          "außer z. B. bei Verstößen gegen die Nutzungsrichtlinien oder wenn das Gesetz eine längere Speicherung " +
+          "verlangt. Fotos für die Erkennung speichert der Server nicht.",
+      ],
+    };
+  }
+  if (b.ki === "ollama-laptop" && b.weg === "b") {
+    return {
+      intro:
+        "Diese Funktionen schicken Daten über den Server und Cloudflare Tunnel (B1) an ein KI-Modell (Ollama) auf meinem " +
+        "eigenen Rechner:",
+      after: [
+        "Cloudflare leitet diese Anfragen samt Inhalt weiter (B1); an einen KI-Anbieter gehen die Daten nicht. Fotos für " +
+          "die Erkennung speichert der Server nicht.",
+      ],
+    };
+  }
+  if (b.ki === "ollama") {
+    return {
+      intro: "Diese Funktionen schicken Daten an ein KI-Modell (Ollama), das auf demselben Rechner läuft wie der Server (B1):",
+      after: ["Die Daten gehen dafür an keinen KI-Anbieter. Fotos für die Erkennung speichert der Server nicht."],
+    };
+  }
+  return { intro: `Diese Funktionen schicken Daten über den Server an ${aiShort(b)}:`, after: [] };
+}
+
 /** Impressum, Variante B: Angaben nach § 5 E-Commerce-Gesetz und Offenlegung nach § 25 Mediengesetz. */
 export function impressum(a: Angaben = ANGABEN): LegalSection[] {
   const f = fields(a);
@@ -62,25 +219,23 @@ export function impressum(a: Angaben = ANGABEN): LegalSection[] {
   ];
 }
 
-/** Datenschutzerklärung: Teil A immer, Teil B und das Mindestalter nur mit Server. */
-export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN): LegalSection[] {
+/** Datenschutzerklärung: Teil A immer, Teil B und das Mindestalter nur mit Server (`betrieb`: wie er läuft). */
+export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN, betrieb: Betrieb = BETRIEB): LegalSection[] {
   const f = fields(a);
   const sections: LegalSection[] = [
     { title: "Datenschutzerklärung", level: 1, blocks: [`Stand: ${f.stand}`] },
     {
       title: "Kurz gesagt",
       level: 2,
-      blocks: [
-        "- FoodTracker funktioniert ohne Konto und ohne Anmeldung.",
-        "- Was du in FoodTracker eingibst – Antworten aus dem Fragebogen, Monatsplan, Einkaufsliste, Vorrat, Tagebuch, " +
-          "eigene Rezepte und Fotos – bleibt auf deinem Gerät. Ich bekomme diese Daten nicht.",
-        "- Keine Werbung, keine Analyse- oder Tracking-Werkzeuge, keine Cookies.",
-        "- Beim Aufruf der Web-Version und beim Laden der Rezeptfotos erfahren die Server von GitHub, Wikimedia und Flickr " +
-          "technisch bedingt deine IP-Adresse (Abschnitte 3 und 4).",
-        ...(withServer
-          ? ["[[PRÜFEN: Mit Server stimmt „Kurz gesagt“ nicht mehr ganz (siehe Teil B) – anpassen, bevor der Server für andere läuft.]]"]
-          : []),
-      ],
+      blocks: withServer
+        ? summaryWithServer(betrieb)
+        : [
+            "- FoodTracker funktioniert ohne Konto und ohne Anmeldung.",
+            "- Was du in FoodTracker eingibst – Antworten aus dem Fragebogen, Monatsplan, Einkaufsliste, Vorrat, Tagebuch, " +
+              "eigene Rezepte und Fotos – bleibt auf deinem Gerät. Ich bekomme diese Daten nicht.",
+            "- Keine Werbung, keine Analyse- oder Tracking-Werkzeuge, keine Cookies.",
+            PHOTO_IP_SUMMARY,
+          ],
     },
     {
       title: "1. Verantwortlich",
@@ -172,7 +327,7 @@ export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN):
     },
   ];
 
-  if (withServer) sections.push(...partB());
+  if (withServer) sections.push(...partB(betrieb));
 
   let number = 6;
   sections.push({
@@ -215,7 +370,8 @@ export function datenschutz({ withServer }: LegalOptions, a: Angaben = ANGABEN):
 }
 
 /** Teil B: Funktionen mit Server – noch mit Platzhaltern, bis ein Server für andere läuft. */
-function partB(): LegalSection[] {
+function partB(b: Betrieb): LegalSection[] {
+  const ai = aiRecipient(b);
   return [
     {
       title: "Teil B – Funktionen mit Server",
@@ -226,17 +382,13 @@ function partB(): LegalSection[] {
       title: "B1. Server",
       level: 3,
       blocks: [
-        "Der Server läuft bei [[ANGABE: Hoster, Sitz, Standort der Server]]. [[ANGABE: Vertrag zur Auftragsverarbeitung " +
-          "(Art. 28 DSGVO) mit dem Hoster]]. Er protokolliert [[ANGABE: welche Daten, z. B. IP-Adresse, Zeitpunkt, " +
-          "aufgerufene Adresse, Fehlermeldungen]] und löscht die Protokolle nach [[ANGABE: Frist]].",
+        ...hostingBlocks(b),
         "Gegen Missbrauch – etwa das Durchprobieren von Passwörtern oder massenhafte KI-Anfragen – zählt der Server " +
           "Anfragen je IP-Adresse (bei Anfragen über Cloudflare die Adresse, die Cloudflare meldet) und je Konto. Diese " +
           "Zähler liegen nur im Arbeitsspeicher, nicht in der Datenbank, und verschwinden nach höchstens etwa einer Stunde " +
           "bzw. beim Neustart. In sein eigenes Protokoll schreibt der Server keine IP-Adressen, E-Mail-Adressen, " +
           "Passwörter oder Tokens. Rechtsgrundlage ist mein berechtigtes Interesse an einem sicheren Betrieb (Art. 6 " +
           "Abs. 1 lit. f DSGVO).",
-        "Fotos (Galerie der Rezepte, geteilte und eigene Rezepte) speichert der Server [[ANGABE: auf dem Server selbst " +
-          "oder bei einem Objektspeicher-Anbieter – Name, Sitz, Standort der Server, Vertrag zur Auftragsverarbeitung]].",
         "Mit jeder Anfrage schickt FoodTracker die zufällige Geräte-Kennung aus Abschnitt 2. Sie enthält keinen Namen und " +
           "dient dazu, Favoriten, Bewertungen, eigene Fotos und geteilte Rezepte deinem Gerät zuzuordnen – bis du dich " +
           "anmeldest, dann gehören sie deinem Konto (B2).",
@@ -281,31 +433,33 @@ function partB(): LegalSection[] {
     {
       title: "B3. KI-Funktionen",
       level: 3,
-      blocks: [
-        "Diese Funktionen schicken Daten über den Server an den Anbieter des KI-Modells [[ANGABE: Claude von Anthropic " +
-          "oder ein Modell auf dem eigenen Server (Ollama) – je nach Einrichtung]]:",
-        "- Mahlzeit fotografieren: das Foto und die Sprache",
-        "- Kassenbon fotografieren: das Foto und die Sprache",
-        "- Rezept aus TikTok oder Instagram übernehmen: Beschreibung des Beitrags, Vorschaubild und ausgewählte " +
-          "Einzelbilder des Videos",
-        "- Rezept übersetzen: Name, Schritte und Gewürze des Rezepts, Zielsprache",
-        "- „Text mit KI verbessern“: Name, Zutaten mit Mengen, Schritte, Kochzeit und was du am Rezept bemängelst",
-        "- Monatsplan mit Wünschen: nur der Text, den du ins Wunschfeld schreibst, und die Sprache",
-        "Vertragspartner ist [[ANGABE: Anthropic-Gesellschaft laut API-Vertrag, Anschrift]]. Laut Anthropic (Stand " +
-          "01.07.2026) werden Eingaben und Ausgaben über die API nach spätestens 30 Tagen gelöscht – außer z. B. bei " +
-          "Verstößen gegen die Nutzungsrichtlinien oder wenn das Gesetz eine längere Speicherung verlangt; standardmäßig " +
-          "werden sie nicht zum Training der Modelle verwendet (Stand 18.08.2026). [[PRÜFEN: Grundlage der Übermittlung " +
-          "in die USA laut Vertrag zur Auftragsverarbeitung von Anthropic; aktuelle Fristen.]] Fotos für die Erkennung " +
-          "speichert der Server nicht.",
-        "Rechtsgrundlage: deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schreibst du Gesundheitsangaben in ein " +
-          "Wunschfeld oder zeigt ein Foto solche, gilt zusätzlich Art. 9 Abs. 2 lit. a DSGVO (ausdrückliche Einwilligung). " +
-          "FoodTracker fragt vor der ersten Nutzung einer KI-Funktion danach und schickt ohne deine Zustimmung nichts an " +
-          "die KI. Im Profil unter „KI-Funktionen“ kannst du die Einwilligung jederzeit mit Wirkung für die Zukunft " +
-          "widerrufen; vor der nächsten KI-Funktion fragt FoodTracker dann wieder. Zum Alter siehe Abschnitt „Mindestalter“.",
-        "Für den Rezept-Import fragt der Server mit dem Link, den du eingibst, die öffentliche Schnittstelle von TikTok " +
-          "(tiktok.com) bzw. von Meta für Instagram (graph.facebook.com) ab. Deine IP-Adresse erfahren diese Dienste " +
-          "dabei nicht, die Anfrage stellt der Server.",
-      ],
+      blocks:
+        b.ki === "keine"
+          ? [
+              "Dieser Server bietet keine KI-Funktionen an: Mahlzeit und Kassenbon erkennen, Rezepte importieren, " +
+                "übersetzen, „Text mit KI verbessern“ und Wünsche im Plan melden dann, dass keine KI eingerichtet ist, und " +
+                "FoodTracker schickt dafür nichts an eine KI.",
+            ]
+          : [
+              ai.intro,
+              "- Mahlzeit fotografieren: das Foto und die Sprache",
+              "- Kassenbon fotografieren: das Foto und die Sprache",
+              "- Rezept aus TikTok oder Instagram übernehmen: Beschreibung des Beitrags, Vorschaubild und ausgewählte " +
+                "Einzelbilder des Videos",
+              "- Rezept übersetzen: Name, Schritte und Gewürze des Rezepts, Zielsprache",
+              "- „Text mit KI verbessern“: Name, Zutaten mit Mengen, Schritte, Kochzeit und was du am Rezept bemängelst",
+              "- Monatsplan mit Wünschen: nur der Text, den du ins Wunschfeld schreibst, und die Sprache",
+              ...ai.after,
+              "Rechtsgrundlage: deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schreibst du Gesundheitsangaben in ein " +
+                "Wunschfeld oder zeigt ein Foto solche, gilt zusätzlich Art. 9 Abs. 2 lit. a DSGVO (ausdrückliche " +
+                "Einwilligung). FoodTracker fragt vor der ersten Nutzung einer KI-Funktion danach und schickt ohne deine " +
+                "Zustimmung nichts an die KI; ändert sich, was an wen geht, fragt FoodTracker erneut. Im Profil unter " +
+                "„KI-Funktionen“ kannst du die Einwilligung jederzeit mit Wirkung für die Zukunft widerrufen; vor der " +
+                "nächsten KI-Funktion fragt FoodTracker dann wieder. Zum Alter siehe Abschnitt „Mindestalter“.",
+              "Für den Rezept-Import fragt der Server mit dem Link, den du eingibst, die öffentliche Schnittstelle von " +
+                "TikTok (tiktok.com) bzw. von Meta für Instagram (graph.facebook.com) ab. Deine IP-Adresse erfahren diese " +
+                "Dienste dabei nicht, die Anfrage stellt der Server.",
+            ],
     },
     {
       title: "B4. Community, Fotos, Bewertungen und Meldungen",
@@ -383,12 +537,12 @@ function partB(): LegalSection[] {
 }
 
 /** Beide Texte für diese App bzw. diesen Build. */
-export function legalDocuments(options: LegalOptions, angaben: Angaben = ANGABEN): LegalDocuments {
-  return { impressum: impressum(angaben), datenschutz: datenschutz(options, angaben) };
+export function legalDocuments(options: LegalOptions, angaben: Angaben = ANGABEN, betrieb: Betrieb = BETRIEB): LegalDocuments {
+  return { impressum: impressum(angaben), datenschutz: datenschutz(options, angaben, betrieb) };
 }
 
 /** Was in den angezeigten Texten noch fehlt (leer = fertig, kein „Entwurf“). */
-export function missingLegalInfo(options: LegalOptions, angaben: Angaben = ANGABEN): Placeholder[] {
-  const docs = legalDocuments(options, angaben);
+export function missingLegalInfo(options: LegalOptions, angaben: Angaben = ANGABEN, betrieb: Betrieb = BETRIEB): Placeholder[] {
+  const docs = legalDocuments(options, angaben, betrieb);
   return missingIn([...docs.impressum, ...docs.datenschutz]);
 }

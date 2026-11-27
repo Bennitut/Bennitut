@@ -1,6 +1,7 @@
 # Rechtstexte – Entwürfe
 
-Stand: 24.11.2026 (Backlog-Punkt 7). Entwürfe für Österreich, geschrieben von der Nachtschicht – **keine
+Stand: 24.11.2026 (Backlog-Punkt 7), Teil B zuletzt am 27.11.2026 ergänzt (Betrieb des Servers: Cloudflare, Render,
+Neon, Anthropic). Entwürfe für Österreich, geschrieben von der Nachtschicht – **keine
 Rechtsberatung**. Vor dem Veröffentlichen ausfüllen und am besten von jemandem mit Rechtskenntnis gegenlesen lassen.
 
 | Datei | Inhalt |
@@ -64,10 +65,19 @@ Alles in `app/src/legal/angaben.ts` (Variante B):
    Registrierung und vor der ersten Nutzung der KI-Funktionen darauf hin, dass Kinder unter 14 – und bei
    Gesundheitsangaben Minderjährige unter 18 – nur mit Zustimmung eines Elternteils einwilligen; Abschnitt 7 der
    Datenschutzerklärung sagt dasselbe. Ohne Server zeigt die App den Abschnitt nicht (dann bekommst du keine Daten).
-4. **Später, mit Server:** Teil B der Datenschutzerklärung ergänzen (Hoster, Vertragspartner bei Anthropic,
-   Lieferdienst, Speicherfristen). Die ausdrückliche Einwilligung vor den KI-Funktionen (Art. 9 DSGVO) fragt die App
-   seit 26.11.2026 vor der ersten Nutzung ab (im Profil widerrufbar); offen ist sie noch für die Sicherung der
-   Ernährungshistorie (B6). Konto löschen gibt es seit 26.11.2026 in App und Server (Recht auf Löschung, Art. 17 DSGVO).
+4. **Später, mit Server:** Teil B der Datenschutzerklärung ergänzen (Lieferdienst, Speicherfristen). Die ausdrückliche
+   Einwilligung vor den KI-Funktionen (Art. 9 DSGVO) fragt die App seit 26.11.2026 vor der ersten Nutzung ab (im Profil
+   widerrufbar); offen ist sie noch für die Sicherung der Ernährungshistorie (B6). Konto löschen gibt es seit 26.11.2026
+   in App und Server (Recht auf Löschung, Art. 17 DSGVO).
+5. **Betrieb des Servers** (kommt mit Vorrang 1, 9.5 – die Nachtschicht fragt dich, welchen Weg aus
+   [`../SERVER-HOSTING.md`](../SERVER-HOSTING.md) du nimmst): In `app/src/legal/angaben.ts` unter `BETRIEB` den Weg
+   (`weg`: „a“ = Laptop mit Cloudflare Tunnel, „b“ = Render mit Neon) und die KI (`ki`: „claude“, „ollama“,
+   „ollama-laptop“ = KI vom Laptop, nur bei Weg b, oder „keine“) eintragen. Dann zeigt die App in „Kurz gesagt“, B1
+   und B3 nur die passenden Sätze; die Texte zu Cloudflare, Render, Neon und Anthropic sind seit 27.11.2026 fertig
+   (Stand der Dienste unten bei den Quellen). Offen bleiben je Weg ein paar `[[PRÜFEN]]` – vor allem der Vertrag zur
+   Auftragsverarbeitung mit Cloudflare (nur mit Konto, ein Quick Tunnel ist laut Cloudflare nur zum Testen gedacht) und
+   der Vertrag mit Neon bzw. Databricks. Wechselt die KI später, fragt die App vor der nächsten KI-Funktion neu, sobald
+   die Nachtschicht die Fassung der Einwilligung erhöht (zuletzt am 27.11.2026 auf 2).
 
 ## Wo die Texte stehen
 
@@ -107,6 +117,16 @@ Alles in `app/src/legal/angaben.ts` (Variante B):
 - Flickr: [Privacy Policy](https://www.flickr.com/help/privacy-policy) (Stand 20.10.2026)
 - Anthropic: [How long do you store my organization's data?](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data) (Stand 01.07.2026), [Is my data used for model training?](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training) (Stand 18.08.2026)
 
+Abgerufen am 27.11.2026 (Betrieb des Servers, Teil B):
+
+- Anthropic: [Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms) (gültig ab 17.06.2025: Vertragspartner im EWR die Anthropic Ireland, Limited; der Auftragsverarbeitungsvertrag ist Teil der Bedingungen; kein Training mit Kundeninhalten), [Data Processing Addendum](https://www.anthropic.com/legal/data-processing-addendum) (gültig ab 24.02.2025: Anthropic als Auftragsverarbeiter, Standardvertragsklauseln Modul 2 und 3), [Privacy Policy](https://www.anthropic.com/privacy) (gültig ab 10.09.2026: Anschrift der Anthropic Ireland, Limited; für Übermittlungen Angemessenheitsbeschlüsse und Standardvertragsklauseln, kein Data Privacy Framework)
+- Cloudflare: [Data Processing Addendum](https://www.cloudflare.com/cloudflare-customer-dpa/) (Fassung 6.4 vom 03.04.2026: Teil des Hauptvertrags, z. B. des Self-Serve Subscription Agreement; Data Privacy Framework und Standardvertragsklauseln), [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) (Stand 30.09.2026: „Quick Tunnels are for testing and development“, kein Konto nötig, keine Verfügbarkeitsgarantie)
+- Render: [Data Processing Addendum](https://render.com/dpa) (Stand 19.12.2024: ergänzt die Nutzungsbedingungen; „primary processing operations take place in the United States“; Data Privacy Framework, sonst Standardvertragsklauseln), [Privacy Policy](https://render.com/privacy) (Stand 10.07.2026), [Zertifizierung nach dem Data Privacy Framework](https://render.com/changelog/render-achieves-certification-under-the-eu-us-data-privacy-framework) (seit 06.01.2025, mit UK-Erweiterung und Swiss-U.S. DPF)
+- Neon: [neon.com/dpa](https://neon.com/dpa) und [neon.com/terms-of-service](https://neon.com/terms-of-service) zeigten beide den „Product Specific Schedule (Neon)“ (Stand 14.10.2026: „Databricks, Inc., the parent company of Neon, LLC“; es gilt das Master Cloud Services Agreement von Databricks) – einen eigenen Auftragsverarbeitungsvertrag von Neon gab es dort nicht
+
 Nicht erreichbar waren aus der Cloud das RIS (Gesetzestexte; die Paragrafen stammen deshalb aus den Erläuterungen
 von WKO und USP) und die Datenschutzerklärung der Wikimedia Foundation – beides vor dem Veröffentlichen einmal selbst
-ansehen.
+ansehen. Am 27.11.2026 außerdem nicht lesbar: das Self-Serve Subscription Agreement von Cloudflare (ob der
+Auftragsverarbeitungsvertrag mit einem kostenlosen Konto gilt), der Auftragsverarbeitungsvertrag und die Liste der
+Unterauftragsverarbeiter von Neon bzw. Databricks; eine Zertifizierung von Anthropic nach dem Data Privacy Framework
+ist auf deren Seiten nicht erwähnt (die DPF-Liste selbst hat die Nachtschicht nicht geprüft).
